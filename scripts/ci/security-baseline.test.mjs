@@ -9,7 +9,7 @@ const read = (path) => readFileSync(resolve(root, path), "utf8");
 const workflowNames = readdirSync(resolve(root, ".github/workflows"));
 
 test("security workflows keep least privilege and untrusted PR boundaries", () => {
-  for (const name of ["repository-quality.yml", "codeql.yml"]) {
+  for (const name of workflowNames) {
     const workflow = read(`.github/workflows/${name}`);
     assert.match(workflow, /contents: read/);
     assert.match(workflow, /persist-credentials: false/);
@@ -41,9 +41,9 @@ test("Dependabot tracks Actions with bounded pull requests", () => {
   assert.match(config, /open-pull-requests-limit: [1-5]/);
 });
 
-test("bootstrap makes no unsupported product, dependency or release claims", () => {
+test("contract lab makes no unsupported product stack or release claims", () => {
   assert.match(read("README.md"), /pending evaluation/);
-  assert.match(read(".github/workflows/codeql.yml"), /language: \[actions\]/);
+  assert.match(read(".github/workflows/codeql.yml"), /language: \[actions, javascript-typescript\]/);
   assert.doesNotMatch(workflowNames.join(" "), /release|deploy|dependency-security/);
   for (const path of ["package.json", "package-lock.json", "Cargo.toml", "LICENSE"]) {
     assert.equal(existsSync(resolve(root, path)), false, path);

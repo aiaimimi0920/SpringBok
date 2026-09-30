@@ -72,13 +72,42 @@ try {
   await page.getByRole('button', { name: '刷新状态', exact: true }).click();
   await check(page, '已读取本地演示记录；没有执行真实部署');
   await page.reload(); await check(gateway, '已模拟回滚');
+  // Independent M4 preview is GET-only and cannot approve or mutate M3 history.
+  const beforePreview = await page.evaluate(async () => (await fetch('/api/state')).json());
+  const preview = page.getByRole('region', { name: '离线计划预览', exact: true });
+  const previewResult = page.locator('#preview-result');
+  await previewResult.locator('table').waitFor({ state: 'visible' });
+  await check(preview, '目标配置尚未准备：此预览不会写入部署配置');
+  const previewWrites = [];
+  const recordWrite = request => { if (request.method() !== 'GET') previewWrites.push(request.url()); };
+  page.on('request', recordWrite);
+  await preview.getByLabel('合成场景', { exact: true }).selectOption('unknown');
+  await check(preview, '提交结果未知：禁止再次提交，只能等待有依据的核对');
+  await check(preview, '未知，不可发布');
+  await preview.getByLabel('合成场景', { exact: true }).selectOption('live');
+  await preview.getByLabel('计划操作', { exact: true }).selectOption('rollback');
+  await previewResult.locator('dd').filter({ hasText: '合成记录存在已成功目标；仍须准备配置与真实授权' }).waitFor({ state: 'visible' });
+  assert.equal(await previewResult.getByText(`sha256:${'1'.repeat(64)}`, { exact: true }).count() >= 1, true);
+  // Rapid changes must end at the final selection, never a stale response.
+  await preview.getByLabel('合成场景', { exact: true }).selectOption('unknown');
+  await preview.getByLabel('合成场景', { exact: true }).selectOption('fresh');
+  await check(preview, '没有已成功版本，不能生成回滚目标');
+  assert.equal(await previewResult.getAttribute('data-scenario'), 'fresh');
+  const afterPreview = await page.evaluate(async () => (await fetch('/api/state')).json());
+  assert.deepEqual(afterPreview, beforePreview); assert.deepEqual(previewWrites, []);
+  page.off('request', recordWrite);
+  await preview.getByLabel('合成场景', { exact: true }).selectOption('approved');
+  await preview.getByLabel('计划操作', { exact: true }).selectOption('promote');
+  await check(preview, '目标配置尚未准备：此预览不会写入部署配置');
   assert.deepEqual(errors, []);
   mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/demo-desktop.png', fullPage: true });
+  await preview.screenshot({ path: 'test-results/plan-desktop.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/demo-mobile.png', fullPage: true });
+  await preview.screenshot({ path: 'test-results/plan-mobile.png' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  console.log('PASS: real Chrome UI, four cards, keyboard acceptance, failure/retry, v1/v2/rollback, reload/restart, stale session/tab, repeated click, mobile layout');
+  console.log('PASS: real Chrome UI, four cards, keyboard acceptance, failure/retry, v1/v2/rollback, reload/restart, stale session/tab, repeated click, read-only plan preview/unknown/rollback/stale responses, mobile layout');
 } finally {
   await browser?.close(); await app?.close(); rmSync(directory, { recursive: true, force: true });
 }

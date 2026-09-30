@@ -1,7 +1,8 @@
 # SpringBok repository rules
 
 This is a personal deployment configuration workspace. Upstream selection and
-product implementation remain pending evaluation. Do not introduce an application
+production integration remain pending evaluation. M1 adds an offline contract
+lab and isolated sample-container smoke tests only. Do not introduce an application
 stack, license, infrastructure deployment, or real credentials without approval.
 
 Preserve the repository checks described in `docs/security-quality-baseline.md`.

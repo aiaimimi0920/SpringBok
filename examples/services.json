@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "services": [
+    {
+      "id": "gateway",
+      "testTarget": "gateway-test",
+      "productionTarget": "gateway-production",
+      "artifact": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "forum",
+      "testTarget": "forum-test",
+      "productionTarget": "forum-production",
+      "artifact": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "game",
+      "testTarget": "game-test",
+      "productionTarget": "game-production",
+      "artifact": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "account",
+      "testTarget": "account-test",
+      "productionTarget": "account-production",
+      "artifact": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}

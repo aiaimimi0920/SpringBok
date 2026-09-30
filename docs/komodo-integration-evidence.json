@@ -1,0 +1,32 @@
+{
+  "verified_at": "2026-09-30T12:36:06Z",
+  "commit": "eb411e56547baf71cbe1e1648a172026dbe9cf55",
+  "tree": "89390f2efcb03f023cd951feae9ab08065e7ceb6",
+  "run_url": "https://github.com/aiaimimi0920/SpringBok/actions/runs/36715595686",
+  "job_url": "https://github.com/aiaimimi0920/SpringBok/actions/runs/36715595686/job/109887610962",
+  "conclusion": "success",
+  "komodo_version": "2.3.3",
+  "deployments": 8,
+  "test_procedures": 4,
+  "healthy_container_verifications": 20,
+  "known_good_rollbacks": 4,
+  "failed_test_image_observed": true,
+  "failed_test_promotion_blocked": true,
+  "cleanup_verified": true,
+  "execution_files_sha256": {
+    "src/contract.mjs": "b1d2a17a4d425c4864467c39182db7d2220a1a3339535008a42a711eef7afd52",
+    "src/komodo/ci-client.mjs": "7dc5b5491489dc4b9dedb02d5062ae969d90b6cbb5d22821f4878f1522c18a73",
+    "src/komodo/mapping.mjs": "e589cc1694a5aa95d1e801ff875c24b3794cc244e364baef5e51a359d81d619f",
+    "scripts/integration/komodo.sh": "6374bbcc6c28d19f9a4caf028d045a6b7ea87741bbe9ab4d9a4fa81af340ca17",
+    "scripts/integration/driver.mjs": "94ad36b015aef43ff03f6d07e34ccbec2425dad30acb72b0f566b7f5a53598bb",
+    "scripts/integration/driver.Dockerfile": "1614a5855df087f98f9b1d92ad0fecb63ad935f6bbe82b88f9457375b1d25386",
+    "examples/fixture/Dockerfile": "419624288eb6a9f39e75a7771f22108e227a194cbc3372547d81d668947a9e7a",
+    "examples/fixture/server.mjs": "4b09ca8089b156beac020c1a514c26c9cb3b73323ca4890bdc4657cbdc34f899"
+  },
+  "limitations": [
+    "Single disposable GitHub-hosted server",
+    "Synthetic acceptance in trusted harness",
+    "Sample health services, not actual business applications",
+    "No product UI, persistent approval ledger or production executor"
+  ]
+}

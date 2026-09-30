@@ -1,9 +1,16 @@
 name: Komodo Disposable Integration
 on:
-  # Temporary bootstrap trigger; remove after this authorized M2 validation.
-  push:
-    branches: [feat/komodo-integration-m2]
   workflow_dispatch:
+    inputs:
+      approve_temporary_docker_admin:
+        description: Authorize this run's temporary Docker admin access and disposable test credentials
+        required: true
+        type: boolean
+        default: false
+      reviewed_sha:
+        description: Exact independently reviewed main commit SHA (40 hexadecimal characters)
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -11,10 +18,15 @@ concurrency:
   cancel-in-progress: false
 jobs:
   komodo:
-    if: github.repository == 'aiaimimi0920/SpringBok' && github.ref == 'refs/heads/feat/komodo-integration-m2'
+    if: github.repository == 'aiaimimi0920/SpringBok' && github.ref == 'refs/heads/main' && inputs.approve_temporary_docker_admin
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Bind manual approval to the reviewed commit
+        env:
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+        run: |
+          [[ "$REVIEWED_SHA" =~ ^[a-f0-9]{40}$ && "$REVIEWED_SHA" == "$GITHUB_SHA" ]] || exit 2
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -101,4 +102,20 @@ test('Mongo readiness normalizes BSON numeric thresholds and tests index creatio
   const bsonLike = { valueOf: () => 500 };
   assert.equal(Number.isFinite(bsonLike), false);
   assert.equal(Number.isFinite(Number(bsonLike)), true);
+});
+
+test('privileged CI has only an explicitly acknowledged exact-main-SHA manual entry', () => {
+  const wf = readFileSync(new URL('../.github/workflows/komodo-integration.yml', import.meta.url), 'utf8');
+  assert.match(wf, /workflow_dispatch:/);
+  assert.doesNotMatch(wf, /\n  (push|pull_request|schedule):/);
+  assert.match(wf, /github\.ref == 'refs\/heads\/main'/);
+  assert.match(wf, /inputs\.approve_temporary_docker_admin/);
+  assert.match(wf, /default: false/);
+  assert.match(wf, /"\$REVIEWED_SHA" == "\$GITHUB_SHA"/);
+});
+test('execution files still match the recorded successful real Komodo run', () => {
+  const evidence = JSON.parse(readFileSync(new URL('../docs/komodo-integration-evidence.json', import.meta.url)));
+  for (const [path, hash] of Object.entries(evidence.execution_files_sha256)) {
+    assert.equal(createHash('sha256').update(readFileSync(new URL(`../${path}`, import.meta.url))).digest('hex'), hash, path);
+  }
 });

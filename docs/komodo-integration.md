@@ -77,10 +77,13 @@ on force-cancellation. Nothing is exported as an artifact.
 
 Ordinary pull requests run unit/static and small fixture tests only. The privileged
 integration must not run for arbitrary contribution code, `pull_request_target`,
-schedules or main pushes. During this authorized M2 bootstrap only, the exact
-reviewed dedicated `feat/komodo-integration-m2` push can run it. Remove that bootstrap
-trigger after validation. Future manual runs require an explicit authorization
-and an independently reviewed ref. CI code review precedes starting the test.
+schedules or main pushes. The bootstrap push trigger has been removed after the verified M2 run.
+Only manual dispatch on main is supported. The dispatcher must explicitly check
+approval of temporary Docker administrator access and disposable credentials,
+and supply the exact independently reviewed main commit SHA. A mismatch fails
+before checkout or environment creation. This retained manual entry point does
+not authorize an assistant to run future tests without asking; no privileged job
+runs on PRs, branch/main pushes or schedules. CI review precedes each authorized run.
 
 Local offline checks:
 
@@ -106,3 +109,21 @@ do not assume this CI harness is already an installable management product.
   validation; printable numeric BSON objects need not pass `Number.isFinite`
 - Container inspection JSON uses `Image`, `State`, `Running`, `Health`, `Status`
   and `ExitCode`; Rust field names are not the serialized API names
+
+## Verified result
+
+[Real integration run 36715595686](https://github.com/aiaimimi0920/SpringBok/actions/runs/36715595686)
+passed on 2026-09-30 at commit `eb411e56547baf71cbe1e1648a172026dbe9cf55`.
+It verified 8 actual mappings, 4 actual Procedures, 20 healthy immutable-image
+checks, 4 known-good rollbacks, failed-test promotion blocking, and final cleanup.
+The successful run used the official Core entrypoint, 1847 MB available database
+tmpfs against the unchanged 500 MB index-build threshold. Fixture evidence
+checks reject OOM or paused states.
+Earlier startup failures and adapter/probe mistakes were fixed; they are not
+counted as successful tests. The exact startup failure root cause was not captured
+in raw logs; only the final corrected configuration is verified.
+
+[Machine-readable evidence](komodo-integration-evidence.json) binds the successful
+run to SHA-256 hashes of all execution files. Only documentation, static tests and
+removal of the privileged automatic trigger changed after that run. It does not
+claim that the final manual-dispatch UI was itself invoked during this milestone.

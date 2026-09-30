@@ -1,7 +1,7 @@
 # SpringBok
 
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
-Komodo integration, product UI, production execution and license selection remain
+Production integration, product UI, production execution and license selection remain
 pending evaluation. This repository does not fork or bundle Komodo.
 
 ## 现在可以跑什么
@@ -33,7 +33,7 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 
 ## M2：真实 Komodo 集成验证
 
-增加固定 Komodo 2.3.3 资源映射、受限 CI 客户端及真实集成测试脚本。
+已用真实 Komodo 2.3.3 跑通8个部署映射、4个测试Procedure、四服务样例更新与回滚。
 只允许明确授权后的 GitHub 临时测试机运行，需授予临时 Docker 管理权限；
-不是可用于生产的安装脚本。实际运行证据在对应 PR/Actions，不能把离线测试
-通过当作 Komodo 集成成功。[范围、授权和验收](docs/komodo-integration.md)
+不是可用于生产的安装脚本。[真实集成通过记录](https://github.com/aiaimimi0920/SpringBok/actions/runs/36715595686)
+覆盖样例容器与失败阻断，产品UI、真实业务、多机及持久人工验收仍待实现。[范围、授权和验收](docs/komodo-integration.md)

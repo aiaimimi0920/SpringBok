@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { deploymentRequest, releaseManifest, testProcedureRequest, KOMODO_VERSION } from '../src/komodo/mapping.mjs';
-import { ciClient, completedUpdate } from '../src/komodo/ci-client.mjs';
+import { ciClient, completedUpdate, containerMatches } from '../src/komodo/ci-client.mjs';
 import { validateManifest, SERVICES } from '../src/contract.mjs';
 const v1 = `sha256:${'1'.repeat(64)}`;
 const v2 = `sha256:${'2'.repeat(64)}`;
@@ -76,4 +76,29 @@ test('privileged integration remains bounded with no public ports, secrets logs,
   const wf = readFileSync(new URL('../.github/workflows/komodo-integration.yml', import.meta.url), 'utf8');
   assert.doesNotMatch(wf, /pull_request|secrets\.|upload-artifact|contents: write/);
   assert.match(wf, /github\.repository == 'aiaimimi0920\/SpringBok'/);
+});
+
+test('container evidence uses exact Docker JSON and rejects missing, unhealthy, wrong-image or paused evidence', () => {
+  const healthy = { Image: v1, State: { Status: 'running', Running: true, Paused: false, OOMKilled: false, Health: { Status: 'healthy' } } };
+  assert.equal(containerMatches(healthy, v1), true);
+  for (const value of [undefined, {}, { image: v1, state: { running: true, health: { status: 'healthy' } } },
+    { ...healthy, Image: v2 }, { ...healthy, State: { ...healthy.State, Paused: true } },
+    { ...healthy, State: { ...healthy.State, OOMKilled: true } },
+    { ...healthy, State: { ...healthy.State, Health: { Status: 'unhealthy' } } }]) {
+    assert.equal(containerMatches(value, v1), false);
+  }
+  assert.equal(containerMatches({ Image: v1, State: { Status: 'exited', Running: false, OOMKilled: false, Paused: false, ExitCode: 1 } }, v1, false), true);
+  assert.equal(containerMatches({ Image: v1, State: { Status: 'exited', Running: false, OOMKilled: false, Paused: false, ExitCode: 0 } }, v1, false), false);
+  assert.equal(containerMatches({ Image: v1, State: { Status: 'exited', Running: false, OOMKilled: true, Paused: false, ExitCode: 137 } }, v1, false), false);
+  assert.equal(containerMatches({ Image: v1, State: { Status: 'exited', Running: false, OOMKilled: false, Paused: true, ExitCode: 1 } }, v1, false), false);
+});
+test('Mongo readiness normalizes BSON numeric thresholds and tests index creation', () => {
+  const shell = readFileSync(new URL('../scripts/integration/komodo.sh', import.meta.url), 'utf8');
+  assert.match(shell, /const threshold = Number\(admin\.runCommand/);
+  assert.match(shell, /Number\.isFinite\(threshold\)/);
+  assert.match(shell, /probe\.createIndex/);
+  assert.match(shell, /--tmpfs \/data\/db:rw,size=2g/);
+  const bsonLike = { valueOf: () => 500 };
+  assert.equal(Number.isFinite(bsonLike), false);
+  assert.equal(Number.isFinite(Number(bsonLike)), true);
 });

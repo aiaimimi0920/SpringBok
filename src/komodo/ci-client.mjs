@@ -3,7 +3,8 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const allowed = new Set(['read/GetVersion', 'read/GetServer', 'read/GetServerState', 'read/GetDeployment', 'read/GetProcedure',
   'read/GetUpdate', 'read/InspectDeploymentContainer', 'write/CreateDeployment', 'write/UpdateDeployment',
   'write/CreateProcedure', 'execute/Deploy', 'execute/RunProcedure']);
-// Disposable CI client only. No caller-chosen URLs, keys, shell or terminal API.
+// Disposable CI client only: fixed URL and endpoint allowlist. Params are trusted
+// harness input, NOT an authorization layer or an AI-callable executor.
 export function ciClient() {
   let jwt;
   async function request(path, body, authenticated = true) {
@@ -55,4 +56,14 @@ export async function completedUpdate(client, initial, type, target) {
     throw new Error(`${type} execution failed or mismatched`);
   }
   return id;
+}
+
+// Komodo 2.3.3 preserves Docker's PascalCase inspection JSON (serde rename).
+export function containerMatches(container, image, healthy = true) {
+  if (!container || container.Image !== image) return false;
+  const state = container.State;
+  if (healthy) return state?.Status === 'running' && state.Running === true &&
+    state.Paused === false && state.OOMKilled === false && state.Health?.Status === 'healthy';
+  return state?.Status === 'exited' && state.Running === false &&
+    state.OOMKilled === false && state.Paused === false && state.ExitCode === 1;
 }

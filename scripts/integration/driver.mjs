@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { SERVICES, createLab } from '../../src/contract.mjs';
-import { ciClient, waitFor, completedUpdate } from '../../src/komodo/ci-client.mjs';
+import { ciClient, waitFor, completedUpdate, containerMatches } from '../../src/komodo/ci-client.mjs';
 import { deploymentRequest, releaseManifest, testProcedureRequest } from '../../src/komodo/mapping.mjs';
 
 async function main() {
@@ -34,12 +34,9 @@ async function main() {
   }
   // Actual health and immutable image identity, never just HTTP 200 / Update accepted.
   async function inspect(name, image, healthy = true) {
-    const expected = healthy ? 'healthy' : null;
     return waitFor(async () => {
       const c = await client.call('read/InspectDeploymentContainer', { deployment: deployments.get(name) });
-      if (c.image !== image) return null;
-      if (healthy) return c.state?.running === true && c.state?.health?.status === expected ? c : null;
-      return c.state?.running === false ? c : null;
+      return containerMatches(c, image, healthy) ? c : null;
     }, `${name} ${healthy ? 'healthy image' : 'failed health'}`);
   }
   async function deploy(service, env, image, viaProcedure = false, healthy = true) {

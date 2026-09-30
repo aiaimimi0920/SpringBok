@@ -21,22 +21,23 @@ cleanup() {
   trap - EXIT
   if [[ "$armed" == true ]]; then
     if [[ "$status" != 0 ]]; then
-      for name in "${containers[@]}"; do
-        docker inspect --format '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$name" 2>/dev/null || :
+      for name in "${containers[@]}" "${fixtures[@]}"; do
+        docker inspect --format '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} health={{if .State.Health}}{{.State.Health.Status}}{{end}} image={{.Image}}' "$name" 2>/dev/null || :
       done
-      # Whitelisted error categories only; never print raw startup logs/config.
-      docker exec "$prefix-core" sh -c '
-        for category in "FATAL: Failed to initialize database::Client" "Failed to initialize database connection" "failed to init mongo with given args" "config.database not configured" "Failed to parse Komodo Core environment" "Failed at parsing config from paths" "Read-only file system" "Permission denied" "No such file" "panicked" "Authentication failed" "Server selection timeout" "Connection refused" "No space left" "Unauthorized" "create index" "create unique index" "create sparse index" "available disk space" "OutOfDiskSpace" "DNS" "resolver" "TLS" "certificate" "Invalid argument" "Address family not supported" "Cannot assign requested address" "Address already in use" "os error"; do
-          if grep -Fqi "$category" /tmp/core-startup.log; then printf "Core diagnostic category: %s\n" "$category"; fi
-        done
-        if test -f /tmp/core-exit-code; then printf "Core process exit: "; cat /tmp/core-exit-code; fi
-      ' 2>/dev/null || :
+
     fi
     docker rm -f -v "${containers[@]}" "${fixtures[@]}" >/dev/null 2>&1 || :
     docker network rm "$network" >/dev/null 2>&1 || :
+    if ! docker info >/dev/null 2>&1; then echo 'FAIL cleanup verification unavailable'; status=1; fi
+    for name in "${containers[@]}" "${fixtures[@]}"; do
+      if docker container inspect "$name" >/dev/null 2>&1; then echo 'FAIL test container cleanup'; status=1; fi
+    done
+    if docker network inspect "$network" >/dev/null 2>&1; then echo 'FAIL test network cleanup'; status=1; fi
   fi
   # Only generated tmpfs material in our mktemp directory, never repository/user files.
   rm -rf -- "$work"
+  if [[ -e "$work" ]]; then echo 'FAIL temporary credential cleanup'; status=1; fi
+  if [[ "$status" == 0 ]]; then echo 'PASS temporary containers, network and credentials cleaned'; fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -125,8 +126,7 @@ docker run -d --name "$prefix-core" --network "$network" --network-alias core \
   --log-driver=none --restart=on-failure:3 --memory=1g --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /backups:rw,size=64m \
   --mount "type=bind,source=$work/keys,target=/config/keys" \
-  --env-file "$work/core.env" --entrypoint /bin/sh ghcr.io/moghtech/komodo-core:2.3.3 -c \
-  'core >/tmp/core-startup.log 2>&1; printf "%s\n" "$?" >/tmp/core-exit-code; sleep 300' >/dev/null
+  --env-file "$work/core.env" ghcr.io/moghtech/komodo-core:2.3.3 >/dev/null
 docker run -d --name "$prefix-periphery" --network "$network" \
   --log-driver=none --restart=on-failure:3 --memory=512m --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /etc/komodo:rw,size=64m \

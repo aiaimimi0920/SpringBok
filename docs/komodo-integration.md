@@ -65,9 +65,9 @@ features are disabled. No API key, OAuth grant or persistent access is created.
 Random test passwords and JWT seeds are generated on the runner, kept in mode-600
 files under a mode-700 tmpfs directory, and never printed or uploaded. Internal
 HTTP carries only synthetic ephemeral credentials on the isolated network; this
-is NOT a TLS pattern for real environments. Docker logging is disabled for Core/Mongo/Periphery. Core startup output stays
-inside container tmpfs for debugging; only fixed diagnostic categories and exit
-codes may be emitted, never raw log lines. Telemetry reporting is disabled. The driver emits only fixed status,
+is NOT a TLS pattern for real environments. Docker logging is disabled for Core/Mongo/Periphery. Failure diagnostics include
+only selected container state/health/exit-code fields and public image IDs, never
+raw logs or environment. The official entrypoint is used; telemetry is disabled. The driver emits only fixed status,
 public image IDs and update IDs, not response bodies. No credentials are in images.
 Exit cleanup removes all test containers, the internal network and generated tmpfs
 files, including on failure; destruction of the hosted VM is the final boundary
@@ -95,3 +95,14 @@ persistent approval/execution ledger. Confirm real target inventory, how the own
 logs in, secret handling and failure/restart reconciliation before implementing a
 network-enabled production executor. Reuse Komodo's UI/resources where practical;
 do not assume this CI harness is already an installable management product.
+
+## Integration regression notes
+
+- Authenticated Mongo ping is not enough: test actual index creation before Core.
+  Mongo 8 requires 500 MB available for index builds by default; use a 2 GB tmpfs
+  capacity (not preallocated RAM), retain the 1 GB container memory limit, and
+  check actual available MB without weakening the database threshold
+- Normalize BSON numeric threshold values with `Number(...)` before finite-number
+  validation; printable numeric BSON objects need not pass `Number.isFinite`
+- Container inspection JSON uses `Image`, `State`, `Running`, `Health`, `Status`
+  and `ExitCode`; Rust field names are not the serialized API names

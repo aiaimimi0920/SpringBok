@@ -1,10 +1,21 @@
 # SpringBok
 
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
-Production integration, product UI, production execution and license selection remain
-pending evaluation. This repository does not fork or bundle Komodo.
+Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
-## 现在可以跑什么
+## M3：打开本地演示界面
+
+```sh
+node scripts/demo.mjs
+```
+
+目前仅支持 Linux、Node.js 22+（Windows/macOS 暂不支持）。
+打开 `http://127.0.0.1:3210`，无需安装运行时依赖。四个中文服务卡支持
+模拟测试、模拟验收、晋级、回滚与持久历史；重启撤销未使用的模拟验收。
+界面显著标注 DEMO，未连接真实服务器。
+[使用、安全边界和崩溃恢复](docs/demo-console.md)
+
+## M1：离线契约检查
 
 需要 Node.js 22+，无需安装依赖：
 
@@ -36,4 +47,4 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 已用真实 Komodo 2.3.3 跑通8个部署映射、4个测试Procedure、四服务样例更新与回滚。
 只允许明确授权后的 GitHub 临时测试机运行，需授予临时 Docker 管理权限；
 不是可用于生产的安装脚本。[真实集成通过记录](https://github.com/aiaimimi0920/SpringBok/actions/runs/36715595686)
-覆盖样例容器与失败阻断，产品UI、真实业务、多机及持久人工验收仍待实现。[范围、授权和验收](docs/komodo-integration.md)
+覆盖样例容器与失败阻断；M3另提供演示UI，真实业务、多机及生产人工验收仍待实现。[范围、授权和验收](docs/komodo-integration.md)

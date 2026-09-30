@@ -15,3 +15,7 @@
 .tmp/
 node_modules/
 .DS_Store
+
+# Local simulated release history (never credentials)
+.springbok-demo/
+test-results/

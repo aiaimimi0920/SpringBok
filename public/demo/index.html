@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SpringBok · 本地演示控制台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><div class="brand">SpringBok <span>发布工作台</span></div><strong class="badge">DEMO · 未连接真实服务器</strong></header>
+<main>
+<section class="intro"><div><p class="eyebrow">从测试到回滚，一步一步</p><h1>四个服务，一个清晰流程</h1><p>这里的测试、验收、晋级与回滚都是模拟操作。不会部署任何业务，也不会产生生产授权。</p></div><button id="refresh" type="button">刷新状态</button></section>
+<ol class="flow" aria-label="演示流程"><li>选择版本</li><li>模拟测试</li><li>模拟验收</li><li>模拟晋级</li><li>按需回滚</li></ol>
+<p id="notice" role="status" aria-live="polite">正在读取本地记录…</p>
+<section id="services" class="grid" aria-label="四类服务"></section>
+<section class="history"><div class="section-title"><h2>操作记录</h2><span id="revision"></span></div><p>记录仅保存在此演示实例。重启会撤销尚未使用的模拟验收，已完成的模拟版本与历史保留。</p><ol id="history"></ol></section>
+<footer>真实执行器未启用 · 单人本地演示 · 无账号登录 · 本机其他程序不属于此演示的安全隔离范围</footer>
+</main></body></html>

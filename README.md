@@ -3,6 +3,14 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M4：固定执行与中断恢复
+
+新增独立执行协调库：把固定候选与目标、提交前持久意图、Komodo 执行 ID 和结果证据
+关联起来。提交结果未知时阻止重复部署；已知 ID 可在重启后只读核对；未使用的验收
+在重启时撤销。通过注入 transport 和本地假 HTTP 服务验证故障，不接入演示按钮。
+本阶段仅协调预配置资源，还没有真实登录、服务器连接或自动写入部署配置。
+[执行接口、恢复策略与真实接入前的限制](docs/execution-recovery.md)
+
 ## M3：打开本地演示界面
 
 ```sh

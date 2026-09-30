@@ -26,8 +26,8 @@ cleanup() {
       done
       # Whitelisted error categories only; never print raw startup logs/config.
       docker exec "$prefix-core" sh -c '
-        for category in "Read-only file system" "Permission denied" "No such file" "database" "panicked" "Invalid" "Failed" "Authentication failed" "Server selection timeout" "Connection refused" "failed to lookup" "No space left" "Unauthorized" "create index" "error code"; do
-          if grep -qi "$category" /tmp/core-startup.log; then printf "Core diagnostic category: %s\n" "$category"; fi
+        for category in "FATAL: Failed to initialize database::Client" "Failed to initialize database connection" "failed to init mongo with given args" "config.database not configured" "Failed to parse Komodo Core environment" "Failed at parsing config from paths" "Read-only file system" "Permission denied" "No such file" "panicked" "Authentication failed" "Server selection timeout" "Connection refused" "No space left" "Unauthorized" "create index" "DNS" "resolver" "TLS" "certificate" "Invalid argument" "Address family not supported" "Cannot assign requested address" "Address already in use" "os error"; do
+          if grep -Fqi "$category" /tmp/core-startup.log; then printf "Core diagnostic category: %s\n" "$category"; fi
         done
         if test -f /tmp/core-exit-code; then printf "Core process exit: "; cat /tmp/core-exit-code; fi
       ' 2>/dev/null || :
@@ -55,11 +55,11 @@ const db = randomBytes(32).toString('hex');
 const write = (file, lines) => writeFileSync(`${dir}/${file}`, lines.join('\n')+'\n', { mode: 0o600 });
 write('mongo.env', ['MONGO_INITDB_ROOT_USERNAME=ci', `MONGO_INITDB_ROOT_PASSWORD=${db}`]);
 write('core.env', [
-  'KOMODO_DATABASE_ADDRESS=mongo:27017', 'KOMODO_DATABASE_USERNAME=ci', `KOMODO_DATABASE_PASSWORD=${db}`,
+  `KOMODO_DATABASE_URI=mongodb://ci:${db}@mongo:27017/?authSource=admin&directConnection=true`,
   'KOMODO_INIT_ADMIN_USERNAME=springbok-ci', `KOMODO_INIT_ADMIN_PASSWORD=${admin}`,
   'KOMODO_LOCAL_AUTH=true', 'KOMODO_DISABLE_USER_REGISTRATION=true',
   'KOMODO_DISABLE_INIT_RESOURCES=true', 'KOMODO_FIRST_SERVER_NAME=springbok-ci',
-  'KOMODO_REPORTING_ENABLED=false', 'KOMODO_HOST=http://core:9120', 'KOMODO_PERIPHERY_PUBLIC_KEY=file:/config/keys/periphery.pub',
+  'KOMODO_BIND_IP=0.0.0.0', 'KOMODO_REPORTING_ENABLED=false', 'KOMODO_HOST=http://core:9120', 'KOMODO_PERIPHERY_PUBLIC_KEY=file:/config/keys/periphery.pub',
   'KOMODO_MONITORING_INTERVAL=1-sec', 'KOMODO_RESOURCE_POLL_INTERVAL=1-day',
   `KOMODO_JWT_SECRET=${randomBytes(32).toString('hex')}`, `KOMODO_WEBHOOK_SECRET=${randomBytes(32).toString('hex')}`,
 ]);
@@ -88,7 +88,7 @@ docker run -d --name "$prefix-mongo" --network "$network" --network-alias mongo 
   --env-file "$work/mongo.env" mongo:8.0 --quiet --wiredTigerCacheSizeGB 0.25 >/dev/null
 # Wait for the authenticated final Mongo process, not the transient initialization server.
 for attempt in {1..60}; do
-  if docker exec "$prefix-mongo" mongosh --quiet --eval '
+  if docker exec "$prefix-mongo" mongosh --host mongo --quiet --eval '
     const admin = db.getSiblingDB("admin");
     const auth = admin.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD);
     if (auth !== 1 && auth?.ok !== 1) quit(1);

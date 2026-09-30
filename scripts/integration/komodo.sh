@@ -26,7 +26,7 @@ cleanup() {
       done
       # Whitelisted error categories only; never print raw startup logs/config.
       docker exec "$prefix-core" sh -c '
-        for category in "Read-only file system" "Permission denied" "No such file" "database" "panicked" "Invalid" "Failed"; do
+        for category in "Read-only file system" "Permission denied" "No such file" "database" "panicked" "Invalid" "Failed" "Authentication failed" "Server selection timeout" "Connection refused" "failed to lookup" "No space left" "Unauthorized" "create index" "error code"; do
           if grep -qi "$category" /tmp/core-startup.log; then printf "Core diagnostic category: %s\n" "$category"; fi
         done
         if test -f /tmp/core-exit-code; then printf "Core process exit: "; cat /tmp/core-exit-code; fi
@@ -86,6 +86,20 @@ docker run -d --name "$prefix-mongo" --network "$network" --network-alias mongo 
   --log-driver=none --memory=1g --cpus=1 --pids-limit=256 \
   --tmpfs /data/db:rw,size=512m --tmpfs /data/configdb:rw,size=64m \
   --env-file "$work/mongo.env" mongo:8.0 --quiet --wiredTigerCacheSizeGB 0.25 >/dev/null
+# Wait for the authenticated final Mongo process, not the transient initialization server.
+for attempt in {1..60}; do
+  if docker exec "$prefix-mongo" mongosh --quiet --eval '
+    const admin = db.getSiblingDB("admin");
+    const auth = admin.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD);
+    if (auth !== 1 && auth?.ok !== 1) quit(1);
+    const opts = admin.runCommand({getCmdLineOpts:1});
+    if (opts.parsed.net.bindIp !== "*" && opts.parsed.net.bindIpAll !== true) quit(1);
+    if (admin.runCommand({ping:1}).ok !== 1) quit(1);
+  ' >/dev/null 2>&1; then break; fi
+  if [[ "$attempt" == 60 ]]; then echo 'Mongo authenticated readiness failed'; exit 1; fi
+  sleep 1
+done
+echo 'PASS authenticated Mongo readiness'
 docker run -d --name "$prefix-core" --network "$network" --network-alias core \
   --log-driver=none --restart=on-failure:3 --memory=1g --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /backups:rw,size=64m \

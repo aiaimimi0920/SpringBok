@@ -1,0 +1,27 @@
+name: Komodo Disposable Integration
+on:
+  # Temporary bootstrap trigger; remove after this authorized M2 validation.
+  push:
+    branches: [feat/komodo-integration-m2]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: komodo-disposable-integration
+  cancel-in-progress: false
+jobs:
+  komodo:
+    if: github.repository == 'aiaimimi0920/SpringBok' && github.ref == 'refs/heads/feat/komodo-integration-m2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Run explicitly approved disposable integration
+        env:
+          SPRINGBOK_ALLOW_EPHEMERAL_DOCKER: 'yes'
+        run: bash scripts/integration/komodo.sh

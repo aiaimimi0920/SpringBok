@@ -30,3 +30,10 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 [流程和安全边界](docs/deployment-contract.md) ·
 [Komodo 适配评估](docs/komodo-evaluation.md) ·
 [仓库安全检查](docs/security-quality-baseline.md) · [安全政策](SECURITY.md)
+
+## M2：真实 Komodo 集成验证
+
+增加固定 Komodo 2.3.3 资源映射、受限 CI 客户端及真实集成测试脚本。
+只允许明确授权后的 GitHub 临时测试机运行，需授予临时 Docker 管理权限；
+不是可用于生产的安装脚本。实际运行证据在对应 PR/Actions，不能把离线测试
+通过当作 Komodo 集成成功。[范围、授权和验收](docs/komodo-integration.md)

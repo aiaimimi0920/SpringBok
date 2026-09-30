@@ -29,7 +29,9 @@ export function ciClient() {
     },
     async version() {
       const response = await fetch('http://core:9120/version', { redirect: 'error', signal: AbortSignal.timeout(5000) });
-      if (!response.ok || (await response.text()).trim() !== KOMODO_VERSION) throw new Error('unexpected Core version');
+      if (!response.ok) throw new Error(`Core version HTTP ${response.status}`);
+      const version = (await response.text()).trim();
+      if (version !== KOMODO_VERSION) throw new Error('unexpected Core version');
       return KOMODO_VERSION;
     },
   };

@@ -65,8 +65,9 @@ features are disabled. No API key, OAuth grant or persistent access is created.
 Random test passwords and JWT seeds are generated on the runner, kept in mode-600
 files under a mode-700 tmpfs directory, and never printed or uploaded. Internal
 HTTP carries only synthetic ephemeral credentials on the isolated network; this
-is NOT a TLS pattern for real environments. Core/Mongo/Periphery logging is disabled
-to avoid accidentally publishing credentials. The driver emits only fixed status,
+is NOT a TLS pattern for real environments. Docker logging is disabled for Core/Mongo/Periphery. Core startup output stays
+inside container tmpfs for debugging; only fixed diagnostic categories and exit
+codes may be emitted, never raw log lines. Telemetry reporting is disabled. The driver emits only fixed status,
 public image IDs and update IDs, not response bodies. No credentials are in images.
 Exit cleanup removes all test containers, the internal network and generated tmpfs
 files, including on failure; destruction of the hosted VM is the final boundary

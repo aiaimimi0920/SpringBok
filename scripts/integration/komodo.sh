@@ -20,6 +20,18 @@ cleanup() {
   local status=$?
   trap - EXIT
   if [[ "$armed" == true ]]; then
+    if [[ "$status" != 0 ]]; then
+      for name in "${containers[@]}"; do
+        docker inspect --format '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$name" 2>/dev/null || :
+      done
+      # Whitelisted error categories only; never print raw startup logs/config.
+      docker exec "$prefix-core" sh -c '
+        for category in "Read-only file system" "Permission denied" "No such file" "database" "panicked" "Invalid" "Failed"; do
+          if grep -qi "$category" /tmp/core-startup.log; then printf "Core diagnostic category: %s\n" "$category"; fi
+        done
+        if test -f /tmp/core-exit-code; then printf "Core process exit: "; cat /tmp/core-exit-code; fi
+      ' 2>/dev/null || :
+    fi
     docker rm -f -v "${containers[@]}" "${fixtures[@]}" >/dev/null 2>&1 || :
     docker network rm "$network" >/dev/null 2>&1 || :
   fi
@@ -47,7 +59,7 @@ write('core.env', [
   'KOMODO_INIT_ADMIN_USERNAME=springbok-ci', `KOMODO_INIT_ADMIN_PASSWORD=${admin}`,
   'KOMODO_LOCAL_AUTH=true', 'KOMODO_DISABLE_USER_REGISTRATION=true',
   'KOMODO_DISABLE_INIT_RESOURCES=true', 'KOMODO_FIRST_SERVER_NAME=springbok-ci',
-  'KOMODO_HOST=http://core:9120', 'KOMODO_PERIPHERY_PUBLIC_KEY=file:/config/keys/periphery.pub',
+  'KOMODO_REPORTING_ENABLED=false', 'KOMODO_HOST=http://core:9120', 'KOMODO_PERIPHERY_PUBLIC_KEY=file:/config/keys/periphery.pub',
   'KOMODO_MONITORING_INTERVAL=1-sec', 'KOMODO_RESOURCE_POLL_INTERVAL=1-day',
   `KOMODO_JWT_SECRET=${randomBytes(32).toString('hex')}`, `KOMODO_WEBHOOK_SECRET=${randomBytes(32).toString('hex')}`,
 ]);
@@ -78,7 +90,8 @@ docker run -d --name "$prefix-core" --network "$network" --network-alias core \
   --log-driver=none --restart=on-failure:3 --memory=1g --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /backups:rw,size=64m \
   --mount "type=bind,source=$work/keys,target=/config/keys" \
-  --env-file "$work/core.env" ghcr.io/moghtech/komodo-core:2.3.3 >/dev/null
+  --env-file "$work/core.env" --entrypoint /bin/sh ghcr.io/moghtech/komodo-core:2.3.3 -c \
+  'core >/tmp/core-startup.log 2>&1; printf "%s\n" "$?" >/tmp/core-exit-code; sleep 300' >/dev/null
 docker run -d --name "$prefix-periphery" --network "$network" \
   --log-driver=none --restart=on-failure:3 --memory=512m --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /etc/komodo:rw,size=64m \

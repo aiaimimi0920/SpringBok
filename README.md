@@ -3,6 +3,13 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M5：看清离线发布计划
+
+本地演示新增“离线计划预览”：选择固定服务、合成场景与操作，查看目标、镜像和配置
+摘要、已知状态差异、回滚条件与阻断原因。复用 M4 契约，只读展示；提交结果未知时
+明确显示不可发布。预览不写历史、不授予验收、不连接服务器。
+[预览使用方式与连接数据边界](docs/plan-preview.md)
+
 ## M4：固定执行与中断恢复
 
 新增独立执行协调库：把固定候选与目标、提交前持久意图、Komodo 执行 ID 和结果证据

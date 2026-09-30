@@ -3,11 +3,13 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openStore } from './store.mjs';
+import { fixturePreview } from '../preview/fixtures.mjs';
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+  ['/preview.js', ['preview.js', 'text/javascript; charset=utf-8']],
 ]);
 export async function startDemo({ directory = join(process.cwd(), '.springbok-demo'), port = 3210 } = {}) {
   const store = openStore(directory);
@@ -30,6 +32,11 @@ export async function startDemo({ directory = join(process.cwd(), '.springbok-de
         return reply(200, readFileSync(new URL(`../../public/demo/${file}`, import.meta.url)), type);
       }
       if (req.method === 'GET' && req.url === '/api/state') return reply(200, { ...store.snapshot(), csrf });
+      if (req.method === 'GET' && req.url.startsWith('/api/plan?')) {
+        const query = new URL(req.url, origin).searchParams;
+        if ([...query.keys()].sort().join(',') !== 'operation,scenario,service') throw new Error('invalid plan query');
+        return reply(200, fixturePreview(query.get('service'), query.get('scenario'), query.get('operation')));
+      }
       if (req.method !== 'POST' || req.url !== '/api/action') return reply(404, { error: 'Unknown route' });
       if (req.headers.origin !== origin || req.headers['content-type'] !== 'application/json') return reply(403, { error: 'Same-origin JSON required' });
       const token = req.headers['x-csrf-token'];

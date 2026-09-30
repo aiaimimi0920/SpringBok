@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SpringBok · 本地演示控制台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SpringBok · 本地演示控制台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script><script src="/preview.js" defer></script></head>
 <body>
 <header><div class="brand">SpringBok <span>发布工作台</span></div><strong class="badge">DEMO · 未连接真实服务器</strong></header>
 <main>
@@ -8,6 +8,18 @@
 <ol class="flow" aria-label="演示流程"><li>选择版本</li><li>模拟测试</li><li>模拟验收</li><li>模拟晋级</li><li>按需回滚</li></ol>
 <p id="notice" role="status" aria-live="polite">正在读取本地记录…</p>
 <section id="services" class="grid" aria-label="四类服务"></section>
+<section class="preview" aria-labelledby="preview-title">
+<div class="section-title"><h2 id="preview-title">离线计划预览</h2><strong class="badge">合成场景 · 只读</strong></div>
+<p>这里使用独立的 M4 合成记录，与上方模拟验收无关。选择场景只查看计划，不写历史、不批准执行，也不连接服务器。</p>
+<div class="preview-controls">
+<div><label for="preview-service">服务</label><select id="preview-service"><option value="gateway">Gateway 网关</option><option value="forum">论坛</option><option value="game">在线游戏</option><option value="account">账号服务</option></select></div>
+<div><label for="preview-scenario">合成场景</label><select id="preview-scenario"><option value="approved">v1 已成功，v2 已模拟验收</option><option value="live">v2 已成功，可核对回滚</option><option value="unknown">v2 提交结果未知</option><option value="fresh">新服务，暂无成功记录</option></select></div>
+<div><label for="preview-operation">计划操作</label><select id="preview-operation"><option value="promote">晋级计划</option><option value="rollback">回滚计划</option><option value="test">测试计划</option></select></div>
+</div>
+<p id="preview-status" role="status" aria-live="polite">正在读取合成计划…</p>
+<div id="preview-result" aria-label="计划详情"></div>
+<p class="preview-boundary">真实执行未启用：owner 身份、认证连接、配置独占均未确认。未知状态不可发布；预览结果不是执行授权。</p>
+</section>
 <section class="history"><div class="section-title"><h2>操作记录</h2><span id="revision"></span></div><p>记录仅保存在此演示实例。重启会撤销尚未使用的模拟验收，已完成的模拟版本与历史保留。</p><ol id="history"></ol></section>
 <footer>真实执行器未启用 · 单人本地演示 · 无账号登录 · 本机其他程序不属于此演示的安全隔离范围</footer>
 </main></body></html>

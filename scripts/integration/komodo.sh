@@ -26,7 +26,7 @@ cleanup() {
       done
       # Whitelisted error categories only; never print raw startup logs/config.
       docker exec "$prefix-core" sh -c '
-        for category in "FATAL: Failed to initialize database::Client" "Failed to initialize database connection" "failed to init mongo with given args" "config.database not configured" "Failed to parse Komodo Core environment" "Failed at parsing config from paths" "Read-only file system" "Permission denied" "No such file" "panicked" "Authentication failed" "Server selection timeout" "Connection refused" "No space left" "Unauthorized" "create index" "DNS" "resolver" "TLS" "certificate" "Invalid argument" "Address family not supported" "Cannot assign requested address" "Address already in use" "os error"; do
+        for category in "FATAL: Failed to initialize database::Client" "Failed to initialize database connection" "failed to init mongo with given args" "config.database not configured" "Failed to parse Komodo Core environment" "Failed at parsing config from paths" "Read-only file system" "Permission denied" "No such file" "panicked" "Authentication failed" "Server selection timeout" "Connection refused" "No space left" "Unauthorized" "create index" "create unique index" "create sparse index" "available disk space" "OutOfDiskSpace" "DNS" "resolver" "TLS" "certificate" "Invalid argument" "Address family not supported" "Cannot assign requested address" "Address already in use" "os error"; do
           if grep -Fqi "$category" /tmp/core-startup.log; then printf "Core diagnostic category: %s\n" "$category"; fi
         done
         if test -f /tmp/core-exit-code; then printf "Core process exit: "; cat /tmp/core-exit-code; fi
@@ -84,7 +84,7 @@ docker network create --internal "$network" >/dev/null
 # No published ports, no host/proc mounts, no real credentials, no logs containing secrets.
 docker run -d --name "$prefix-mongo" --network "$network" --network-alias mongo \
   --log-driver=none --memory=1g --cpus=1 --pids-limit=256 \
-  --tmpfs /data/db:rw,size=512m --tmpfs /data/configdb:rw,size=64m \
+  --tmpfs /data/db:rw,size=2g --tmpfs /data/configdb:rw,size=64m \
   --env-file "$work/mongo.env" mongo:8.0 --quiet --wiredTigerCacheSizeGB 0.25 >/dev/null
 # Wait for the authenticated final Mongo process, not the transient initialization server.
 for attempt in {1..60}; do
@@ -100,6 +100,27 @@ for attempt in {1..60}; do
   sleep 1
 done
 echo 'PASS authenticated Mongo readiness'
+# MongoDB 8 defaults to requiring 500 MB free for index builds. A 512 MB tmpfs
+# may be insufficient after journal initialization, even while ping/auth succeed.
+docker exec "$prefix-mongo" mongosh --host mongo --quiet --eval '
+  const admin = db.getSiblingDB("admin");
+  admin.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD);
+  const fs = require("fs");
+  const stat = fs.statfsSync("/data/db");
+  const availableMB = Math.floor(stat.bavail * stat.bsize / 1024 / 1024);
+  const threshold = admin.runCommand({getParameter:1,indexBuildMinAvailableDiskSpaceMB:1}).indexBuildMinAvailableDiskSpaceMB;
+  print("Mongo index space MB: available=" + availableMB + " minimum=" + threshold);
+  if (!Number.isFinite(threshold) || availableMB < threshold) quit(1);
+  try {
+    const probe = db.getSiblingDB("komodo").getCollection("__springbok_readiness");
+    probe.createIndex({probe:1},{unique:true});
+    probe.drop();
+    print("PASS Mongo index creation");
+  } catch (error) {
+    print("Mongo index failure numeric code=" + (Number.isInteger(error.code) ? error.code : -1));
+    quit(1);
+  }
+'
 docker run -d --name "$prefix-core" --network "$network" --network-alias core \
   --log-driver=none --restart=on-failure:3 --memory=1g --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /backups:rw,size=64m \

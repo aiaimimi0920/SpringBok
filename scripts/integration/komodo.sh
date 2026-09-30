@@ -108,7 +108,7 @@ docker exec "$prefix-mongo" mongosh --host mongo --quiet --eval '
   const fs = require("fs");
   const stat = fs.statfsSync("/data/db");
   const availableMB = Math.floor(stat.bavail * stat.bsize / 1024 / 1024);
-  const threshold = admin.runCommand({getParameter:1,indexBuildMinAvailableDiskSpaceMB:1}).indexBuildMinAvailableDiskSpaceMB;
+  const threshold = Number(admin.runCommand({getParameter:1,indexBuildMinAvailableDiskSpaceMB:1}).indexBuildMinAvailableDiskSpaceMB);
   print("Mongo index space MB: available=" + availableMB + " minimum=" + threshold);
   if (!Number.isFinite(threshold) || availableMB < threshold) quit(1);
   try {

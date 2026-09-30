@@ -45,9 +45,11 @@ try {
   await gateway.getByRole('combobox').selectOption('v2');
   await gateway.getByRole('button', { name: '选择候选', exact: true }).click(); await check(gateway, '待模拟测试');
   await release(gateway);
+  assert.equal(await gateway.getByRole('combobox').inputValue(), 'v2');
   await gateway.getByRole('button', { name: '模拟回滚失败', exact: true }).click(); await check(gateway, '模拟回滚失败');
   await gateway.getByRole('button', { name: '模拟回滚', exact: true }).click(); await check(gateway, '已模拟回滚');
   await page.reload(); await check(gateway, '已模拟回滚');
+  assert.equal(await gateway.getByRole('combobox').inputValue(), 'v1');
   const forum = page.getByRole('article', { name: '论坛', exact: true });
   await forum.getByRole('button', { name: '模拟测试通过', exact: true }).click(); await approve(forum);
   const oldOrigin = app.origin;

@@ -128,6 +128,10 @@ export function openStore(directory, { writeFile = atomicWrite } = {}) {
     snapshot() {
       if (closed || poisoned) throw new Error('Demo storage unavailable');
       return { mode: 'demo-only', revision: events.length, services: projection.lab.snapshot().services,
+        demoVersions: Object.fromEntries(projection.lab.snapshot().services.map(r => [r.spec.id, {
+          candidate: ['v1', 'v2'].find(v => candidate(r.spec.id, v).artifact === r.spec.artifact),
+          active: r.active ? ['v1', 'v2'].find(v => candidate(r.spec.id, v).artifact === r.active.artifact) : null,
+        }])),
         history: structuredClone(events), bindings: Object.fromEntries(SERVICES.map(s => [s, projection.lab.approvalBinding(s)])) };
     },
     action(revision, input) {

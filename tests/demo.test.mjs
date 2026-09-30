@@ -18,6 +18,7 @@ test('demo v1/v2 promotion and rollback persist through replay for four independ
     release(store, service); action(store, 'candidate', { version: 'v2' }, service); release(store, service);
     action(store, 'rollback', { success: true }, service);
     assert.equal(row(store, service).active.artifact, candidate(service, 'v1').artifact);
+    assert.deepEqual(store.snapshot().demoVersions[service], { candidate: 'v1', active: 'v1' });
   }
   const before = store.snapshot(); store.close(); store = openStore(dir);
   assert.deepEqual(store.snapshot(), before); store.close();

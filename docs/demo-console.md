@@ -11,7 +11,8 @@ node scripts/demo.mjs
 ```
 
 浏览器打开终端打印的 `http://127.0.0.1:3210`。必须使用这个精确地址，
-不是 `localhost`。Ctrl+C 正常退出。运行界面无需 npm 安装、Docker、Komodo
+不是 `localhost`。Ctrl+C 正常退出。Linux 桌面需已有中文字体（如 Noto CJK）；
+缺失时请使用发行版官方字体包，应用不会自行安装。运行界面无需 npm 安装、Docker、Komodo
 或任何账号/密钥。服务只监听 IPv4 loopback，不支持公网暴露或反向代理。
 
 页面一直显示 **DEMO · 未连接真实服务器**。Gateway、论坛、游戏、账号只是
@@ -79,7 +80,8 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 ```
 
 普通 GitHub `Demo Browser` job 使用 runner 已有 Chrome 与锁定的 Playwright
-测试依赖，覆盖真实 DOM 操作、键盘验收、失败/重试、v1→v2→回滚、刷新、
+测试依赖，并从官方 Ubuntu 包下载 Noto CJK 字体，仅解包到临时 runner 用户
+字体目录（无 sudo），确保中文截图可读。覆盖真实 DOM 操作、键盘验收、失败/重试、v1→v2→回滚、刷新、
 重启撤销审批、旧 token/多标签页以及移动宽度。仅测试依赖是 Apache-2.0
 Playwright；不进入应用运行时、不替项目决定许可证。不安装系统浏览器、
 不使用 Docker socket、无权限提升、无服务公网端口。产物只有演示页面截图，

@@ -47,13 +47,14 @@ function render() {
     const title = element('div'); title.append(element('h2', names[spec.id]), element('p', spec.id, 'service-id'));
     top.append(title, element('span', phases[phase] || phase, `phase${phase.includes('failed') ? ' bad' : ''}`)); card.append(top);
     const details = element('dl', undefined, 'details');
-    for (const [key, value] of [['测试目标', spec.testTarget], ['晋级目标', `${spec.productionTarget}（模拟）`], ['候选制品', spec.artifact], ['配置摘要', spec.configDigest], ['当前模拟版本', record.active?.artifact || '尚无'], ['可回滚版本', (phase === 'production-failed' ? record.active : phase === 'rollback-failed' ? record.pendingRollback : record.previous)?.artifact || '尚无已成功版本']]) {
+    for (const [key, value] of [['测试目标', spec.testTarget], ['晋级目标', `${spec.productionTarget}（模拟）`], ['候选制品', `${state.demoVersions[spec.id].candidate} · ${spec.artifact}`], ['配置摘要', spec.configDigest], ['当前模拟版本', record.active ? `${state.demoVersions[spec.id].active} · ${record.active.artifact}` : '尚无'], ['可回滚版本', (phase === 'production-failed' ? record.active : phase === 'rollback-failed' ? record.pendingRollback : record.previous)?.artifact || '尚无已成功版本']]) {
       details.append(element('dt', key), element('dd', value, key.includes('制品') || key.includes('摘要') || key.includes('版本') ? 'digest' : ''));
     }
     card.append(details);
     const actions = element('div', undefined, 'actions');
     const select = element('select'); select.setAttribute('aria-label', `${names[spec.id]}候选版本`);
     for (const version of ['v1', 'v2']) { const option = element('option', version); option.value = version; select.append(option); }
+    select.value = state.demoVersions[spec.id].candidate;
     select.disabled = busy;
     const canCandidate = ['ready', 'test-failed', 'tested', 'approved', 'live', 'rolled-back'].includes(phase);
     actions.append(select, button('选择候选', canCandidate, () => submit(spec.id, 'candidate', { version: select.value })));

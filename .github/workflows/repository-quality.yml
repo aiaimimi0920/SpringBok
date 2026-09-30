@@ -1,0 +1,43 @@
+name: Repository Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "43 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout full history for secret scanning
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js for repository contracts
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+      - name: Test repository security contract
+        run: node --test scripts/ci/security-baseline.test.mjs
+      - name: Lint workflow definitions
+        shell: bash
+        run: |
+          bash scripts/ci/install-tool.sh actionlint "$RUNNER_TEMP/ci-tools"
+          "$RUNNER_TEMP/ci-tools/actionlint" -color
+      - name: Scan committed history for secrets
+        shell: bash
+        run: |
+          bash scripts/ci/install-tool.sh gitleaks "$RUNNER_TEMP/ci-tools"
+          "$RUNNER_TEMP/ci-tools/gitleaks" git --redact=100 --no-banner --exit-code=1 --log-opts="--all" .

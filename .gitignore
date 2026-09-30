@@ -1,0 +1,17 @@
+# Private local configuration and generated output
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+.terraform/
+.tmp/
+node_modules/
+.DS_Store

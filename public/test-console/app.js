@@ -2,7 +2,45 @@
 const names = { gateway: 'Gateway 网关', forum: '论坛', game: '在线游戏', account: '账号服务' };
 const phases = { ready: '待测试', testing: '测试执行中', tested: '待测试验收', approved: '已测试验收', promoting: '晋级执行中', live: '测试版本已晋级', 'test-failed': '测试失败', 'production-failed': '晋级失败', 'rolling-back': '回滚执行中', 'rollback-failed': '回滚失败', 'rolled-back': '已回滚' };
 const cards = document.querySelector('#services'), notice = document.querySelector('#notice');
-let state, busy = false;
+let state, busy = false, pendingReview = null, reviewGeneration = 0;
+const dialog = document.querySelector('#execution-review');
+const reviewSubmit = document.querySelector('#review-submit');
+const operationNames = { test: '执行测试', promote: '晋级测试版本', rollback: '回滚已知成功版本' };
+function cancelReview() { reviewGeneration++; pendingReview = null; reviewSubmit.disabled = true; if (dialog.open) dialog.close(); }
+async function review(service, operation) {
+  if (busy) return;
+  cancelReview(); const generation = reviewGeneration;
+  const body = { revision: state.revision, id: crypto.randomUUID(), service, operation };
+  busy = true; render(); document.querySelector('#review-details').replaceChildren();
+  document.querySelector('#review-status').textContent = '正在读取计划；尚未执行'; dialog.showModal();
+  document.querySelector('#review-cancel').focus();
+  try {
+    const response = await fetch('/api/preview', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf }, body: JSON.stringify(body) });
+    const result = await response.json(); if (!response.ok) throw new Error(result.error);
+    if (generation !== reviewGeneration || !dialog.open) return;
+    pendingReview = result;
+    const details = document.querySelector('#review-details');
+    const values = [['服务', names[result.service]], ['操作', operationNames[result.operation]],
+      ['目标环境', result.operation === 'test' ? '临时测试环境' : '临时生产角色（非真实生产）'],
+      ['目标资源', result.plan.name], ['资源 ID', result.plan.target], ['不可变镜像', result.plan.artifact],
+      ['发布配置摘要', result.plan.configDigest], ['目标配置摘要', result.plan.targetConfigDigest], ['记录版本', String(result.revision)]];
+    for (const [label, value] of values) details.append(el('dt', label), el('dd', value));
+    document.querySelector('#review-status').textContent = '请核对目标与版本。计划两分钟内有效；记录变化或重启后必须重新确认。';
+    reviewSubmit.disabled = false;
+  } catch (error) {
+    if (generation === reviewGeneration && dialog.open) document.querySelector('#review-status').textContent = error.message;
+  } finally { busy = false; render(); }
+}
+for (const id of ['review-cancel', 'review-close']) document.querySelector(`#${id}`).onclick = cancelReview;
+dialog.addEventListener('cancel', event => { event.preventDefault(); cancelReview(); });
+dialog.addEventListener('close', () => { pendingReview = null; reviewSubmit.disabled = true; });
+reviewSubmit.onclick = () => {
+  if (busy || !pendingReview) return;
+  const { plan: _plan, ...body } = pendingReview; cancelReview(); send('/api/action', body);
+};
+window.addEventListener('popstate', cancelReview);
+window.addEventListener('pagehide', cancelReview);
+window.addEventListener('pageshow', event => { if (event.persisted) { cancelReview(); refresh().catch(() => { notice.textContent = '读取失败'; }); } });
 function el(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function button(label, enabled, callback) { const b = el('button', label); b.type = 'button'; b.disabled = busy || !enabled; b.onclick = callback; return b; }
 async function refresh() { const response = await fetch('/api/state', { cache: 'no-store' }); if (!response.ok) throw new Error('读取记录失败'); state = await response.json(); render(); }
@@ -32,14 +70,14 @@ function render() {
     const select = el('select'); select.setAttribute('aria-label', `${names[spec.id]}候选版本`);
     for (const v of ['v1', 'v2', 'bad']) { const o = el('option', v === 'bad' ? '坏镜像（失败测试）' : v); o.value = v; select.append(o); } select.value = version;
     actions.append(select, button('选择候选', !unknown && ['ready', 'test-failed', 'tested', 'approved', 'live', 'rolled-back'].includes(phase), () => action(spec.id, 'candidate', { version: select.value })));
-    actions.append(button('执行真实测试', !unknown && ['ready', 'test-failed', 'tested', 'approved'].includes(phase), () => action(spec.id, 'test')));
+    actions.append(button('执行真实测试', !unknown && ['ready', 'test-failed', 'tested', 'approved'].includes(phase), () => review(spec.id, 'test')));
     const label = el('label', undefined, 'approval'), checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.disabled = busy || unknown || phase !== 'tested';
     label.append(checkbox, el('span', '我已查看测试证据；这仅是测试验收，不是生产授权'));
     const approve = button('确认测试验收', false, () => action(spec.id, 'approve', { binding: state.bindings[spec.id], acknowledged: true }));
     checkbox.onchange = () => { approve.disabled = busy || unknown || phase !== 'tested' || !checkbox.checked; }; actions.append(label, approve);
-    actions.append(button('晋级测试版本', !unknown && phase === 'approved', () => action(spec.id, 'promote')));
+    actions.append(button('晋级测试版本', !unknown && phase === 'approved', () => review(spec.id, 'promote')));
     const target = phase === 'production-failed' ? record.active : phase === 'rollback-failed' ? record.pendingRollback : record.previous;
-    actions.append(button('回滚已知成功版本', !unknown && ['live', 'production-failed', 'rollback-failed'].includes(phase) && !!target, () => action(spec.id, 'rollback')));
+    actions.append(button('回滚已知成功版本', !unknown && ['live', 'production-failed', 'rollback-failed'].includes(phase) && !!target, () => review(spec.id, 'rollback')));
     for (const request of pending) {
       card.append(el('p', `请求 ${request.input.id} · ${request.status} · Update ${request.updateId || '未知'}`, 'digest'));
       if (request.status === 'accepted') actions.append(button('刷新执行证据', true, () => send('/api/reconcile', { id: request.input.id })));

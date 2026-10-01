@@ -67,27 +67,33 @@ async function main() {
       }
       throw new Error('test UI did not reach required phase');
     }
+    async function executeButton(service, name) {
+      await card(service).getByRole('button', { name, exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '确认本次测试操作' });
+      await dialog.getByText(names[service], { exact: true }).waitFor();
+      await dialog.getByRole('button', { name: '确认执行此计划', exact: true }).click();
+    }
     async function accept(service) {
       const c = card(service); await c.getByRole('checkbox').check();
       await c.getByRole('button', { name: '确认测试验收', exact: true }).click(); await settle(service, '已测试验收');
     }
     async function release(service) {
-      await card(service).getByRole('button', { name: '执行真实测试', exact: true }).click(); await settle(service, '待测试验收');
+      await executeButton(service, '执行真实测试'); await settle(service, '待测试验收');
       assert.equal(await card(service).getByRole('button', { name: '晋级测试版本', exact: true }).isEnabled(), false);
-      await accept(service); await card(service).getByRole('button', { name: '晋级测试版本', exact: true }).click(); await settle(service, '测试版本已晋级');
+      await accept(service); await executeButton(service, '晋级测试版本'); await settle(service, '测试版本已晋级');
     }
     stage = 'four-service-ui-flow';
     for (const service of SERVICES) {
       await release(service);
       await card(service).getByRole('combobox').selectOption('v2'); await card(service).getByRole('button', { name: '选择候选', exact: true }).click(); await settle(service, '待测试');
-      await release(service); await card(service).getByRole('button', { name: '回滚已知成功版本', exact: true }).click(); await settle(service, '已回滚');
+      await release(service); await executeButton(service, '回滚已知成功版本'); await settle(service, '已回滚');
       const container = await client.call('read/InspectDeploymentContainer', { deployment: targets.get(`${service}/production`).id });
       assert.equal(containerMatches(container, versions.v1), true);
     }
     assert.equal(sends, 20);
     stage = 'bad-image-blocking';
     await card('gateway').getByRole('combobox').selectOption('bad'); await card('gateway').getByRole('button', { name: '选择候选', exact: true }).click(); await settle('gateway', '待测试');
-    await card('gateway').getByRole('button', { name: '执行真实测试', exact: true }).click(); await settle('gateway', '测试失败');
+    await executeButton('gateway', '执行真实测试'); await settle('gateway', '测试失败');
     assert.equal(await card('gateway').getByRole('button', { name: '确认测试验收', exact: true }).isEnabled(), false);
     assert.equal(await card('gateway').getByRole('button', { name: '晋级测试版本', exact: true }).isEnabled(), false);
     assert.equal(controller.snapshot().history.at(-1).kind, 'health-failure');
@@ -95,7 +101,7 @@ async function main() {
     stage = 'restart-recovery';
     // Restart with a durably known Update before reading its result; never deploy twice.
     await card('forum').getByRole('combobox').selectOption('v2'); await card('forum').getByRole('button', { name: '选择候选', exact: true }).click(); await settle('forum', '待测试');
-    await card('forum').getByRole('button', { name: '执行真实测试', exact: true }).click(); await settle('forum', '测试执行中');
+    await executeButton('forum', '执行真实测试'); await settle('forum', '测试执行中');
     const beforeRestart = sends;
     await app.close(); controller.close(); controller = openTestController(options); app = await startTestConsole({ controller });
     await page.goto(app.origin); await settle('forum', '待测试验收'); assert.equal(sends, beforeRestart);
@@ -106,10 +112,10 @@ async function main() {
     stage = 'unknown-receipt';
     // Lose one actual Deploy receipt. The remote operation may run; the UI must stay unknown.
     await card('gateway').getByRole('combobox').selectOption('v1'); await card('gateway').getByRole('button', { name: '选择候选', exact: true }).click(); await settle('gateway', '待测试');
-    dropNext = true; await card('gateway').getByRole('button', { name: '执行真实测试', exact: true }).click();
+    dropNext = true; await executeButton('gateway', '执行真实测试');
     await card('gateway').getByText('提交结果未知：已阻断，禁止自动重试', { exact: true }).waitFor();
     const unknownSends = sends;
-    await assert.rejects(controller.action({ revision: controller.snapshot().revision, id: 'no-bypass', service: 'gateway', operation: 'test' }));
+    assert.throws(() => controller.preview({ revision: controller.snapshot().revision, id: 'no-bypass', service: 'gateway', operation: 'test' }));
     await app.close(); controller.close(); controller = openTestController(options); app = await startTestConsole({ controller });
     await page.goto(app.origin); await card('gateway').getByText('提交结果未知：已阻断，禁止自动重试', { exact: true }).waitFor();
     assert.equal(sends, unknownSends); assert.deepEqual(pageErrors, []);

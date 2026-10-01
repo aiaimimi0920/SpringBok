@@ -117,6 +117,9 @@ async function main() {
     assert.ok(!ledger.includes('jwt') && !ledger.includes('PASSWORD'));
     mkdirSync('test-results/m6', { recursive: true });
     await page.screenshot({ path: 'test-results/m6/real-test-console.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: 'test-results/m6/real-test-console-mobile.png', fullPage: true });
     console.log('PASS M6 real UI -> durable preparation -> Komodo -> verified container: four releases, upgrades, rollbacks; bad image blocked; restart and unknown receipt do not redeploy');
   } finally { await browser?.close(); await app?.close(); controller.close(); }
 }

@@ -60,7 +60,8 @@ M1/M2 八个已验证执行文件及其历史证据哈希不修改。M6 是新�
   保存在 Docker 守护进程的容器元数据中，可被有 Docker 权限的进程读取。
   不打印、不上传；结束删除本次容器与 tmpfs，随后销毁临时 runner，不声称
   Docker 元数据从未落盘或已经安全擦除。凭据不属于用户真实账号
-- Node 仅通过确切 loopback Core HTTP 调用固定白名单 API，拒绝重定向、限制
+- Node/Chrome都是受信任runner测试进程，没有另建阻止它们访问Docker的OS沙箱。
+  实现代码仅通过确切loopback Core HTTP调用固定白名单API，拒绝重定向、限制
   响应大小与截止时间；浏览器拿不到 Core 登录信息
 - UI 使用精确 Host/Origin、内存 CSRF、固定路由、CSP及请求大小限制；没有
   生产认证，也不防御同一 runner 上的恶意进程
@@ -93,3 +94,8 @@ M1/M2 八个已验证执行文件及其历史证据哈希不修改。M6 是新�
 UI尚未启动即停止；保留internal隔离，用固定本机桥接修复，不改成外联网。
 [Docker官方桥接说明](https://docs.docker.com/engine/network/drivers/bridge/)
 说明宿主机可访问桥接网络容器；这不等于把端口公开到外部网络。
+
+一次中间测试出现Mongo exit48（监听失败类别），但没有足够日志确认具体原因。
+后续使用仅输出白名单类别的tmpfs诊断wrapper时未复现，UI全链和清理通过；
+最终恢复官方Mongo入口，诊断脚本不接入正常启动。不宣称该偶发启动失败已
+确定根因或通过改变配置永久修复。

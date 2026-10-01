@@ -20,12 +20,13 @@ function render() {
   if (!state) return; cards.replaceChildren();
   for (const record of state.services) {
     const { spec, phase } = record;
-    const card = el('article', undefined, 'card'); card.setAttribute('aria-label', names[spec.id]);
-    const top = el('div', undefined, 'card-top'); top.append(el('h2', names[spec.id]), el('span', phases[phase] || phase, 'phase')); card.append(top);
-    const version = Object.keys(state.versions).find(v => state.versions[v] === spec.artifact);
-    card.append(el('p', `候选 ${version} · ${spec.artifact}`, 'digest'), el('p', `当前成功版本：${record.active?.artifact || '尚无'}`, 'digest'));
     const pending = state.requests.filter(r => r.input.service === spec.id && ['accepted', 'unknown'].includes(r.status));
     const unknown = pending.some(r => r.status === 'unknown') || state.preparation.some(r => r.service === spec.id && r.status === 'unknown');
+    const card = el('article', undefined, 'card'); card.setAttribute('aria-label', names[spec.id]);
+    const top = el('div', undefined, 'card-top'); top.append(el('h2', names[spec.id]), el('span', unknown ? '结果未知 · 已阻断' : phases[phase] || phase, 'phase')); card.append(top);
+    const version = Object.keys(state.versions).find(v => state.versions[v] === spec.artifact);
+    card.append(el('p', `候选 ${version} · ${spec.artifact}`, 'digest'), el('p', `当前成功版本：${record.active?.artifact || '尚无'}`, 'digest'));
+
     if (unknown) card.append(el('p', '提交结果未知：已阻断，禁止自动重试'));
     const actions = el('div', undefined, 'actions');
     const select = el('select'); select.setAttribute('aria-label', `${names[spec.id]}候选版本`);

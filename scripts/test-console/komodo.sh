@@ -88,17 +88,9 @@ network_id=$(docker network create --internal "$network")
 docker run -d --name "$prefix-mongo" --network "$network" --network-alias mongo \
   --log-driver=none --memory=1g --cpus=1 --pids-limit=256 \
   --tmpfs /data/db:rw,size=2g --tmpfs /data/configdb:rw,size=64m --tmpfs /tmp:rw,size=16m \
-  --env-file "$work/mongo.env" --entrypoint bash mongo:8.0 -c '
-    docker-entrypoint.sh mongod --quiet --wiredTigerCacheSizeGB 0.25 >/tmp/mongo-startup.log 2>&1
-    code=$?; printf "%s\n" "$code" >/tmp/mongo-exit
-    sleep infinity
-  ' >/dev/null
+  --env-file "$work/mongo.env" mongo:8.0 --quiet --wiredTigerCacheSizeGB 0.25 >/dev/null
 # Wait for the authenticated final Mongo process, not the transient initialization server.
 for attempt in {1..60}; do
-  if docker exec "$prefix-mongo" test -f /tmp/mongo-exit; then
-    docker exec -i "$prefix-mongo" mongosh --nodb --quiet --file /dev/stdin < scripts/test-console/mongo-diagnostic.cjs
-    echo 'Mongo process exited before authenticated readiness'; exit 1
-  fi
   if docker exec "$prefix-mongo" mongosh --host mongo --quiet --eval '
     const admin = db.getSiblingDB("admin");
     const auth = admin.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD);
@@ -108,7 +100,6 @@ for attempt in {1..60}; do
     if (admin.runCommand({ping:1}).ok !== 1) quit(1);
   ' >/dev/null 2>&1; then break; fi
   if [[ "$attempt" == 60 ]]; then
-    docker exec -i "$prefix-mongo" mongosh --nodb --quiet --file /dev/stdin < scripts/test-console/mongo-diagnostic.cjs
     echo 'Mongo authenticated readiness failed'; exit 1
   fi
   sleep 1

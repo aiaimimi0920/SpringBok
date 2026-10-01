@@ -25,13 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      REVIEWED_SHA: ${{ github.event_name == 'push' && '8ba30599b793f3ba86360e064f49a832887d19e0' || inputs.reviewed_sha }}
+      REVIEWED_SHA: ${{ github.event_name == 'push' && '4af70436d9baca5020521a5252c8e410c3b8c015' || inputs.reviewed_sha }}
     steps:
       - name: Bind reviewed source before checkout
         run: |
           [[ "$REVIEWED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            [[ "$REVIEWED_SHA" == 8ba30599b793f3ba86360e064f49a832887d19e0 ]] || exit 2
+            [[ "$REVIEWED_SHA" == 4af70436d9baca5020521a5252c8e410c3b8c015 ]] || exit 2
           else
             [[ "$REVIEWED_SHA" == "$GITHUB_SHA" ]] || exit 2
           fi

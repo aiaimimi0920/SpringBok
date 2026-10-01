@@ -63,3 +63,10 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 只允许明确授权后的 GitHub 临时测试机运行，需授予临时 Docker 管理权限；
 不是可用于生产的安装脚本。[真实集成通过记录](https://github.com/aiaimimi0920/SpringBok/actions/runs/36715595686)
 覆盖样例容器与失败阻断；M3另提供演示UI，真实业务、多机及生产人工验收仍待实现。[范围、授权和验收](docs/komodo-integration.md)
+
+## M6：临时单机真实执行测试
+
+新增独立测试控制台，把固定界面操作、配置准备、持久执行记录接到真实
+Komodo 测试资源。运行仅限明确授权的 GitHub 临时 Linux 机，已在临时机通过四服务真实浏览器发布、更新、失败阻断、回滚与恢复测试。
+准确测试状态见 [真实测试控制台](docs/real-test-console.md)。M3演示入口保持
+独立，不连接真实服务器。生产登录、配置所有权与用户服务器接入仍待决策。

@@ -77,7 +77,18 @@ export function openCoordinator({ directory, manifest, releases, transport, time
         if (update.success) {
           resource = await call('read/GetDeployment', { deployment: request.plan.target });
           container = await call('read/InspectDeploymentContainer', { deployment: request.plan.target });
-          if (!matchesResource(resource, request.plan) || !containerMatches(container, request.plan.artifact)) throw new Error('execution health or configuration not confirmed');
+          if (!matchesResource(resource, request.plan)) throw new Error('execution configuration not confirmed');
+          if (containerMatches(container, request.plan.artifact, false)) {
+            // Deploy may complete successfully while the exact fixture exits 1.
+            // Preserve that distinction instead of inventing Update.success=false.
+            journal.append({ kind: 'health-failure', requestId, evidence: {
+              updateId: request.updateId, target: request.plan.target, updateSuccess: true,
+              configDigest: request.plan.targetConfigDigest, image: container.Image,
+              status: 'exited', exitCode: 1, paused: false, oomKilled: false,
+            } });
+            return current(requestId);
+          }
+          if (!containerMatches(container, request.plan.artifact)) throw new Error('execution health or configuration not confirmed');
         }
         journal.append({ kind: 'outcome', requestId, evidence: resultEvidence(update, request, resource, container) });
         return current(requestId);

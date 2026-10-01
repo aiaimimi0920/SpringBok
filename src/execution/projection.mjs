@@ -57,6 +57,16 @@ export function project(catalog, events) {
       const operation = { test: 'test-result', promote: 'production-result', rollback: 'rollback-result' }[request.input.operation];
       state.lab.dispatch({ service: request.input.service, operation, params: { success: e.success } }, runner);
       request.status = e.success ? 'succeeded' : 'failed';
+    } else if (event.kind === 'health-failure') {
+      exact(event, ['revision', 'kind', 'requestId', 'evidence']);
+      const request = state.requests.get(event.requestId), e = event.evidence;
+      exact(e, ['updateId', 'target', 'updateSuccess', 'configDigest', 'image', 'status', 'exitCode', 'paused', 'oomKilled']);
+      if (request?.status !== 'accepted' || e.updateId !== request.updateId || e.target !== request.plan.target ||
+          e.updateSuccess !== true || e.configDigest !== request.plan.targetConfigDigest || e.image !== request.plan.artifact ||
+          e.status !== 'exited' || e.exitCode !== 1 || e.paused !== false || e.oomKilled !== false) throw new Error('invalid failed-container evidence');
+      const operation = { test: 'test-result', promote: 'production-result', rollback: 'rollback-result' }[request.input.operation];
+      state.lab.dispatch({ service: request.input.service, operation, params: { success: false } }, runner);
+      request.status = 'failed'; request.failure = 'container-exited-1';
     } else throw new Error('unknown execution event');
   }
   events.forEach((event, index) => {

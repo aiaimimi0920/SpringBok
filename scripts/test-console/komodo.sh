@@ -4,12 +4,12 @@ set -euo pipefail
 # protection, not an authorization system. Explicit human permission is still required.
 [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted && \
    ${GITHUB_REPOSITORY:-} == aiaimimi0920/SpringBok && \
-   ${SPRINGBOK_ALLOW_M6_TEST:-} == yes ]] || { echo 'Requires explicitly approved disposable GitHub runner'; exit 2; }
+   ${SPRINGBOK_ALLOW_M10_TEST:-} == yes ]] || { echo 'Requires explicitly approved disposable GitHub runner'; exit 2; }
 [[ ${GITHUB_RUN_ID:-} =~ ^[0-9]+$ && ${GITHUB_RUN_ATTEMPT:-} =~ ^[0-9]+$ ]] || exit 2
-prefix="springbok-m6-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+prefix="springbok-m10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 network="$prefix-net"
 network_id=
-work=$(mktemp -d /dev/shm/springbok-m6.XXXXXX)
+work=$(mktemp -d /dev/shm/springbok-m10.XXXXXX)
 chmod 700 "$work"
 containers=("$prefix-core" "$prefix-mongo" "$prefix-periphery")
 fixtures=()

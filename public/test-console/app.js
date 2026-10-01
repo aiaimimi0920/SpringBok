@@ -3,6 +3,7 @@ const names = { gateway: 'Gateway 网关', forum: '论坛', game: '在线游戏'
 const phases = { ready: '待测试', testing: '测试执行中', tested: '待测试验收', approved: '已测试验收', promoting: '晋级执行中', live: '测试版本已晋级', 'test-failed': '测试失败', 'production-failed': '晋级失败', 'rolling-back': '回滚执行中', 'rollback-failed': '回滚失败', 'rolled-back': '已回滚' };
 const cards = document.querySelector('#services'), notice = document.querySelector('#notice');
 let state, busy = false, pendingReview = null, reviewGeneration = 0;
+const inspections = new Map();
 const dialog = document.querySelector('#execution-review');
 const reviewSubmit = document.querySelector('#review-submit');
 const operationNames = { test: '执行测试', promote: '晋级测试版本', rollback: '回滚已知成功版本' };
@@ -54,6 +55,16 @@ async function send(path, body) {
   finally { busy = false; render(); }
 }
 const action = (service, operation, extra = {}) => send('/api/action', { id: crypto.randomUUID(), service, operation, ...extra });
+async function inspect(service, id) {
+  if (busy) return; busy = true; inspections.delete(service); notice.textContent = '正在只读查看证据…'; render();
+  try {
+    const response = await fetch('/api/inspect', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf }, body: JSON.stringify({ revision: state.revision, id }) });
+    const result = await response.json(); if (!response.ok) throw new Error(result.error);
+    inspections.set(service, result); notice.textContent = '已只读查看证据；没有更改发布记录、配置或容器';
+  } catch (error) { notice.textContent = error.message; }
+  finally { busy = false; render(); }
+}
+
 function render() {
   if (!state) return; cards.replaceChildren();
   for (const record of state.services) {
@@ -82,7 +93,20 @@ function render() {
       card.append(el('p', `请求 ${request.input.id} · ${request.status} · Update ${request.updateId || '未知'}`, 'digest'));
       if (request.status === 'accepted') actions.append(button('刷新执行证据', true, () => send('/api/reconcile', { id: request.input.id })));
     }
-    card.append(actions); cards.append(card);
+    const latest = [...state.requests].reverse().find(r => r.input.service === spec.id && r.plan);
+    const preparation = state.preparation.find(r => r.service === spec.id && r.status === 'unknown');
+    const inspectionId = preparation?.id || latest?.input.id;
+    if (inspectionId) actions.append(button('查看执行证据与阻断原因', true, () => inspect(spec.id, inspectionId)));
+    card.append(actions);
+    const observation = inspections.get(spec.id);
+    if (observation && observation.revision === state.revision && observation.requestId === inspectionId) {
+      const panel = el('section', undefined, 'diagnostic'); panel.setAttribute('aria-label', `${names[spec.id]}执行证据`);
+      panel.append(el('h3', observation.title), el('p', observation.detail), el('p', `下一步：${observation.next}`));
+      panel.append(el('p', `只读观测时间：${observation.observedAt} · 记录版本 ${observation.revision}`, 'digest'));
+      panel.append(el('p', `请求 ${observation.requestId} · Update ${observation.updateId || '未知'} · 目标 ${observation.target}`, 'digest'));
+      panel.append(button('关闭证据说明', true, () => { inspections.delete(spec.id); render(); })); card.append(panel);
+    }
+    cards.append(card);
   }
   const history = document.querySelector('#history'); history.replaceChildren();
   for (const event of [...state.history].reverse()) history.append(el('li', `#${event.revision} ${event.kind} · ${event.input?.service || event.requestId || ''}${event.updateId ? ` · Update ${event.updateId}` : ''}${event.evidence ? ` · ${event.kind === 'health-failure' ? '容器明确失败' : event.evidence.success ? '已验证成功' : '已验证失败'}` : ''}`));

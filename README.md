@@ -3,6 +3,12 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M8：看清执行证据与阻断原因
+
+临时测试控制台新增只读证据说明：区分排队、执行中、配置不一致、错镜像、
+OOM、暂停和健康检查状态，并给出明确下一步。查看不会写记录、重发部署或
+自动解除阻断，未知回执仍保持未知。[使用方式与验证范围](docs/execution-diagnostics.md)
+
 ## M7：执行前核对目标和版本
 
 临时真实测试控制台新增执行确认面板：测试、晋级和回滚之前，先看清确切目标、

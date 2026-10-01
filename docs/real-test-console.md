@@ -52,7 +52,9 @@ M1/M2 八个已验证执行文件及其历史证据哈希不修改。M6 是新�
 - Core/Mongo/Periphery 使用独立 internal Docker 网络，无宿主根或 /proc 挂载
 - 仅 Periphery 挂 Docker socket；它实际可管理此临时机的 Docker，不能说成
   Docker namespace 沙箱或只对几个容器有强制权限隔离
-- Core 唯一发布端口为 `127.0.0.1` 的随机高端口；测试 UI 也只监听 loopback
+- Docker 不发布任何端口。harness读取本次Core容器在本次internal网络的确切
+  私有IPv4，短期TCP桥接只监听 `127.0.0.1` 随机高端口，只转发该固定地址的
+  9120端口；无任意上游或DNS。测试 UI 也只监听loopback，结束关闭桥接连接
 - 样例容器 network=none、无发布端口、无持久卷；禁用远程终端
 - 随机测试登录/数据库凭据及密钥的生成文件位于 tmpfs；容器环境变量也会
   保存在 Docker 守护进程的容器元数据中，可被有 Docker 权限的进程读取。
@@ -86,3 +88,8 @@ M1/M2 八个已验证执行文件及其历史证据哈希不修改。M6 是新�
 
 当前用户不需要提供长期机器。等测试闭环与已声明范围全部通过，再决定真实
 服务器接入。此阶段不承诺生产可用、任意业务、多机管理或真实人工身份。
+
+首轮实测发现该runner的internal Docker网络未建立请求的published端口，
+UI尚未启动即停止；保留internal隔离，用固定本机桥接修复，不改成外联网。
+[Docker官方桥接说明](https://docs.docker.com/engine/network/drivers/bridge/)
+说明宿主机可访问桥接网络容器；这不等于把端口公开到外部网络。

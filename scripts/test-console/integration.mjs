@@ -8,19 +8,21 @@ import { waitFor, containerMatches } from '../../src/komodo/ci-client.mjs';
 import { releaseSpec } from '../../src/execution/plan.mjs';
 import { loopbackClient } from '../../src/test-console/transport.mjs';
 import { openTestController } from '../../src/test-console/controller.mjs';
+import { openCoreBridge } from './core-bridge.mjs';
 import { startTestConsole } from '../../src/test-console/server.mjs';
 
-let stage = 'startup';
+let stage = 'startup', bridge;
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted' ||
       process.env.GITHUB_REPOSITORY !== 'aiaimimi0920/SpringBok' || process.env.SPRINGBOK_ALLOW_M6_TEST !== 'yes') throw new Error('approved temporary runner required');
-  const directory = process.argv[2], port = Number(process.argv[3]);
+  const directory = process.argv[2], coreAddress = process.argv[3];
   if (!/^\/dev\/shm\/springbok-m6\.[A-Za-z0-9]+$/.test(directory)) throw new Error('temporary directory required');
   const env = Object.fromEntries(readFileSync(join(directory, 'driver.env'), 'utf8').trim().split('\n').map(line => line.split('=')));
   const versions = { v1: env.IMAGE_V1, v2: env.IMAGE_V2, bad: env.IMAGE_BAD };
   for (const image of Object.values(versions)) assert.match(image, /^sha256:[a-f0-9]{64}$/);
   assert.equal(new Set(Object.values(versions)).size, 3);
-  const client = loopbackClient(port); await waitFor(() => client.version(), 'test Core readiness');
+  bridge = await openCoreBridge(coreAddress);
+  const client = loopbackClient(bridge.port); await waitFor(() => client.version(), 'test Core readiness');
   await client.login(env.KOMODO_INIT_ADMIN_PASSWORD); delete env.KOMODO_INIT_ADMIN_PASSWORD;
   await waitFor(async () => (await client.call('read/GetServerState', { server: 'springbok-ci' })).status === 'Ok', 'test Periphery');
   stage = 'resource-catalog';
@@ -118,4 +120,4 @@ async function main() {
     console.log('PASS M6 real UI -> durable preparation -> Komodo -> verified container: four releases, upgrades, rollbacks; bad image blocked; restart and unknown receipt do not redeploy');
   } finally { await browser?.close(); await app?.close(); controller.close(); }
 }
-main().catch(() => { console.error(`FAIL M6 integration stage=${stage} (no credential or response dumps)`); process.exitCode = 1; });
+main().catch(() => { console.error(`FAIL M6 integration stage=${stage} (no credential or response dumps)`); process.exitCode = 1; }).finally(async () => { await bridge?.close(); });

@@ -120,3 +120,10 @@ test('test transport only accepts numeric high loopback port and requires an exp
   for (const port of [80, 65536, '9120', 'https://example.com']) assert.throws(() => loopbackClient(port));
   await assert.rejects(loopbackClient(9120).call('execute/Deploy', {}), /not allowed/);
 });
+
+test('temporary Core bridge accepts private literal IPv4 only and listens only on loopback', async () => {
+  const { openCoreBridge, validateCoreAddress } = await import('../scripts/test-console/core-bridge.mjs');
+  for (const value of ['example.com', '127.0.0.1', '0.0.0.0', '8.8.8.8', '::1', '172.99.1.1']) assert.throws(() => validateCoreAddress(value));
+  const bridge = await openCoreBridge('172.18.0.2');
+  assert.equal(bridge.address, '127.0.0.1'); assert.ok(bridge.port > 1023); await bridge.close();
+});

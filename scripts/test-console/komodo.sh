@@ -8,6 +8,7 @@ set -euo pipefail
 [[ ${GITHUB_RUN_ID:-} =~ ^[0-9]+$ && ${GITHUB_RUN_ATTEMPT:-} =~ ^[0-9]+$ ]] || exit 2
 prefix="springbok-m6-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 network="$prefix-net"
+network_id=
 work=$(mktemp -d /dev/shm/springbok-m6.XXXXXX)
 chmod 700 "$work"
 containers=("$prefix-core" "$prefix-mongo" "$prefix-periphery")
@@ -27,7 +28,7 @@ cleanup() {
 
     fi
     docker rm -f -v "${containers[@]}" "${fixtures[@]}" >/dev/null 2>&1 || :
-    docker network rm "$network" >/dev/null 2>&1 || :
+    if [[ -n "$network_id" ]]; then docker network rm "$network_id" >/dev/null 2>&1 || :; fi
     if ! docker info >/dev/null 2>&1; then echo 'FAIL cleanup verification unavailable'; status=1; fi
     for name in "${containers[@]}" "${fixtures[@]}"; do
       if docker container inspect "$name" >/dev/null 2>&1; then echo 'FAIL test container cleanup'; status=1; fi
@@ -44,6 +45,7 @@ trap cleanup EXIT
 for name in "${containers[@]}" "${fixtures[@]}"; do
   if docker container inspect "$name" >/dev/null 2>&1; then echo 'Unexpected pre-existing test container'; exit 2; fi
 done
+if docker network inspect "$network" >/dev/null 2>&1; then echo 'Unexpected pre-existing test network'; exit 2; fi
 armed=true
 mkdir "$work/keys"
 # Generate inside the ephemeral runner; never echo, persist to artifacts, or use real accounts.
@@ -80,8 +82,9 @@ for pair in 'v1 IMAGE_V1' 'v2 IMAGE_V2' 'bad IMAGE_BAD'; do
   read -r tag key <<< "$pair"
   printf '%s=%s\n' "$key" "$(docker image inspect --format '{{.Id}}' "$prefix-$tag")" >> "$work/driver.env"
 done
-docker network create --internal "$network" >/dev/null
-# Only Core is published, to IPv4 loopback on a random port. No public listener, host/proc mount or real credential.
+network_id=$(docker network create --internal "$network")
+[[ "$network_id" =~ ^[a-f0-9]{64}$ ]] || exit 2
+# No Docker-published ports. The driver creates a bounded loopback-only bridge to this Core.
 docker run -d --name "$prefix-mongo" --network "$network" --network-alias mongo \
   --log-driver=none --memory=1g --cpus=1 --pids-limit=256 \
   --tmpfs /data/db:rw,size=2g --tmpfs /data/configdb:rw,size=64m \
@@ -121,11 +124,12 @@ docker exec "$prefix-mongo" mongosh --host mongo --quiet --eval '
     quit(1);
   }
 '
-docker run -d --name "$prefix-core" --network "$network" --network-alias core --publish 127.0.0.1::9120 \
+core_id=$(docker run -d --name "$prefix-core" --network "$network" --network-alias core \
   --log-driver=none --restart=on-failure:3 --memory=1g --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /backups:rw,size=64m \
   --mount "type=bind,source=$work/keys,target=/config/keys" \
-  --env-file "$work/core.env" ghcr.io/moghtech/komodo-core:2.3.3 >/dev/null
+  --env-file "$work/core.env" ghcr.io/moghtech/komodo-core:2.3.3)
+[[ "$core_id" =~ ^[a-f0-9]{64}$ ]] || exit 2
 docker run -d --name "$prefix-periphery" --network "$network" \
   --log-driver=none --restart=on-failure:3 --memory=512m --cpus=1 --pids-limit=256 \
   --read-only --tmpfs /tmp:rw,size=64m --tmpfs /etc/komodo:rw,size=64m \
@@ -136,7 +140,7 @@ docker run -d --name "$prefix-periphery" --network "$network" \
   -e PERIPHERY_DISABLE_TERMINALS=true -e PERIPHERY_DISABLE_CONTAINER_TERMINALS=true \
   ghcr.io/moghtech/komodo-periphery:2.3.3 >/dev/null
 # The UI/browser run on the same temporary runner. No socket is passed to Node.
-core_address=$(docker port "$prefix-core" 9120/tcp)
-[[ "$core_address" =~ ^127\.0\.0\.1:([0-9]+)$ ]] || exit 2
-core_port="${BASH_REMATCH[1]}"
-node scripts/test-console/integration.mjs "$work" "$core_port"
+read -r checked_id checked_name checked_network core_address < <(docker inspect --format "{{.Id}} {{.Name}} {{(index .NetworkSettings.Networks \"$network\").NetworkID}} {{(index .NetworkSettings.Networks \"$network\").IPAddress}}" "$core_id")
+[[ "$checked_id" == "$core_id" && "$checked_name" == "/$prefix-core" && "$checked_network" == "$network_id" ]] || exit 2
+[[ $(docker network inspect --format '{{.Internal}}' "$network_id") == true ]] || exit 2
+node scripts/test-console/integration.mjs "$work" "$core_address"

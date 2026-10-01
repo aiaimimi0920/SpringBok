@@ -19,3 +19,6 @@ node_modules/
 # Local simulated release history (never credentials)
 .springbok-demo/
 test-results/
+
+# Read-only historical source checkout used by CI
+.evidence/

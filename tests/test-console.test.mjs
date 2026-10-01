@@ -22,7 +22,11 @@ function setup(t) {
   let controller = openTestController(options), count = 0;
   t.after(() => controller.close());
   return { directory, backend, options, get c() { return controller; }, set hook(fn) { hook = fn; },
-    async action(operation, extra = {}, service = 'gateway') { return controller.action({ revision: controller.snapshot().revision, id: `r${++count}`, service, operation, ...extra }); },
+    async action(operation, extra = {}, service = 'gateway') {
+      const body = { revision: controller.snapshot().revision, id: `r${++count}`, service, operation, ...extra };
+      if (['test', 'promote', 'rollback'].includes(operation)) body.confirmation = controller.preview(body).confirmation;
+      return controller.action(body);
+    },
     restart() { controller.close(); controller = openTestController(options); },
   };
 }
@@ -105,7 +109,8 @@ test('real-test HTTP rejects wrong Host/Origin/CSRF, caller results and arbitrar
   const first = await fetch(`${app.origin}/api/state`); const state = await first.json();
   assert.equal(state.mode, 'disposable-integration-test');
   const headers = { Origin: app.origin, 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf };
-  const body = JSON.stringify({ revision: state.revision, id: 'http-test', service: 'gateway', operation: 'test' });
+  const request = { revision: state.revision, id: 'http-test', service: 'gateway', operation: 'test' };
+  const body = JSON.stringify({ ...request, confirmation: f.c.preview(request).confirmation });
   const wrongHost = await new Promise((resolve, reject) => { const req = http.get(app.origin + '/api/state', { headers: { Host: 'other.example' } }, res => { res.resume(); resolve(res.statusCode); }); req.on('error', reject); });
   assert.equal(wrongHost, 403);
   for (const change of [{ Origin: 'https://other.example' }, { 'X-CSRF-Token': 'bad' }, { Origin: '' }]) {
@@ -149,10 +154,77 @@ test('M6 privileged integration has only an acknowledged exact-main-SHA manual e
   assert.ok(wf.indexOf('"$REVIEWED_SHA" == "$GITHUB_SHA"') < wf.indexOf('uses: actions/checkout'));
   assert.doesNotMatch(wf, /secrets\.|contents: write/);
 });
-test('M6 execution inputs still match the successful real test UI integration', async () => {
+test('unchanged M6 inputs retain their evidence hashes; M7 changes are explicitly excluded from that claim', async () => {
   const { createHash } = await import('node:crypto');
   const evidence = JSON.parse(readFileSync(new URL('../docs/test-console-evidence.json', import.meta.url)));
+  const evolution = JSON.parse(readFileSync(new URL('../docs/m7-changed-inputs.json', import.meta.url)));
+  assert.equal(evolution.baseline_commit, evidence.source_commit);
   for (const [path, hash] of Object.entries(evidence.execution_files_sha256)) {
+    if (evolution.changed_inputs.includes(path)) continue;
     assert.equal(createHash('sha256').update(readFileSync(new URL(`../${path}`, import.meta.url))).digest('hex'), hash, path);
+  }
+});
+
+test('review is read-only and binds exact resource, artifact, revision and request', async t => {
+  const f = setup(t), before = f.c.snapshot();
+  const body = { revision: before.revision, id: 'review-test', service: 'gateway', operation: 'test' };
+  const review = f.c.preview(body);
+  assert.deepEqual(f.c.snapshot(), before); assert.deepEqual(f.backend.calls, []);
+  assert.equal(review.plan.target, f.options.releases[0].test.id);
+  assert.equal(review.plan.artifact, image(1));
+  await assert.rejects(f.c.action(body));
+  for (const change of [{ id: 'other' }, { service: 'forum' }, { operation: 'promote' },
+    { confirmation: { ...review.confirmation, signature: '0'.repeat(64) } },
+    { confirmation: { ...review.confirmation, expiresAt: 0 } }]) {
+    await assert.rejects(f.c.action({ ...body, confirmation: review.confirmation, ...change }));
+  }
+  assert.deepEqual(f.c.snapshot(), before); assert.deepEqual(f.backend.calls, []);
+  await f.c.action({ ...body, confirmation: review.confirmation }); assert.equal(f.backend.executeCount, 1);
+});
+test('old revision, restart and repeated confirmation cannot send another deployment', async t => {
+  const f = setup(t);
+  const body = { revision: f.c.snapshot().revision, id: 'review-old', service: 'gateway', operation: 'test' };
+  const review = f.c.preview(body); f.restart();
+  await assert.rejects(f.c.action({ ...body, confirmation: review.confirmation }), /confirmation/);
+  assert.equal(f.backend.calls.length, 0);
+  const current = f.c.preview(body);
+  const results = await Promise.allSettled([f.c.action({ ...body, confirmation: current.confirmation }), f.c.action({ ...body, confirmation: current.confirmation })]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1); assert.equal(f.backend.executeCount, 1);
+  await assert.rejects(f.c.action({ ...body, confirmation: current.confirmation }), /stale/);
+});
+test('candidate changes invalidate the preview; rollback review uses the known-good image', async t => {
+  const f = setup(t);
+  const body = { revision: f.c.snapshot().revision, id: 'old-candidate', service: 'gateway', operation: 'test' };
+  const review = f.c.preview(body);
+  await f.action('candidate', { version: 'v2' });
+  await assert.rejects(f.c.action({ ...body, confirmation: review.confirmation }), /stale/);
+  assert.equal(f.backend.executeCount, 0);
+  await release(f, 'gateway'); await f.action('candidate', { version: 'v1' }); await release(f, 'gateway');
+  const rollback = f.c.preview({ revision: f.c.snapshot().revision, id: 'rollback-review', service: 'gateway', operation: 'rollback' });
+  assert.equal(rollback.plan.artifact, image(2)); assert.equal(rollback.plan.target, f.options.releases[0].production.id);
+});
+test('HTTP preview is protected and cannot mutate or accept caller-supplied plans', async t => {
+  const f = setup(t), app = await startTestConsole({ controller: f.c }); t.after(() => app.close());
+  const state = await (await fetch(`${app.origin}/api/state`)).json();
+  const headers = { Origin: app.origin, 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf };
+  const body = { revision: state.revision, id: 'preview-http', service: 'gateway', operation: 'test' };
+  assert.equal((await fetch(`${app.origin}/api/preview`, { method: 'POST', headers: { ...headers, Origin: 'https://other.example' }, body: JSON.stringify(body) })).status, 403);
+  assert.equal((await fetch(`${app.origin}/api/preview`, { method: 'POST', headers, body: JSON.stringify({ ...body, plan: {} }) })).status, 400);
+  const response = await fetch(`${app.origin}/api/preview`, { method: 'POST', headers, body: JSON.stringify(body) });
+  assert.equal(response.status, 200); assert.equal((await response.json()).plan.artifact, image(1));
+  assert.equal(f.backend.calls.length, 0); assert.deepEqual(f.c.snapshot().history, []);
+});
+
+test('a genuinely expired signed plan is rejected and confirmation material is never persisted', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1000000 });
+  const f = setup(t), body = { revision: f.c.snapshot().revision, id: 'expiring', service: 'gateway', operation: 'test' };
+  const review = f.c.preview(body);
+  t.mock.timers.tick(120001);
+  await assert.rejects(f.c.action({ ...body, confirmation: review.confirmation }), /confirmation/);
+  assert.equal(f.backend.calls.length, 0);
+  const fresh = f.c.preview(body); await f.c.action({ ...body, confirmation: fresh.confirmation });
+  for (const folder of ['preparation', 'execution']) {
+    const bytes = readFileSync(join(f.directory, folder, 'ledger.json'), 'utf8');
+    assert.ok(!bytes.includes(fresh.confirmation.signature)); assert.ok(!bytes.includes('confirmationKey'));
   }
 });

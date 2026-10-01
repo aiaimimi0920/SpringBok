@@ -3,6 +3,13 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M7：执行前核对目标和版本
+
+临时真实测试控制台新增执行确认面板：测试、晋级和回滚之前，先看清确切目标、
+不可变镜像与配置摘要，再确认执行。取消不写入，旧计划、重启和重复点击受到
+服务端校验。此轮用假后端与普通浏览器回归验证，尚未重新运行真实 Komodo；
+M6 历史成功证据保留并单独核验。[操作方式与验证边界](docs/execution-confirmation.md)
+
 ## M5：看清离线发布计划
 
 本地演示新增“离线计划预览”：选择固定服务、合成场景与操作，查看目标、镜像和配置

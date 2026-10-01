@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 import { openCoordinator } from '../execution/coordinator.mjs';
 import { createCatalog, digest, exact, matchesResource, releaseSpec } from '../execution/plan.mjs';
 import { project, dispatch, requestDigest, validateInput } from '../execution/projection.mjs';
@@ -16,6 +17,8 @@ export function openTestController({ directory, manifest, releases, versions, tr
   const labels = structuredClone(versions);
   exact(labels, ['v1', 'v2', 'bad']);
   for (const artifact of Object.values(labels)) if (!releases.some(r => r.artifact === artifact)) throw new Error('unknown test release');
+  const confirmationKey = randomBytes(32); // Session-only plan binding, not authentication.
+  const external = new Set(['test', 'promote', 'rollback']);
   let coordinator, staging, busy = false;
   function stages(events) {
     const rows = new Map();
@@ -61,8 +64,35 @@ export function openTestController({ directory, manifest, releases, versions, tr
     if (busy) throw new Error('test controller busy'); busy = true;
     try { return await work(); } finally { busy = false; }
   }
+  function planFor(body, state) {
+    exact(body, ['revision', 'id', 'service', 'operation']);
+    if (!Number.isSafeInteger(body.revision) || body.revision !== state.revision) {
+      const error = new Error('stale test state'); error.status = 409; throw error;
+    }
+    if (!external.has(body.operation)) throw new Error('only execution actions have a review plan');
+    if (state.preparation.some(r => r.service === body.service && r.status === 'unknown')) throw new Error('configuration preparation unknown');
+    const input = { id: body.id, service: body.service, operation: body.operation, params: {} };
+    return dispatch(project(catalog, state.history).lab, input, actor, catalog);
+  }
+  function signature(body, plan, expiresAt) {
+    return createHmac('sha256', confirmationKey).update(digest({ body, plan, expiresAt })).digest('hex');
+  }
+  function verifyConfirmation(body, plan, confirmation) {
+    exact(confirmation, ['expiresAt', 'signature']);
+    if (!Number.isSafeInteger(confirmation.expiresAt) || confirmation.expiresAt <= Date.now() ||
+        confirmation.expiresAt > Date.now() + 120000 || typeof confirmation.signature !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(confirmation.signature) ||
+        !timingSafeEqual(Buffer.from(confirmation.signature), Buffer.from(signature(body, plan, confirmation.expiresAt)))) {
+      const error = new Error('execution confirmation expired or changed'); error.status = 409; throw error;
+    }
+  }
   return {
     snapshot,
+    preview(body) {
+      if (busy) throw new Error('test controller busy');
+      const plan = planFor(body, snapshot()), expiresAt = Date.now() + 120000;
+      return { ...structuredClone(body), plan, confirmation: { expiresAt, signature: signature(body, plan, expiresAt) } };
+    },
     action(body) {
       return exclusive(async () => {
         const state = snapshot();
@@ -79,7 +109,13 @@ export function openTestController({ directory, manifest, releases, versions, tr
           const release = releases.find(r => r.service === service && r.artifact === labels[body.version]);
           if (!release) throw new Error('unknown fixed release');
           params = { artifact: release.artifact, configDigest: releaseSpec(release).configDigest };
-        } else exact(body, ['revision', 'id', 'service', 'operation']);
+        } else {
+          exact(body, ['revision', 'id', 'service', 'operation', 'confirmation']);
+          const reviewBody = { revision: body.revision, id, service, operation };
+          // Recompute under the same exclusive lock, before any durable or remote write.
+          const plan = planFor(reviewBody, state);
+          verifyConfirmation(reviewBody, plan, body.confirmation);
+        }
         const input = { id, service, operation, params };
         if (state.requests.some(r => r.input.id === id)) return coordinator.submit(input, actor);
         const previous = stages(staging.read()).get(id);

@@ -141,3 +141,14 @@ Ordinary CI also runs the unchanged isolated sample-container and DEMO browser
 checks. These are separate validation layers. M2's successful real Komodo evidence
 and its execution source hashes remain unchanged; no new privileged Komodo run,
 user-server connection, production deployment or durable access is implied.
+
+## M6 extension: explicit failed-container evidence
+
+The coordinator now distinguishes a successful final Deploy Update from an exact
+container that exited with code 1, was not running/paused/OOM-killed, and matches
+the planned immutable image and full configuration. It records a separate
+`health-failure` event with `updateSuccess: true`, then transitions the contract
+to failure. It does not relabel the API Update as failed. Missing evidence, OOM,
+paused containers, wrong images and pending health remain unconfirmed. The M6
+test-only controller adds separately journaled fixed configuration preparation;
+see [real test console](real-test-console.md). The production limits above remain.

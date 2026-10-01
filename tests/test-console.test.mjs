@@ -146,7 +146,7 @@ test('Mongo diagnostic outputs only fixed categories and numeric IDs, never raw 
   assert.ok(!output.includes(secret)); assert.ok(!output.includes('PERMISSION'));
 });
 
-test('M6 privileged integration has only an acknowledged exact-main-SHA manual entry', () => {
+test('privileged integration has only an acknowledged exact-main-SHA manual entry', () => {
   const wf = readFileSync(new URL('../.github/workflows/test-console-integration.yml', import.meta.url), 'utf8');
   assert.match(wf, /workflow_dispatch:/); assert.doesNotMatch(wf, /\n  (push|pull_request|pull_request_target|schedule):/);
   assert.match(wf, /github\.ref == 'refs\/heads\/main'/); assert.match(wf, /inputs\.approve_temporary_docker_admin/);
@@ -403,4 +403,13 @@ test('HTTP readiness disconnect aborts the pending read and prevents later resou
   await new Promise(resolve => setImmediate(resolve));
   f.hook = async path => path === 'read/GetServerState' ? { status: 'Ok' } : undefined;
   assert.equal((await f.c.readiness({ revision: state.revision })).rows.length, 8);
+});
+
+test('M10 harness rejects the old M6 flag before Docker or credential creation', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync('bash', ['scripts/test-console/komodo.sh'], { encoding: 'utf8', env: {
+    PATH: process.env.PATH, GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted',
+    GITHUB_REPOSITORY: 'aiaimimi0920/SpringBok', GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', SPRINGBOK_ALLOW_M6_TEST: 'yes',
+  } });
+  assert.equal(result.status, 2); assert.match(result.stdout, /Requires explicitly approved disposable GitHub runner/);
 });

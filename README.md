@@ -3,6 +3,12 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M10：准备合并后的真实验收
+
+已扩充真实harness以覆盖M7确认、M8只读诊断与M9固定资源检查。新一轮临时Docker
+权限和一次性凭据必须单独批准后才运行；目前没有新的真实通过记录。
+[验收断言、权限边界和当前状态](docs/combined-console-verification.md)
+
 ## M9：固定资源只读检查
 
 控制台新增固定8资源检查，展示完整配置匹配情况、已知服务器的 Core 缓存状态和

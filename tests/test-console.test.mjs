@@ -127,3 +127,16 @@ test('temporary Core bridge accepts private literal IPv4 only and listens only o
   const bridge = await openCoreBridge('172.18.0.2');
   assert.equal(bridge.address, '127.0.0.1'); assert.ok(bridge.port > 1023); await bridge.close();
 });
+
+test('Mongo diagnostic outputs only fixed categories and numeric IDs, never raw log fields', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const script = readFileSync(new URL('../scripts/test-console/mongo-diagnostic.cjs', import.meta.url), 'utf8');
+  const secret = 'SENSITIVE_TEST_MARKER';
+  const log = Buffer.from(JSON.stringify({ s: 'E', id: 20568, msg: 'Error setting up listener', attr: { error: `Address already in use ${secret}` } }) + '\n' + JSON.stringify({ s: 'I', id: 999, msg: 'Permission denied ' + secret }));
+  let output = '';
+  const fs = { existsSync: path => path !== '/data/db/docker-initdb.log', openSync: () => 1, fstatSync: () => ({ size: log.length }),
+    readSync: (_fd, buffer) => log.copy(buffer), closeSync() {}, readFileSync: () => '48' };
+  runInNewContext(script, { require: () => fs, Buffer, print: text => output = text });
+  assert.match(output, /exit=48 fatal_count=1 categories=ADDRESS_IN_USE,LISTENER ids=20568/);
+  assert.ok(!output.includes(secret)); assert.ok(!output.includes('PERMISSION'));
+});

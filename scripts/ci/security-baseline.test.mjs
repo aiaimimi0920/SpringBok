@@ -49,3 +49,11 @@ test("contract lab makes no unsupported product stack or release claims", () => 
     assert.equal(existsSync(resolve(root, path)), false, path);
   }
 });
+
+test("CodeQL initialization and analysis share an exact release pin", () => {
+  const workflow = read(".github/workflows/codeql.yml");
+  const pins = [...workflow.matchAll(/uses:\s+github\/codeql-action\/(init|analyze)@([a-f0-9]{40})(?=\s|$)/g)];
+  assert.deepEqual(pins.map(([, action]) => action).sort(), ["analyze", "init"]);
+  assert.equal(new Set(pins.map(([, , pin]) => pin)).size, 1, "mixed CodeQL versions cannot read each other's configuration");
+  assert.match(read(".github/dependabot.yml"), /groups:\s+codeql-actions:\s+patterns:\s+- "github\/codeql-action\/\*"/);
+});

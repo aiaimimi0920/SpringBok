@@ -3,6 +3,12 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M9：固定资源只读检查
+
+控制台新增固定8资源检查，展示完整配置匹配情况、已知服务器的 Core 缓存状态和
+未决执行记录。支持截止时间、取消及重新检查；始终不授予发布权限、不改变记录。
+此轮使用假后端及普通浏览器回归。[语义、取消与验证范围](docs/resource-readiness.md)
+
 ## M8：看清执行证据与阻断原因
 
 临时测试控制台新增只读证据说明：区分排队、执行中、配置不一致、错镜像、

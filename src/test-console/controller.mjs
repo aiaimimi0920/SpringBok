@@ -5,6 +5,7 @@ import { createCatalog, digest, exact, matchesResource, releaseSpec } from '../e
 import { project, dispatch, requestDigest, validateInput } from '../execution/projection.mjs';
 import { openJournal } from '../execution/journal.mjs';
 import { diagnostic, inspectExecution } from './diagnostics.mjs';
+import { createReadinessCheck } from './readiness.mjs';
 
 // Only the disposable integration harness constructs this controller. The fixed
 // actor records a test click; it is not real owner authentication or AI exclusion.
@@ -18,6 +19,7 @@ export function openTestController({ directory, manifest, releases, versions, tr
   const labels = structuredClone(versions);
   exact(labels, ['v1', 'v2', 'bad']);
   for (const artifact of Object.values(labels)) if (!releases.some(r => r.artifact === artifact)) throw new Error('unknown test release');
+  const checkReadiness = createReadinessCheck(releases, transport, timeoutMs);
   const confirmationKey = randomBytes(32); // Session-only plan binding, not authentication.
   const external = new Set(['test', 'promote', 'rollback']);
   let coordinator, staging, busy = false;
@@ -135,6 +137,19 @@ export function openTestController({ directory, manifest, releases, versions, tr
           staging.append({ kind: 'prepared', requestId: id });
         }
         return coordinator.submit(input, actor);
+      });
+    },
+    readiness(body, { signal } = {}) {
+      return exclusive(async () => {
+        exact(body, ['revision']);
+        const state = snapshot();
+        if (body.revision !== state.revision) { const e = new Error('stale test state'); e.status = 409; throw e; }
+        const records = Object.fromEntries(state.services.map(({ spec }) => {
+          const requests = state.requests.filter(r => r.input.service === spec.id);
+          const unknown = requests.some(r => r.status === 'unknown') || state.preparation.some(r => r.service === spec.id && r.status === 'unknown');
+          return [spec.id, unknown ? 'unknown' : requests.some(r => r.status === 'accepted') ? 'pending' : 'no-pending-record'];
+        }));
+        return { revision: state.revision, ...await checkReadiness(records, signal) };
       });
     },
     inspect(body) {

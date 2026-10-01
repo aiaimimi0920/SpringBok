@@ -1,5 +1,5 @@
 {
-  "milestone": "M7 execution confirmation and M8 read-only execution diagnostics",
+  "milestone": "M7 execution confirmation, M8 evidence diagnostics and M9 fixed-resource readiness",
   "baseline_commit": "b42d86d4a1ac2741142386e99c4a3b7ee44b3eaf",
   "baseline_tree": "e656ffe8df8d2eb5fcb03425c85c5aacd15561e9",
   "verification": "unit, fake-backend HTTP and real browser regression; no new real Komodo run",
@@ -12,6 +12,7 @@
     "scripts/test-console/integration.mjs"
   ],
   "new_inputs": [
-    "src/test-console/diagnostics.mjs"
+    "src/test-console/diagnostics.mjs",
+    "src/test-console/readiness.mjs"
   ]
 }

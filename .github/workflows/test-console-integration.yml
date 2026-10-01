@@ -1,5 +1,8 @@
 name: Real Test Console Integration
 on:
+  # Temporary M6 bootstrap; removed before merge. Executes only the reviewed SHA below.
+  push:
+    branches: [feat/real-test-console-m6]
   workflow_dispatch:
     inputs:
       approve_temporary_docker_admin:
@@ -18,18 +21,26 @@ concurrency:
   cancel-in-progress: false
 jobs:
   real-console:
-    if: github.repository == 'aiaimimi0920/SpringBok' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_temporary_docker_admin
+    if: github.repository == 'aiaimimi0920/SpringBok' && ((github.event_name == 'push' && github.ref == 'refs/heads/feat/real-test-console-m6') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.approve_temporary_docker_admin))
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      REVIEWED_SHA: ${{ github.event_name == 'push' && 'd5ba59c1271e23d35381e7ddd9b23839080d695a' || inputs.reviewed_sha }}
     steps:
-      - name: Bind manual approval before checkout
-        env:
-          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      - name: Bind reviewed source before checkout
         run: |
-          [[ "$REVIEWED_SHA" =~ ^[a-f0-9]{40}$ && "$REVIEWED_SHA" == "$GITHUB_SHA" ]] || exit 2
+          [[ "$REVIEWED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            [[ "$REVIEWED_SHA" == d5ba59c1271e23d35381e7ddd9b23839080d695a ]] || exit 2
+          else
+            [[ "$REVIEWED_SHA" == "$GITHUB_SHA" ]] || exit 2
+          fi
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+          ref: ${{ env.REVIEWED_SHA }}
+      - name: Verify checked-out reviewed source
+        run: test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'

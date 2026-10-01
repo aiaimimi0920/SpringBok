@@ -16,8 +16,12 @@ data.releases.push(...data.releases.slice(0, 4).map(r => {
   return row;
 }));
 const backend = fakeBackend(data.releases);
-let inspectionMode = null;
-backend.hook = async (path, params) => {
+let inspectionMode = null, holdReadiness = false, readinessEntered, readinessAborted;
+backend.hook = async (path, params, { signal } = {}) => {
+  if (path === 'read/GetDeployment' && holdReadiness) {
+    readinessEntered(); signal.addEventListener('abort', () => readinessAborted(), { once: true }); return new Promise(() => {});
+  }
+  if (path === 'read/GetServerState') return { status: 'Ok', error: 'PRIVATE_CACHE_MARKER' };
   if (path === 'write/UpdateDeployment' && inspectionMode === 'lost-configuration') throw new Error('synthetic lost configuration receipt');
   if (path === 'read/InspectDeploymentContainer' && inspectionMode === 'unhealthy') return {
     Image: image(1), State: { Status: 'running', Running: true, Paused: false, OOMKilled: false, Health: { Status: 'unhealthy' } },
@@ -132,5 +136,44 @@ try {
   assert.equal(await forum.getByRole('button', { name: '执行真实测试', exact: true }).isEnabled(), false);
   assert.deepEqual(controller.snapshot(), blockedState); assert.equal(backend.calls.length, callsBefore);
   assert.deepEqual(errors, []);
-  console.log('PASS M7/M8 real Chrome with fake backend: cancel/close/Escape/late response/Back/Forward/reopen/stale tab/double confirm/restart/mobile; queued/unhealthy/ready/configuration-unknown inspections never write or unblock; no Docker or credentials');
+  inspectionMode = null;
+  const beforeReadiness = controller.snapshot(), callsAtReadiness = backend.calls.length;
+  const readiness = page.getByRole('region', { name: '固定资源只读检查', exact: true });
+  const checkResources = readiness.getByRole('button', { name: '检查固定资源', exact: true });
+  await checkResources.click();
+  await readiness.getByRole('heading', { name: '部分资源需要核对', exact: true }).waitFor();
+  assert.equal(await readiness.locator('li').count(), 8);
+  assert.equal(await readiness.getByText('执行记录未知，保持阻断', { exact: true }).count(), 2);
+  assert.equal(await readiness.getByText('Core 缓存：Ok', { exact: true }).count(), 8);
+  await checkResources.click(); await readiness.getByText('读取完成；没有更改资源、发布记录或验收权限', { exact: true }).waitFor();
+  assert.deepEqual(controller.snapshot(), beforeReadiness);
+  assert.ok(backend.calls.slice(callsAtReadiness).every(c => c.path.startsWith('read/')));
+  const gameTarget = data.releases.find(r => r.service === 'game').test.id;
+  const originalConfig = structuredClone(backend.resources.get(gameTarget).config);
+  backend.resources.get(gameTarget).config.command = 'PRIVATE_UNKNOWN_CONFIGURATION';
+  await checkResources.click(); await readiness.getByText('配置或服务器映射未知', { exact: true }).waitFor();
+  assert.ok(!(await readiness.textContent()).includes('PRIVATE'));
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.screenshot({ path: 'test-results/resource-readiness-mock-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: 'test-results/resource-readiness-mock-mobile.png', fullPage: true });
+  backend.resources.get(gameTarget).config = originalConfig;
+  await readiness.getByRole('button', { name: '关闭检查结果', exact: true }).click();
+  assert.equal(await readiness.locator('li').count(), 0);
+  holdReadiness = true;
+  const entered = new Promise(resolve => { readinessEntered = resolve; });
+  const aborted = new Promise(resolve => { readinessAborted = resolve; });
+  const callsBeforeCancel = backend.calls.length;
+  await checkResources.click(); await entered;
+  await readiness.getByRole('button', { name: '取消检查', exact: true }).click();
+  let timeout;
+  try { await Promise.race([aborted, new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('HTTP cancellation did not reach the controller')), 3000); })]); }
+  finally { clearTimeout(timeout); }
+  assert.equal(backend.calls.length, callsBeforeCancel + 1); assert.equal(await readiness.locator('li').count(), 0);
+  holdReadiness = false;
+  await checkResources.click(); await readiness.getByRole('heading', { name: '部分资源需要核对', exact: true }).waitFor();
+  assert.equal(await readiness.locator('li').count(), 8); assert.deepEqual(controller.snapshot(), beforeReadiness);
+  assert.deepEqual(errors, []);
+  console.log('PASS M7/M8/M9 real Chrome with fake backend: cancel/close/Escape/late response/Back/Forward/reopen/stale tab/double confirm/restart/mobile; queued/unhealthy/ready/configuration-unknown inspections never write or unblock; fixed resource checks repeat/cancel/reopen without writes, unknown config and cached status; no Docker or credentials');
 } finally { await browser?.close(); await app?.close(); controller.close(); rmSync(directory, { recursive: true, force: true }); }

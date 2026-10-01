@@ -304,3 +304,103 @@ test('HTTP inspection requires same-origin CSRF and cannot accept replacement ev
   assert.equal(response.status, 200); assert.equal((await response.json()).code, 'ready-to-record');
   assert.deepEqual(f.c.snapshot(), before);
 });
+
+test('readiness checks only eight catalog resources and one deduplicated cached server without writes', async t => {
+  const f = setup(t), before = f.c.snapshot();
+  f.hook = async path => path === 'read/GetServerState' ? { status: 'Ok', privateData: 'PRIVATE_READINESS_MARKER' } : undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = await f.c.readiness({ revision: before.revision });
+    assert.equal(result.rows.length, 8); assert.equal(result.observation, 'matched');
+    assert.equal(result.executionReady, false); assert.equal(result.approvalGranted, false);
+    assert.ok(result.rows.every(r => r.resource === 'matched' && r.server === 'cached-ok'));
+    assert.ok(!JSON.stringify(result).includes('PRIVATE_READINESS_MARKER'));
+  }
+  assert.equal(f.backend.calls.filter(c => c.path === 'read/GetDeployment').length, 16);
+  assert.equal(f.backend.calls.filter(c => c.path === 'read/GetServerState').length, 2);
+  assert.ok(f.backend.calls.every(c => c.path.startsWith('read/'))); assert.deepEqual(f.c.snapshot(), before);
+});
+test('readiness rejects wrong resource identity and unknown full config without probing foreign servers', async t => {
+  const f = setup(t), before = f.c.snapshot();
+  const resources = [...f.backend.resources.values()];
+  resources[0].name = 'FOREIGN_PRIVATE_NAME';
+  resources[1].config.server_id = 'f'.repeat(24);
+  resources[2].config.environment = 'PRIVATE_CONFIG_MARKER';
+  f.backend.resources.delete(resources[3]._id.$oid);
+  f.hook = async path => path === 'read/GetServerState' ? { status: 'Ok' } : undefined;
+  const result = await f.c.readiness({ revision: before.revision });
+  assert.equal(result.observation, 'attention');
+  assert.deepEqual(result.rows.slice(0, 4).map(r => r.resource), ['identity-mismatch', 'configuration-unknown', 'configuration-unknown', 'missing']);
+  assert.ok(result.rows.slice(0, 4).every(r => r.serverId === null && r.artifact === null));
+  assert.ok(!JSON.stringify(result).includes('PRIVATE')); assert.ok(!JSON.stringify(result).includes('FOREIGN'));
+  assert.ok(f.backend.calls.filter(c => c.path === 'read/GetServerState').every(c => c.params.server !== 'f'.repeat(24)));
+  assert.deepEqual(f.c.snapshot(), before);
+});
+test('cached server failures and unknown enum values never become ready or expose response fields', async t => {
+  const f = setup(t), revision = f.c.snapshot().revision;
+  for (const [status, code] of [['NotOk', 'cached-not-ok'], ['Disabled', 'cached-disabled'], ['unexpected', 'unknown'], ['constructor', 'unknown'], ['__proto__', 'unknown']]) {
+    f.hook = async path => path === 'read/GetServerState' ? { status, error: 'PRIVATE_SERVER_ERROR' } : undefined;
+    const result = await f.c.readiness({ revision }); assert.equal(result.observation, 'attention');
+    assert.ok(result.rows.every(r => r.server === code)); assert.equal(result.executionReady, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE_SERVER_ERROR'));
+  }
+});
+test('readiness preserves unknown execution blocking even when resource and cache reads match', async t => {
+  const f = setup(t);
+  f.hook = async path => { if (path === 'execute/Deploy') throw new Error('lost receipt'); if (path === 'read/GetServerState') return { status: 'Ok' }; };
+  await f.action('test'); const before = f.c.snapshot(), count = f.backend.executeCount;
+  const result = await f.c.readiness({ revision: before.revision });
+  assert.equal(result.observation, 'attention'); assert.equal(result.executionReady, false);
+  assert.ok(result.rows.filter(r => r.service === 'gateway').every(r => r.recordState === 'unknown'));
+  assert.deepEqual(f.c.snapshot(), before); assert.equal(f.backend.executeCount, count); await assert.rejects(f.action('test'));
+});
+test('readiness timeouts are bounded and cancellation stops subsequent reads and releases the lock', async t => {
+  const f = setup(t), before = f.c.snapshot();
+  f.hook = async () => new Promise(() => {});
+  const timed = await f.c.readiness({ revision: before.revision });
+  assert.equal(timed.observation, 'attention'); assert.ok(timed.rows.every(r => r.resource === 'timeout'));
+  assert.ok(f.backend.calls.length <= 3); assert.deepEqual(f.c.snapshot(), before);
+  let started; const entered = new Promise(resolve => { started = resolve; });
+  let aborted = false;
+  f.hook = async (_path, _params, { signal }) => { signal.addEventListener('abort', () => { aborted = true; }, { once: true }); started(); return new Promise(() => {}); };
+  const abort = new AbortController(), count = f.backend.calls.length;
+  const checking = f.c.readiness({ revision: before.revision }, { signal: abort.signal }); await entered; abort.abort();
+  await assert.rejects(checking, /cancelled/); assert.equal(aborted, true); assert.equal(f.backend.calls.length, count + 1);
+  f.hook = async path => path === 'read/GetServerState' ? { status: 'Ok' } : undefined;
+  assert.equal((await f.c.readiness({ revision: before.revision })).observation, 'matched');
+  assert.deepEqual(f.c.snapshot(), before);
+});
+test('readiness rejects arbitrary targets and stale state before reads; HTTP preserves origin and CSRF', async t => {
+  const f = setup(t), app = await startTestConsole({ controller: f.c }); t.after(() => app.close());
+  const state = await (await fetch(`${app.origin}/api/state`)).json();
+  const headers = { Origin: app.origin, 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf };
+  for (const body of [{ revision: state.revision, target: 'https://example.com' }, { revision: -1 }]) {
+    await assert.rejects(f.c.readiness(body));
+  }
+  assert.equal((await fetch(`${app.origin}/api/readiness`, { method: 'POST', headers: { ...headers, Origin: 'https://other.example' }, body: JSON.stringify({ revision: state.revision }) })).status, 403);
+  assert.equal((await fetch(`${app.origin}/api/readiness`, { method: 'POST', headers: { ...headers, 'X-CSRF-Token': 'wrong' }, body: JSON.stringify({ revision: state.revision }) })).status, 403);
+  assert.equal(f.backend.calls.length, 0);
+  f.hook = async path => path === 'read/GetServerState' ? { status: 'Ok' } : undefined;
+  const response = await fetch(`${app.origin}/api/readiness`, { method: 'POST', headers, body: JSON.stringify({ revision: state.revision }) });
+  assert.equal(response.status, 200); assert.equal((await response.json()).rows.length, 8);
+});
+
+test('HTTP readiness disconnect aborts the pending read and prevents later resource requests', async t => {
+  const f = setup(t), app = await startTestConsole({ controller: f.c }); t.after(() => app.close());
+  const state = await (await fetch(`${app.origin}/api/state`)).json();
+  let enteredResolve, abortedResolve;
+  const entered = new Promise(resolve => { enteredResolve = resolve; });
+  const aborted = new Promise(resolve => { abortedResolve = resolve; });
+  f.hook = async (_path, _params, { signal }) => { signal.addEventListener('abort', abortedResolve, { once: true }); enteredResolve(); return new Promise(() => {}); };
+  const abort = new AbortController();
+  const response = fetch(`${app.origin}/api/readiness`, { method: 'POST', signal: abort.signal,
+    headers: { Origin: app.origin, 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf }, body: JSON.stringify({ revision: state.revision }) });
+  await entered; abort.abort(); await assert.rejects(response);
+  let timer;
+  try { await Promise.race([aborted, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('disconnect did not abort transport')), 1000); })]); }
+  finally { clearTimeout(timer); }
+  assert.equal(f.backend.calls.length, 1);
+  // Let the abort rejection release the controller's exclusive lock.
+  await new Promise(resolve => setImmediate(resolve));
+  f.hook = async path => path === 'read/GetServerState' ? { status: 'Ok' } : undefined;
+  assert.equal((await f.c.readiness({ revision: state.revision })).rows.length, 8);
+});

@@ -4,6 +4,52 @@ const phases = { ready: '待测试', testing: '测试执行中', tested: '待测
 const cards = document.querySelector('#services'), notice = document.querySelector('#notice');
 let state, busy = false, pendingReview = null, reviewGeneration = 0;
 const inspections = new Map();
+let readinessRequest = null, readinessResult = null, readinessGeneration = 0;
+const resourceLabels = { matched: '完整配置匹配目录', missing: '资源缺失', 'identity-mismatch': '资源身份不符', 'configuration-unknown': '配置或服务器映射未知', unavailable: '暂时无法读取', timeout: '读取超时' };
+const serverLabels = { 'cached-ok': 'Core 缓存：Ok', 'cached-not-ok': 'Core 缓存：NotOk', 'cached-disabled': 'Core 缓存：Disabled', unknown: '缓存状态未知', unavailable: '缓存暂不可读', timeout: '缓存读取超时', 'not-checked': '未读取服务器状态' };
+const recordLabels = { unknown: '执行记录未知，保持阻断', pending: '执行结果仍待核对', 'no-pending-record': '无未决执行记录（非发布许可）' };
+function renderReadiness() {
+  document.querySelector('#readiness-check').disabled = busy;
+  document.querySelector('#readiness-cancel').disabled = !readinessRequest;
+  document.querySelector('#readiness-close').hidden = !readinessResult;
+  const box = document.querySelector('#readiness-results'); box.replaceChildren();
+  if (!readinessResult) return;
+  if (readinessResult.revision !== state.revision) { readinessResult = null; document.querySelector('#readiness-status').textContent = '记录已变化，请重新检查'; document.querySelector('#readiness-close').hidden = true; return; }
+  box.append(el('h3', readinessResult.observation === 'matched' ? '固定资源观测匹配（非发布授权）' : '部分资源需要核对'));
+  box.append(el('p', `只读观测 ${readinessResult.observedAt} · 记录版本 ${readinessResult.revision}`, 'digest'));
+  const list = el('ul', undefined, 'readiness-list');
+  for (const row of readinessResult.rows) {
+    const item = el('li'); item.append(el('h4', `${names[row.service]} · ${row.role === 'test' ? '测试' : '临时生产角色'}`),
+      el('p', `${row.name} · ${row.id}`, 'digest'), el('p', resourceLabels[row.resource]), el('p', serverLabels[row.server]),
+      el('p', recordLabels[row.recordState]));
+    if (row.artifact) item.append(el('p', `已知镜像 ${row.artifact}`, 'digest'));
+    list.append(item);
+  }
+  box.append(list);
+}
+function cancelReadiness() {
+  readinessGeneration++; readinessResult = null; readinessRequest?.abort();
+  document.querySelector('#readiness-status').textContent = '已取消等待；不会显示迟到结果，也不会执行部署';
+  if (state) renderReadiness();
+}
+document.querySelector('#readiness-check').onclick = async () => {
+  if (busy) return;
+  const request = new AbortController(), generation = ++readinessGeneration;
+  readinessRequest = request; readinessResult = null; busy = true;
+  document.querySelector('#readiness-status').textContent = '正在只读核对固定资源…'; render();
+  try {
+    const response = await fetch('/api/readiness', { method: 'POST', signal: request.signal,
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf }, body: JSON.stringify({ revision: state.revision }) });
+    const result = await response.json(); if (!response.ok) throw new Error(result.error);
+    if (generation !== readinessGeneration) return;
+    readinessResult = result; document.querySelector('#readiness-status').textContent = '读取完成；没有更改资源、发布记录或验收权限';
+  } catch (error) { if (generation === readinessGeneration) document.querySelector('#readiness-status').textContent = error.message; }
+  finally { if (readinessRequest === request) { readinessRequest = null; busy = false; render(); } }
+};
+document.querySelector('#readiness-cancel').onclick = cancelReadiness;
+document.querySelector('#readiness-close').onclick = () => { readinessResult = null; document.querySelector('#readiness-status').textContent = '已关闭检查结果'; renderReadiness(); };
+window.addEventListener('pagehide', cancelReadiness);
+window.addEventListener('popstate', () => { if (readinessRequest || readinessResult) cancelReadiness(); });
 const dialog = document.querySelector('#execution-review');
 const reviewSubmit = document.querySelector('#review-submit');
 const operationNames = { test: '执行测试', promote: '晋级测试版本', rollback: '回滚已知成功版本' };
@@ -66,7 +112,7 @@ async function inspect(service, id) {
 }
 
 function render() {
-  if (!state) return; cards.replaceChildren();
+  if (!state) return; renderReadiness(); cards.replaceChildren();
   for (const record of state.services) {
     const { spec, phase } = record;
     const pending = state.requests.filter(r => r.input.service === spec.id && ['accepted', 'unknown'].includes(r.status));

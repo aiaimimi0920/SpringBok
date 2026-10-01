@@ -84,7 +84,7 @@ M1/M2 八个已验证执行文件及其历史证据哈希不修改。M6 是新�
 
 无凭据校验：`node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs`。
 真实入口为受审 `Real Test Console Integration` workflow，不能从普通 PR
-自动获取 Docker 管理权限。开发期唯一专用分支 bootstrap 会在合并前删除。
+自动获取 Docker 管理权限。开发期唯一专用分支 bootstrap 已删除。
 最终入口只能 main、显式临时权限确认、reviewed SHA 与实际 GITHUB_SHA 一致。
 
 当前用户不需要提供长期机器。等测试闭环与已声明范围全部通过，再决定真实
@@ -99,3 +99,13 @@ UI尚未启动即停止；保留internal隔离，用固定本机桥接修复，�
 后续使用仅输出白名单类别的tmpfs诊断wrapper时未复现，UI全链和清理通过；
 最终恢复官方Mongo入口，诊断脚本不接入正常启动。不宣称该偶发启动失败已
 确定根因或通过改变配置永久修复。
+
+## 已完成验证（2026-10-01 UTC）
+
+[最终真实运行36803108632](https://github.com/aiaimimi0920/SpringBok/actions/runs/36803108632)
+成功，实际执行源码 b42d86d4a1ac2741142386e99c4a3b7ee44b3eaf。正常Mongo官方
+入口、四服务UI发布/升级/回滚、坏镜像阻断、重启恢复、丢回执不重发、手机
+390px无横向溢出全部通过；桌面/手机截图已实际查看，临时资源清理已验证。
+[执行文件哈希与范围](test-console-evidence.json)绑定20个实际执行输入。最终
+关闭临时push入口，保留显式批准的精确main SHA手动入口；该手动入口本身
+尚未运行，不等于对未来测试授予持续权限。

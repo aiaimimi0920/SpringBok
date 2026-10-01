@@ -140,3 +140,19 @@ test('Mongo diagnostic outputs only fixed categories and numeric IDs, never raw 
   assert.match(output, /exit=48 fatal_count=1 categories=ADDRESS_IN_USE,LISTENER ids=20568/);
   assert.ok(!output.includes(secret)); assert.ok(!output.includes('PERMISSION'));
 });
+
+test('M6 privileged integration has only an acknowledged exact-main-SHA manual entry', () => {
+  const wf = readFileSync(new URL('../.github/workflows/test-console-integration.yml', import.meta.url), 'utf8');
+  assert.match(wf, /workflow_dispatch:/); assert.doesNotMatch(wf, /\n  (push|pull_request|pull_request_target|schedule):/);
+  assert.match(wf, /github\.ref == 'refs\/heads\/main'/); assert.match(wf, /inputs\.approve_temporary_docker_admin/);
+  assert.match(wf, /default: false/); assert.match(wf, /"\$REVIEWED_SHA" == "\$GITHUB_SHA"/);
+  assert.ok(wf.indexOf('"$REVIEWED_SHA" == "$GITHUB_SHA"') < wf.indexOf('uses: actions/checkout'));
+  assert.doesNotMatch(wf, /secrets\.|contents: write/);
+});
+test('M6 execution inputs still match the successful real test UI integration', async () => {
+  const { createHash } = await import('node:crypto');
+  const evidence = JSON.parse(readFileSync(new URL('../docs/test-console-evidence.json', import.meta.url)));
+  for (const [path, hash] of Object.entries(evidence.execution_files_sha256)) {
+    assert.equal(createHash('sha256').update(readFileSync(new URL(`../${path}`, import.meta.url))).digest('hex'), hash, path);
+  }
+});

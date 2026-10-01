@@ -67,6 +67,6 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 ## M6：临时单机真实执行测试
 
 新增独立测试控制台，把固定界面操作、配置准备、持久执行记录接到真实
-Komodo 测试资源。运行仅限明确授权的 GitHub 临时 Linux 机，当前实现和
+Komodo 测试资源。运行仅限明确授权的 GitHub 临时 Linux 机，已在临时机通过四服务真实浏览器发布、更新、失败阻断、回滚与恢复测试。
 准确测试状态见 [真实测试控制台](docs/real-test-console.md)。M3演示入口保持
 独立，不连接真实服务器。生产登录、配置所有权与用户服务器接入仍待决策。

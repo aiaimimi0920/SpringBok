@@ -16,7 +16,12 @@ data.releases.push(...data.releases.slice(0, 4).map(r => {
   return row;
 }));
 const backend = fakeBackend(data.releases);
+let inspectionMode = null;
 backend.hook = async (path, params) => {
+  if (path === 'write/UpdateDeployment' && inspectionMode === 'lost-configuration') throw new Error('synthetic lost configuration receipt');
+  if (path === 'read/InspectDeploymentContainer' && inspectionMode === 'unhealthy') return {
+    Image: image(1), State: { Status: 'running', Running: true, Paused: false, OOMKilled: false, Health: { Status: 'unhealthy' } },
+  };
   if (path === 'write/UpdateDeployment') {
     const resource = backend.resources.get(params.id); resource.config = structuredClone(params.config); return structuredClone(resource);
   }
@@ -74,6 +79,29 @@ try {
   await confirm.evaluate(button => { button.click(); button.click(); });
   await gateway.locator('.phase').filter({ hasText: /^测试执行中$/ }).waitFor();
   assert.equal(backend.executeCount, 1);
+  const beforeInspection = controller.snapshot();
+  const writes = () => backend.calls.filter(c => !c.path.startsWith('read/'));
+  const writesBefore = structuredClone(writes());
+  const evidencePanel = gateway.getByRole('region', { name: 'Gateway 网关执行证据', exact: true });
+  const inspectButton = gateway.getByRole('button', { name: '查看执行证据与阻断原因', exact: true });
+  const update = backend.updates.get(beforeInspection.requests.find(r => r.status === 'accepted').updateId);
+  update.status = 'Queued'; await inspectButton.click(); await evidencePanel.getByRole('heading', { name: '执行仍在排队', exact: true }).waitFor();
+  await inspectButton.click(); await evidencePanel.getByRole('heading', { name: '执行仍在排队', exact: true }).waitFor();
+  update.status = 'Complete'; inspectionMode = 'unhealthy'; await inspectButton.click();
+  await evidencePanel.getByRole('heading', { name: '健康检查未通过', exact: true }).waitFor();
+  assert.deepEqual(controller.snapshot(), beforeInspection); assert.deepEqual(writes(), writesBefore);
+  await page.evaluate(() => { document.querySelector('.badge').textContent = '浏览器回归 · 假后端 · 未执行容器'; });
+  mkdirSync('test-results', { recursive: true });
+  await page.screenshot({ path: 'test-results/execution-diagnostics-mock-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: 'test-results/execution-diagnostics-mock-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  inspectionMode = null; await inspectButton.click();
+  await evidencePanel.getByRole('heading', { name: '当前观测满足成功核对条件', exact: true }).waitFor();
+  assert.deepEqual(controller.snapshot(), beforeInspection); assert.deepEqual(writes(), writesBefore);
+  await evidencePanel.getByRole('button', { name: '关闭证据说明', exact: true }).click();
+  await evidencePanel.waitFor({ state: 'hidden' });
   await gateway.getByRole('button', { name: '刷新执行证据', exact: true }).click();
   await gateway.locator('.phase').filter({ hasText: /^待测试验收$/ }).waitFor();
   await gateway.getByRole('checkbox').check(); await gateway.getByRole('button', { name: '确认测试验收', exact: true }).click();
@@ -93,5 +121,16 @@ try {
   await confirm.click(); await page.getByText('Refresh this test session', { exact: true }).waitFor();
   await gateway.locator('.phase').filter({ hasText: /^待测试验收$/ }).waitFor();
   assert.equal(backend.executeCount, 1); assert.deepEqual(errors, []);
-  console.log('PASS M7 real Chrome with fake backend: cancel/close/Escape/late response/Back/Forward/reopen/stale tab/double confirm/restart/mobile; no Docker or credentials');
+  inspectionMode = 'lost-configuration';
+  const forum = page.getByRole('article', { name: '论坛', exact: true });
+  await forum.getByRole('button', { name: '执行真实测试', exact: true }).click();
+  await dialog.getByText('论坛', { exact: true }).waitFor(); await confirm.click();
+  await forum.locator('.phase').filter({ hasText: '结果未知 · 已阻断' }).waitFor();
+  const blockedState = controller.snapshot(), callsBefore = backend.calls.length;
+  await forum.getByRole('button', { name: '查看执行证据与阻断原因', exact: true }).click();
+  await forum.getByRole('heading', { name: '配置准备结果未知', exact: true }).waitFor();
+  assert.equal(await forum.getByRole('button', { name: '执行真实测试', exact: true }).isEnabled(), false);
+  assert.deepEqual(controller.snapshot(), blockedState); assert.equal(backend.calls.length, callsBefore);
+  assert.deepEqual(errors, []);
+  console.log('PASS M7/M8 real Chrome with fake backend: cancel/close/Escape/late response/Back/Forward/reopen/stale tab/double confirm/restart/mobile; queued/unhealthy/ready/configuration-unknown inspections never write or unblock; no Docker or credentials');
 } finally { await browser?.close(); await app?.close(); controller.close(); rmSync(directory, { recursive: true, force: true }); }

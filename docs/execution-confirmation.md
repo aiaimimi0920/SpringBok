@@ -43,7 +43,7 @@ node tests/browser/execution-review.mjs
 
 [原 M6 证据](test-console-evidence.json)保持原文，始终描述历史提交
 b42d86d4a1ac2741142386e99c4a3b7ee44b3eaf 的成功真实运行。
-[M7 改变的执行输入](m7-changed-inputs.json)显式列出与该基线不同的文件。
+[后续累积改变的执行输入](test-console-evolution.json)显式列出与该基线不同的文件。
 普通 CI 另外检出确切历史提交，只读取不执行，核对 commit、tree 和原 20 个
 SHA256；当前未变文件仍严格对照旧哈希，差异列表也必须恰好匹配。这允许继续
 开发，又不会把旧证据移用到新代码。新的真实集成尚未运行。

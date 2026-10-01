@@ -157,7 +157,7 @@ test('M6 privileged integration has only an acknowledged exact-main-SHA manual e
 test('unchanged M6 inputs retain their evidence hashes; M7 changes are explicitly excluded from that claim', async () => {
   const { createHash } = await import('node:crypto');
   const evidence = JSON.parse(readFileSync(new URL('../docs/test-console-evidence.json', import.meta.url)));
-  const evolution = JSON.parse(readFileSync(new URL('../docs/m7-changed-inputs.json', import.meta.url)));
+  const evolution = JSON.parse(readFileSync(new URL('../docs/test-console-evolution.json', import.meta.url)));
   assert.equal(evolution.baseline_commit, evidence.source_commit);
   for (const [path, hash] of Object.entries(evidence.execution_files_sha256)) {
     if (evolution.changed_inputs.includes(path)) continue;
@@ -227,4 +227,80 @@ test('a genuinely expired signed plan is rejected and confirmation material is n
     const bytes = readFileSync(join(f.directory, folder, 'ledger.json'), 'utf8');
     assert.ok(!bytes.includes(fresh.confirmation.signature)); assert.ok(!bytes.includes('confirmationKey'));
   }
+});
+
+test('execution inspection distinguishes queued/running/completed evidence without writes or acceptance', async t => {
+  const f = setup(t), request = await f.action('test');
+  const before = f.c.snapshot(), bytes = readFileSync(join(f.directory, 'execution/ledger.json'), 'utf8');
+  const inspect = () => f.c.inspect({ revision: before.revision, id: request.input.id });
+  const update = f.backend.updates.get(request.updateId);
+  for (const [status, code] of [['Queued', 'queued'], ['InProgress', 'running'], ['Complete', 'ready-to-record']]) {
+    update.status = status; assert.equal((await inspect()).code, code);
+  }
+  update.success = false; assert.equal((await inspect()).code, 'update-failed'); update.success = true;
+  update.target.id = 'f'.repeat(24); assert.equal((await inspect()).code, 'update-mismatch');
+  assert.deepEqual(f.c.snapshot(), before); assert.equal(readFileSync(join(f.directory, 'execution/ledger.json'), 'utf8'), bytes);
+  assert.equal(f.backend.executeCount, 1); await assert.rejects(accept(f));
+});
+test('execution inspection classifies only exact container evidence, never leaks raw fields', async t => {
+  const f = setup(t), request = await f.action('test'), before = f.c.snapshot();
+  const inspect = () => f.c.inspect({ revision: before.revision, id: request.input.id });
+  const healthy = { Status: 'running', Running: true, Paused: false, OOMKilled: false, Health: { Status: 'healthy' } };
+  for (const [change, code] of [
+    [{ OOMKilled: true }, 'oom'], [{ Paused: true }, 'paused'],
+    [{ Health: { Status: 'starting' } }, 'health-starting'], [{ Health: { Status: 'unhealthy' } }, 'health-unhealthy'],
+    [{ Health: null }, 'health-unconfirmed'],
+    [{ Status: 'exited', Running: false, ExitCode: 1 }, 'fixture-failed'],
+    [{ Status: 'exited', Running: false, ExitCode: 137 }, 'health-unconfirmed'],
+  ]) {
+    f.hook = async path => path === 'read/InspectDeploymentContainer' ? { Image: image(1), State: { ...healthy, ...change }, Log: 'PRIVATE_BACKEND_MARKER' } : undefined;
+    const result = await inspect(); assert.equal(result.code, code); assert.ok(!JSON.stringify(result).includes('PRIVATE_BACKEND_MARKER'));
+  }
+  f.hook = async path => path === 'read/InspectDeploymentContainer' ? { Image: image(2), State: healthy } : undefined;
+  assert.equal((await inspect()).code, 'image-mismatch');
+  f.backend.resources.get(request.plan.target).config.command = 'PRIVATE_BACKEND_MARKER';
+  const drift = await inspect(); assert.equal(drift.code, 'configuration-drift'); assert.ok(!JSON.stringify(drift).includes('PRIVATE_BACKEND_MARKER'));
+  assert.deepEqual(f.c.snapshot(), before); assert.equal(f.backend.executeCount, 1);
+});
+test('inspection transport failure and timeout remain unconfirmed and reveal no backend error', async t => {
+  const f = setup(t), request = await f.action('test'), before = f.c.snapshot();
+  f.hook = async () => { throw new Error('PRIVATE_ERROR_MARKER'); };
+  let result = await f.c.inspect({ revision: before.revision, id: request.input.id });
+  assert.equal(result.code, 'unavailable'); assert.ok(!JSON.stringify(result).includes('PRIVATE_ERROR_MARKER'));
+  f.hook = async () => new Promise(() => {});
+  result = await f.c.inspect({ revision: before.revision, id: request.input.id });
+  assert.equal(result.code, 'unavailable'); assert.deepEqual(f.c.snapshot(), before);
+});
+test('unknown preparation and unknown receipts are explained with zero backend calls and remain blocked', async t => {
+  const f = setup(t);
+  f.hook = async path => { if (path === 'write/UpdateDeployment') throw new Error('lost config'); };
+  const prep = await f.action('test'), count = f.backend.calls.length;
+  const body = { revision: f.c.snapshot().revision, id: prep.input.id };
+  assert.equal((await f.c.inspect(body)).code, 'configuration-unknown'); assert.equal(f.backend.calls.length, count);
+  f.restart(); assert.equal((await f.c.inspect(body)).code, 'configuration-unknown'); await assert.rejects(f.action('test'));
+  f.hook = async path => { if (path === 'execute/Deploy') throw new Error('lost deploy'); };
+  const request = await f.action('test', {}, 'forum'), count2 = f.backend.calls.length;
+  assert.equal((await f.c.inspect({ revision: f.c.snapshot().revision, id: request.input.id })).code, 'receipt-unknown');
+  assert.equal(f.backend.calls.length, count2); await assert.rejects(f.action('test', {}, 'forum'));
+});
+test('recorded outcomes are labeled historical and inspection rejects arbitrary IDs, URLs and stale revisions', async t => {
+  const f = setup(t), request = await f.action('test'); await f.c.reconcile(request.input.id);
+  const before = f.c.snapshot(), count = f.backend.calls.length;
+  assert.equal((await f.c.inspect({ revision: before.revision, id: request.input.id })).code, 'recorded-success');
+  for (const body of [{ revision: before.revision, id: 'https://example.com' }, { revision: 0, id: request.input.id },
+    { revision: before.revision, id: request.input.id, target: 'elsewhere' }]) await assert.rejects(f.c.inspect(body));
+  assert.equal(f.backend.calls.length, count); assert.deepEqual(f.c.snapshot(), before);
+});
+test('HTTP inspection requires same-origin CSRF and cannot accept replacement evidence or write history', async t => {
+  const f = setup(t), request = await f.action('test'), app = await startTestConsole({ controller: f.c }); t.after(() => app.close());
+  const state = await (await fetch(`${app.origin}/api/state`)).json();
+  const headers = { Origin: app.origin, 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf };
+  const body = { revision: state.revision, id: request.input.id }, before = f.c.snapshot();
+  for (const change of [{ Origin: 'https://other.example' }, { 'X-CSRF-Token': 'wrong' }]) {
+    assert.equal((await fetch(`${app.origin}/api/inspect`, { method: 'POST', headers: { ...headers, ...change }, body: JSON.stringify(body) })).status, 403);
+  }
+  assert.equal((await fetch(`${app.origin}/api/inspect`, { method: 'POST', headers, body: JSON.stringify({ ...body, success: true }) })).status, 400);
+  const response = await fetch(`${app.origin}/api/inspect`, { method: 'POST', headers, body: JSON.stringify(body) });
+  assert.equal(response.status, 200); assert.equal((await response.json()).code, 'ready-to-record');
+  assert.deepEqual(f.c.snapshot(), before);
 });

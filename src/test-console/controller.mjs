@@ -4,6 +4,7 @@ import { openCoordinator } from '../execution/coordinator.mjs';
 import { createCatalog, digest, exact, matchesResource, releaseSpec } from '../execution/plan.mjs';
 import { project, dispatch, requestDigest, validateInput } from '../execution/projection.mjs';
 import { openJournal } from '../execution/journal.mjs';
+import { diagnostic, inspectExecution } from './diagnostics.mjs';
 
 // Only the disposable integration harness constructs this controller. The fixed
 // actor records a test click; it is not real owner authentication or AI exclusion.
@@ -134,6 +135,21 @@ export function openTestController({ directory, manifest, releases, versions, tr
           staging.append({ kind: 'prepared', requestId: id });
         }
         return coordinator.submit(input, actor);
+      });
+    },
+    inspect(body) {
+      return exclusive(async () => {
+        exact(body, ['revision', 'id']);
+        const state = snapshot();
+        if (body.revision !== state.revision) { const e = new Error('stale test state'); e.status = 409; throw e; }
+        const request = state.requests.find(r => r.input.id === body.id && r.plan);
+        const preparation = stages(staging.read()).get(body.id);
+        if (!request && preparation?.status !== 'unknown') throw new Error('unknown execution record');
+        const result = request ? await inspectExecution(request, call) : diagnostic('configuration-unknown');
+        const record = request || preparation;
+        return { revision: state.revision, requestId: body.id, service: record.input.service,
+          operation: record.input.operation, target: record.plan.target, updateId: request?.updateId || null,
+          observedAt: new Date().toISOString(), ...result };
       });
     },
     reconcile(id) { return exclusive(() => coordinator.reconcile(id)); },

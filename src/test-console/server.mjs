@@ -28,7 +28,7 @@ export async function startTestConsole({ controller, port = 0 }) {
         return reply(200, readFileSync(new URL(`../../public/test-console/${file}`, import.meta.url)), type);
       }
       if (req.method === 'GET' && req.url === '/api/state') return reply(200, { ...store.snapshot(), csrf });
-      if (req.method !== 'POST' || !['/api/action', '/api/reconcile', '/api/preview'].includes(req.url)) return reply(404, { error: 'Unknown route' });
+      if (req.method !== 'POST' || !['/api/action', '/api/reconcile', '/api/preview', '/api/inspect'].includes(req.url)) return reply(404, { error: 'Unknown route' });
       if (req.headers.origin !== origin || req.headers['content-type'] !== 'application/json') return reply(403, { error: 'Same-origin JSON required' });
       const token = req.headers['x-csrf-token'];
       if (typeof token !== 'string' || token.length !== csrf.length || !timingSafeEqual(Buffer.from(token), Buffer.from(csrf))) return reply(403, { error: 'Refresh this test session' });
@@ -40,6 +40,7 @@ export async function startTestConsole({ controller, port = 0 }) {
       }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       if (!body || typeof body !== 'object' || Array.isArray(body) || !Number.isSafeInteger(body.revision)) throw new Error('invalid request');
+      if (req.url === '/api/inspect') return reply(200, await store.inspect(body));
       if (req.url === '/api/preview') return reply(200, store.preview(body));
       if (req.url === '/api/reconcile') {
         if (Object.keys(body).sort().join(',') !== 'id,revision' || body.revision !== store.snapshot().revision ||

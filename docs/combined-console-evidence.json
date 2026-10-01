@@ -1,0 +1,61 @@
+{
+  "scope": "disposable-single-host-test-only",
+  "source_commit": "d91d8572dd820b0448c9b106f964478c41a0abc4",
+  "source_tree": "0c4a3e8f5fee13bc0b2fdaaac31f7f0bc01ac8ba",
+  "workflow_commit": "454dac18b5982860a4bcdf4b7fb464ffbd210763",
+  "run_id": 36903452204,
+  "job_id": 110508011102,
+  "run_url": "https://github.com/aiaimimi0920/SpringBok/actions/runs/36903452204",
+  "conclusion": "success",
+  "coverage": [
+    "real Chrome UI for four services",
+    "fixed v1 test/acceptance/promotion, v2 update, known-good v1 rollback",
+    "exact bad-image non-OOM exit1 blocks acceptance and promotion",
+    "known Update restart reconciles without redeploy",
+    "unused test acceptance revoked on restart",
+    "injected lost Deploy receipt remains unknown, no resubmission",
+    "390px mobile no horizontal overflow; desktop/mobile screenshots inspected",
+    "temporary containers, network and credential material cleanup verified",
+    "exact-plan confirmation cancel and second-tab stale rejection without deployment",
+    "fixed eight-resource configuration and cached-server observations do not write or unlock",
+    "live exact Update/config/container inspection before reconciliation; unknown and historical inspection use no remote reads"
+  ],
+  "limitations": [
+    "test acceptance is synthetic, not production identity",
+    "single disposable runner and sample services, no user servers",
+    "unknown submissions intentionally stay blocked",
+    "manual main entry itself was not dispatched; successful bootstrap used exact source SHA",
+    "Core server status is cached, not a fresh reachability or production approval guarantee",
+    "timeout, cancellation and injected mismatches remain ordinary synthetic regression coverage"
+  ],
+  "execution_files_sha256": {
+    "src/contract.mjs": "b1d2a17a4d425c4864467c39182db7d2220a1a3339535008a42a711eef7afd52",
+    "src/komodo/ci-client.mjs": "7dc5b5491489dc4b9dedb02d5062ae969d90b6cbb5d22821f4878f1522c18a73",
+    "src/komodo/mapping.mjs": "e589cc1694a5aa95d1e801ff875c24b3794cc244e364baef5e51a359d81d619f",
+    "src/execution/coordinator.mjs": "a98ef048c6985884d7d779970ac616807f8ef08c38ca3c0fe02fc5a6d9a1b9bd",
+    "src/execution/journal.mjs": "84d84073471bce40d3f2eb3252f6e2a183f4893ef72ab5b8b92ce3e29045fe41",
+    "src/execution/plan.mjs": "dced7a9d5f221a196321ad0ba31076db4c83d9bb2cc943795d5cc6c07a8b1744",
+    "src/execution/projection.mjs": "819d328b3b1bf15c3bd0426331e13997f114f7101cba59bbdab93e96da40623f",
+    "src/test-console/controller.mjs": "0bb2a316c73b88da990b084b9fe43058c9f1f55ff332ea68098e640a2c9744ed",
+    "src/test-console/server.mjs": "3c8368ea3c6ef7f3b573468d99737ea4232ff01b8a952b3a6542982b50fb2cf2",
+    "src/test-console/transport.mjs": "fdd5dfdadcf090432d7e26eeed91020265836efb27e4a4349d42c29208046bac",
+    "scripts/test-console/core-bridge.mjs": "89bb87c02e9db1999fedb3fe6df0f3a547049a506789a81104343b7ffad00719",
+    "scripts/test-console/integration.mjs": "b56b1cc0ecf03f8529c68fdc10c72ef984ba5ba9356d4b4c6f13315e003e68ae",
+    "scripts/test-console/komodo.sh": "c1f2f9675e809865be4a402436728188dc6801e6113f3c5494e53454c94c4e61",
+    "public/test-console/app.js": "dad238130ba181de926792c63fd86982a1472406a50fee7610ad11cf403714bd",
+    "public/test-console/index.html": "b00ebb950b01ae7eacfd49c08b872c629de58458d1450aa81375f3c474429ea2",
+    "public/test-console/style.css": "781663087fb7208e8bc09f004304a9f53a9767de982dc91e068f88daebecc9fe",
+    "examples/fixture/Dockerfile": "419624288eb6a9f39e75a7771f22108e227a194cbc3372547d81d668947a9e7a",
+    "examples/fixture/server.mjs": "4b09ca8089b156beac020c1a514c26c9cb3b73323ca4890bdc4657cbdc34f899",
+    "tests/browser/package.json": "464d5cef5c62410d8bc64c1b071e79e076e0177de36b3d5e3bef3efef7d597c5",
+    "tests/browser/package-lock.json": "065c3fd91028ff17bbc64ac0acad0579a8167416e48245e9d4a4b2b330d54508",
+    "src/test-console/diagnostics.mjs": "cb10292fafa751a4b7b625bc4196e2a3e0d45d103767520b8a61fba0962e315f",
+    "src/test-console/readiness.mjs": "130463692e028d3c48a7b3938576035cd3e4ee62866df780fe507c8b4daa131b"
+  },
+  "cleanup_verified_utc": "2026-10-01T18:01:42.4746068Z",
+  "screenshot_artifact": {
+    "id": 11182073812,
+    "sha256": "0ca5867a19ca28679ee206043bcaf350245a4241b78c8f493367640dc45ab936",
+    "expires_at": "2026-10-04T18:01:42Z"
+  }
+}

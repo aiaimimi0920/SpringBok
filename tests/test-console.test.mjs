@@ -413,3 +413,14 @@ test('M10 harness rejects the old M6 flag before Docker or credential creation',
   } });
   assert.equal(result.status, 2); assert.match(result.stdout, /Requires explicitly approved disposable GitHub runner/);
 });
+
+test('M10 successful real-run evidence binds all current execution inputs', async () => {
+  const { createHash } = await import('node:crypto');
+  const evidence = JSON.parse(readFileSync(new URL('../docs/combined-console-evidence.json', import.meta.url)));
+  assert.equal(evidence.source_commit, 'd91d8572dd820b0448c9b106f964478c41a0abc4');
+  assert.equal(evidence.run_id, 36903452204);
+  assert.equal(Object.keys(evidence.execution_files_sha256).length, 22);
+  for (const [path, hash] of Object.entries(evidence.execution_files_sha256)) {
+    assert.equal(createHash('sha256').update(readFileSync(new URL(`../${path}`, import.meta.url))).digest('hex'), hash, path);
+  }
+});

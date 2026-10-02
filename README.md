@@ -3,6 +3,13 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M12：填写自己的服务部署配置
+
+Linux / Node.js 22+可运行 `node scripts/config.mjs examples/config/services.json`。
+支持1–4类服务的不可变镜像、测试/生产目标、结构化端口、命名卷与未解析密钥引用，
+校验冲突后输出确定性配置草稿和未完成项；不连接服务器或执行部署。
+[用户配置格式与使用步骤](docs/user-configuration.md)
+
 ## M11：发布记录查询
 
 已有持久记录按请求归并，支持固定服务筛选、每页10条、展开目标/镜像/回执与关联事件。

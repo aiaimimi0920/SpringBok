@@ -2,12 +2,13 @@ import http from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { compileConfiguration } from './compile.mjs';
+import { compareConfigurations } from './compare.mjs';
 const maxBytes = 65536;
-function readBody(req) {
+function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     let length = 0; const chunks = [];
     const finish = (error, body) => { clearTimeout(timer); req.off('data', data); req.off('end', end); req.off('aborted', aborted); req.off('error', aborted); error ? reject(error) : resolve(body); };
-    const data = chunk => { length += chunk.length; if (length > maxBytes) { req.pause(); finish({ status: 413 }); } else chunks.push(chunk); };
+    const data = chunk => { length += chunk.length; if (length > limit) { req.pause(); finish({ status: 413 }); } else chunks.push(chunk); };
     const end = () => finish(null, Buffer.concat(chunks));
     const aborted = () => finish({ status: 400 });
     const timer = setTimeout(() => { req.pause(); finish({ status: 408 }); }, 5000);
@@ -33,23 +34,24 @@ export async function startConfigReview({ port = 0 } = {}) {
         (req.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(req.headers['sec-fetch-site']))) return reply(403, { error: '来源被拒绝' });
       if (req.method === 'GET' && assets.has(req.url)) { const asset = assets.get(req.url); return reply(200, asset.body, asset.type); }
       if (req.method === 'GET' && req.url === '/api/session') return reply(200, { csrf });
-      if (req.method !== 'POST' || req.url !== '/api/validate') return reply(404, { error: '未知路径或方法' });
+      if (req.method !== 'POST' || !['/api/validate', '/api/compare'].includes(req.url)) return reply(404, { error: '未知路径或方法' });
       const token = req.headers['x-csrf-token'];
       if (req.headers.origin !== origin || req.headers['content-type'] !== 'application/json' ||
         typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || !timingSafeEqual(Buffer.from(token), Buffer.from(csrf))) return reply(403, { error: '请刷新当前本地会话' });
-      if (Number(req.headers['content-length'] || 0) > maxBytes) return reply(413, { error: '文件超过64KiB' });
-      const bytes = await readBody(req);
+      const limit = req.url === '/api/compare' ? maxBytes * 2 + 32 : maxBytes;
+      if (Number(req.headers['content-length'] || 0) > limit) return reply(413, { error: '请求超过大小限制' });
+      const bytes = await readBody(req, limit);
       let input;
       try { input = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
       catch { return reply(400, { error: '文件必须为有效UTF-8 JSON' }); }
       // The compiler has no I/O and its errors contain fixed rules/field indexes,
       // never input values, unknown keys, filesystem paths or exception objects.
       let result;
-      try { result = compileConfiguration(input); }
+      try { result = req.url === '/api/compare' ? compareConfigurations(input) : compileConfiguration(input); }
       catch (error) { return reply(400, { error: error.message }); }
       return reply(200, result);
     } catch (error) {
-      reply(error.status || 400, { error: error.status === 413 ? '文件超过64KiB' : error.status === 408 ? '读取文件超时' : '校验失败，请重新选择文件' });
+      reply(error.status || 400, { error: error.status === 413 ? '请求超过大小限制' : error.status === 408 ? '读取文件超时' : '校验失败，请重新选择文件' });
     }
   });
   server.requestTimeout = 6000; server.headersTimeout = 5000;

@@ -53,3 +53,17 @@ test('streamed body byte limit and slow-upload deadline are enforced without tru
   assert.equal(await raw(app, req => { req.write('{'); }), 408);
   assert.equal((await fetch(app.origin + '/api/session')).status, 200);
 });
+
+test('comparison HTTP shares origin/token protection and does not accept a previous review as authority', async t => {
+  const app = await setup(t), baseline = JSON.parse(source), candidate = JSON.parse(source);
+  candidate.services = candidate.services.slice(0, 1);
+  const body = JSON.stringify({ baseline, candidate });
+  assert.equal((await fetch(app.origin + '/api/compare', { method: 'POST', headers: { ...headers(app), origin: 'null' }, body })).status, 403);
+  const response = await fetch(app.origin + '/api/compare', { method: 'POST', headers: headers(app), body });
+  const { compareConfigurations } = await import('../src/config/compare.mjs');
+  assert.equal(response.status, 200); assert.deepEqual(await response.json(), compareConfigurations({ baseline, candidate }));
+  const invalid = await fetch(app.origin + '/api/compare', { method: 'POST', headers: headers(app), body: JSON.stringify({ baseline: compileConfiguration(baseline), candidate }) });
+  assert.equal(invalid.status, 400); assert.doesNotMatch(await invalid.text(), /reviewDigest/);
+  const oversized = await fetch(app.origin + '/api/compare', { method: 'POST', headers: headers(app), body: ' '.repeat(131105) });
+  assert.equal(oversized.status, 413);
+});

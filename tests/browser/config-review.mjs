@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { startConfigReview } from '../../src/config/server.mjs';
+import { compareConfigurations } from '../../src/config/compare.mjs';
 import { compileConfiguration } from '../../src/config/compile.mjs';
 const source = JSON.parse(readFileSync(new URL('../../examples/config/services.json', import.meta.url)));
 const file = (value, name = 'services.json') => ({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(value)) });
@@ -62,11 +63,59 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: 'test-results/config-review-mobile.png', fullPage: true });
+  // Same page: baseline and candidate are validated independently, then bound.
+  const baselineInput = page.getByLabel('基线配置JSON · 可选 · 仅用户提供的历史配置');
+  const changed = structuredClone(display); changed.services = [changed.services[1]];
+  changed.services[0].test.deploymentName = 'forum-new-target';
+  changed.services[0].test.volumes[0].name = 'forum-new-data';
+  await ready(changed);
+  await baselineInput.setInputFiles(file(display));
+  await page.getByText('差异预览已生成；基线不代表当前部署，尚未允许执行', { exact: true }).waitFor();
+  const comparison = page.locator('#comparison');
+  await comparison.getByRole('heading', { name: 'Gateway 网关 · 移除服务配置', exact: true }).waitFor();
+  await comparison.getByText('目标已改变，需要核对迁移；不是原地更新', { exact: true }).waitFor();
+  await comparison.getByText('存储有变化，需要核对备份与数据迁移', { exact: true }).waitFor();
+  const comparisonEvent = page.waitForEvent('download'); await download.click(); const comparisonFile = await comparisonEvent;
+  const comparisonChunks = []; for await (const chunk of await comparisonFile.createReadStream()) comparisonChunks.push(chunk);
+  assert.deepEqual(JSON.parse(Buffer.concat(comparisonChunks).toString('utf8')), compareConfigurations({ baseline: display, candidate: changed }));
+  await input.setInputFiles(file({ PRIVATE: 'INVALID_CANDIDATE' }));
+  await page.getByText('manifest: unexpected or missing fields', { exact: true }).waitFor();
+  assert.equal(await download.isDisabled(), true); assert.equal(await comparison.isVisible(), false);
+  await input.setInputFiles(file(changed)); await comparison.waitFor();
+  await baselineInput.setInputFiles(file({ PRIVATE: 'NEVER_ECHO' }));
+  await page.getByText('manifest: unexpected or missing fields', { exact: true }).waitFor();
+  assert.equal(await download.isDisabled(), true); assert.equal(await comparison.isVisible(), false);
+  await baselineInput.setInputFiles(file(display)); await comparison.waitFor();
+  await baselineInput.dispatchEvent('cancel'); assert.equal(await download.isDisabled(), true);
+  await baselineInput.setInputFiles(file(display)); await comparison.waitFor();
+  // Abort a pending comparison with Reset; late completion must not restore export.
+  let releaseComparison, comparisonEntered;
+  const comparisonGate = new Promise(resolve => { releaseComparison = resolve; });
+  const comparisonArrived = new Promise(resolve => { comparisonEntered = resolve; });
+  await page.route('**/api/compare', async route => { comparisonEntered(); await comparisonGate;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(compareConfigurations({ baseline: display, candidate: changed })) }); });
+  await baselineInput.setInputFiles(file(display)); await comparisonArrived;
+  await page.getByRole('button', { name: '清空', exact: true }).click(); releaseComparison();
+  await page.unrouteAll({ behavior: 'wait' });
+  assert.equal(await download.isDisabled(), true); assert.equal(await comparison.isVisible(), false);
+  await ready(changed); await baselineInput.setInputFiles(file(display)); await comparison.waitFor();
+  await comparison.locator('article').filter({ has: page.getByRole('heading', { name: '论坛 · 配置有变化', exact: true }) }).getByText('test.deploymentName', { exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.screenshot({ path: 'test-results/config-comparison-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: 'test-results/config-comparison-mobile.png', fullPage: true });
+  await baselineInput.setInputFiles(file(display)); await comparison.waitFor();
+  assert.equal(await page.locator('#changes>article').count(), 2);
+  await page.evaluate(() => history.pushState({}, '', '/#comparison'));
+  await page.goBack(); assert.equal(await download.isDisabled(), true); assert.equal(await comparison.isVisible(), false);
+  assert.equal(await page.locator('#baseline-status').textContent(), '未选择基线；不会推断当前部署或回滚版本');
+  assert.equal(downloads.length, 2);
   assert.deepEqual(errors, []);
   for (const request of requests) {
     const url = new URL(request.url); assert.equal(url.origin, app.origin);
-    assert.ok(['/', '/app.js', '/style.css', '/api/session', '/api/validate'].includes(url.pathname));
-    if (request.method !== 'GET') assert.deepEqual({ method: request.method, path: url.pathname }, { method: 'POST', path: '/api/validate' });
+    assert.ok(['/', '/app.js', '/style.css', '/api/session', '/api/validate', '/api/compare'].includes(url.pathname));
+    if (request.method !== 'GET') { assert.equal(request.method, 'POST'); assert.ok(['/api/validate', '/api/compare'].includes(url.pathname)); }
   }
   console.log('PASS config UI: shared compiler, explicit download, invalid replacement revocation, oversize, cancel/reset/keyboard/late replacement/Back/Forward/repeat/390px and loopback-only requests; no deployment or credentials');
 } finally { await browser?.close(); await app.close(); }

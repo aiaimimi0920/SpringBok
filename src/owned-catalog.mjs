@@ -5,10 +5,25 @@ const productGaps = {
   gateway: ['runtime-mode-and-dependency-profile-unselected', 'business-routing-acceptance-missing'],
   platform: ['multi-component-execution-contract-missing', 'migration-and-data-rollback-policy-missing', 'rauthy-business-integration-unverified'],
   assetlibrary: ['lightweight-runtime-topology-unverified', 'object-storage-and-worker-requirements-unresolved'],
-  rauthy: ['database-mode-and-backup-restore-unverified', 'tls-issuer-and-login-acceptance-missing'],
+  rauthy: ['managed-postgres-instance-and-backup-restore-unbound', 'independent-identity-host-unbound', 'tls-issuer-and-login-acceptance-missing'],
   crow: ['independent-read-only-query-runtime-missing'],
 };
-const kinds = new Set(['database', 'cache', 'volume', 'identity', 'object-store', 'storage-choice', 'tls-domain', 'read-only-source', 'external-service']);
+const kinds = new Set(['database', 'cache', 'volume', 'identity', 'object-store', 'storage-choice', 'tls-domain', 'read-only-source', 'external-service', 'issuer-config', 'deployment-target', 'secret-material']);
+// Exact ownership of these identity-integration dependencies. A similarly named
+// reference is not permission to share Web credentials with account-api/Rauthy.
+const identityDependencies = {
+  platform: {
+    database: ['database', ['platform.database']], cache: ['cache', ['platform.cache']],
+    identity: ['identity', ['platform.oidc-client']], 'issuer-config': ['issuer-config', []],
+    'object-store': ['object-store', ['platform.object-store']],
+  },
+  rauthy: {
+    'external-managed-postgres': ['database', ['rauthy.postgres-auth']],
+    'independent-runtime': ['deployment-target', []],
+    'identity-secrets': ['secret-material', ['rauthy.bootstrap-admin', 'rauthy.encryption']],
+    'login-domain': ['tls-domain', []],
+  },
+};
 const identifier = /^[a-z][a-z0-9-]{0,47}$/;
 const reject = () => { throw new Error('invalid owned-service catalog'); };
 const check = condition => { if (!condition) reject(); };
@@ -39,8 +54,22 @@ export function inspectOwnedCatalog(input) {
     check([...p.components.map(c => c.id)].sort().join(',') === [...components[p.id]].sort().join(','));
     const dependencyIds = new Set(p.dependencies.map(d => d.id));
     for (const d of p.dependencies) {
-      exact(d, ['id', 'kind', 'secretRefs', 'binding']); check(kinds.has(d.kind) && d.binding === null);
+      const postgres = p.id === 'rauthy' && d.id === 'external-managed-postgres';
+      exact(d, ['id', 'kind', 'secretRefs', 'binding', ...(postgres ? ['policy'] : [])]); check(kinds.has(d.kind) && d.binding === null);
+      if (postgres) {
+        exact(d.policy, ['hiqlite', 'tls', 'verifyCertificate', 'caRef']);
+        check(d.kind === 'database' && d.policy.hiqlite === false && d.policy.tls === 'require' && d.policy.verifyCertificate === true && d.policy.caRef === 'rauthy.postgres-ca');
+      }
       unique(d.secretRefs, 16, /^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,47}$/); d.secretRefs.sort(sort);
+    }
+    const ownership = identityDependencies[p.id];
+    if (ownership) {
+      check(p.dependencies.length === Object.keys(ownership).length);
+      for (const d of p.dependencies) {
+        check(Object.hasOwn(ownership, d.id));
+        const [kind, refs] = ownership[d.id];
+        check(d.kind === kind && d.secretRefs.length === refs.length && d.secretRefs.every((ref, index) => ref === refs[index]));
+      }
     }
     const byId = new Map(p.components.map(c => [c.id, c]));
     for (const c of p.components) {
@@ -54,7 +83,20 @@ export function inspectOwnedCatalog(input) {
       }
       c.dependsOn.sort(sort); c.requires.sort(sort);
     }
+    if (p.id === 'rauthy') {
+      check(byId.get('identity').dependsOn.length === 0);
+      check(byId.get('identity').requires.join(',') === ['external-managed-postgres', 'identity-secrets', 'independent-runtime', 'login-domain'].join(','));
+      check(p.dependencies.find(d => d.id === 'independent-runtime')?.kind === 'deployment-target');
+      check(p.dependencies.find(d => d.id === 'identity-secrets')?.kind === 'secret-material');
+    }
     if (p.id === 'platform') {
+      check(byId.get('account-api').requires.join(',') === 'cache,database,issuer-config');
+      check(byId.get('web').requires.join(',') === 'identity,issuer-config');
+      check(p.components.every(c => c.id === 'web' || !c.requires.includes('identity')));
+      const issuer = p.dependencies.find(d => d.id === 'issuer-config'), provider = p.dependencies.find(d => d.id === 'identity');
+      check(issuer?.kind === 'issuer-config' && issuer.secretRefs.length === 0);
+      check(provider?.kind === 'identity' && provider.secretRefs.length === 1 && provider.secretRefs[0] === 'platform.oidc-client');
+      check(p.dependencies.every(d => d.secretRefs.every(ref => ref.startsWith('platform.'))));
       for (const [id, required] of [['gateway-domain-migrate', 'core-migrate'], ['account-domain-migrate', 'gateway-domain-migrate'], ['core', 'core-migrate'], ['account-api', 'account-domain-migrate'], ['account-worker', 'account-domain-migrate'], ['worker', 'core-migrate'], ['executor', 'core-migrate']]) check(byId.get(id).dependsOn.includes(required));
     }
     const active = new Set(), done = new Set();

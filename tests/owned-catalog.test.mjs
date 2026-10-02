@@ -66,3 +66,31 @@ test('coercible IDs and delimiter-colliding object keys cannot satisfy the schem
   rejected(f => { const p = product(f, 'gateway'); p.source = { 'commit,repository': 'ignored' }; });
   rejected(f => { f['kind,products'] = f.kind; delete f.kind; delete f.products; });
 });
+
+test('separate Rauthy target and verified managed PostgreSQL remain unbound requirements', () => {
+  const output = inspectOwnedCatalog(fixture()), r = product(output.catalog, 'rauthy'), p = product(output.catalog, 'platform');
+  assert.equal(p.source.commit, '6512fd2d1f8781001dc83500a65d134b32907a62');
+  assert.deepEqual(p.components.find(c => c.id === 'account-api').requires, ['cache', 'database', 'issuer-config']);
+  assert.deepEqual(p.components.find(c => c.id === 'web').requires, ['identity', 'issuer-config']);
+  assert.deepEqual(r.dependencies.find(d => d.id === 'external-managed-postgres').policy, { hiqlite: false, tls: 'require', verifyCertificate: true, caRef: 'rauthy.postgres-ca' });
+  assert.ok(output.rows.find(r => r.id === 'rauthy').reasons.includes('independent-identity-host-unbound'));
+  for (const change of [f => product(f, 'platform').components.find(c => c.id === 'account-api').requires = ['database', 'identity'], f => product(f, 'platform').dependencies.find(d => d.id === 'issuer-config').secretRefs = ['rauthy.private-key'], f => product(f, 'rauthy').dependencies.find(d => d.id === 'independent-runtime').kind = 'volume']) rejected(change);
+  for (const [key, value] of [['tls', 'prefer'], ['verifyCertificate', false], ['hiqlite', true], ['caRef', 'literal-certificate']]) rejected(f => product(f, 'rauthy').dependencies.find(d => d.id === 'external-managed-postgres').policy[key] = value);
+  rejected(f => product(f, 'platform').components.find(c => c.id === 'web').dependsOn.push('rauthy'));
+});
+
+test('identity dependency kinds and exact secret ownership cannot be reassigned or omitted', () => {
+  const dependency = (f, id, dep) => product(f, id).dependencies.find(d => d.id === dep);
+  for (const [id, dep, refs] of [
+    ['rauthy', 'external-managed-postgres', ['platform.database']],
+    ['rauthy', 'identity-secrets', ['platform.oidc-client']],
+    ['rauthy', 'identity-secrets', []],
+    ['rauthy', 'external-managed-postgres', []],
+    ['platform', 'database', ['platform.database', 'platform.oidc-client']],
+    ['platform', 'identity', []],
+  ]) rejected(f => dependency(f, id, dep).secretRefs = refs);
+  rejected(f => dependency(f, 'platform', 'cache').kind = 'identity');
+  rejected(f => dependency(f, 'rauthy', 'login-domain').kind = 'volume');
+  rejected(f => product(f, 'platform').dependencies.push({ id: 'extra', kind: 'identity', secretRefs: ['platform.oidc-client'], binding: null }));
+  rejected(f => product(f, 'rauthy').dependencies.find(d => d.id === 'login-domain').id = 'unknown-domain');
+});

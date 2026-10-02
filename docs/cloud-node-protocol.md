@@ -89,3 +89,6 @@ Workers+SQLite DO可用Free计划；官方说明超免费限额会报错，不�
 本轮停止条件：本地与CI真实workerd通过、独立审查、精确树合并并复验主干。
 之后提供B的固定fixture执行适配与装配差异，再审批实际安装/发布；不将本轮协议
 通过表述成“云端已经部署到PC2”或业务服务已经可用。
+
+切片B在同一协议上增加显式关闭的固定fixture-cycle；probe仍只表示挑战观察，
+不隐式调用部署。详细权限、装配输入、证据区别见[node fixture执行](node-fixture-execution.md)。

@@ -12,7 +12,7 @@ const origin = 'https://control.example.invalid';
 test('actual workerd / SQLite / Node bridge persists delivery and refuses unsafe replay', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'springbok-workerd-'));
   const control = randomBytes(32).toString('hex'), node = randomBytes(32).toString('hex');
-  const options = { modules: ['worker.mjs', 'protocol.mjs'].map(file => ({ type: 'ESModule', path: join(root, 'cloud', file) })), modulesRoot: root,
+  const options = { modules: ['worker.mjs', 'protocol.mjs', 'fixture-contract.mjs'].map(file => ({ type: 'ESModule', path: join(root, 'cloud', file) })), modulesRoot: root,
     compatibilityDate: '2026-07-30', host: '127.0.0.1', port: 0,
     durableObjects: { TARGET: { className: 'TargetMailbox', useSQLite: true } }, resourcePersistencePath: join(dir, 'cloud'), telemetry: { enabled: false }, cf: false, logRequests: false,
     bindings: { ENABLE_PROTOCOL_TEST: 'yes', CONTROL_TOKEN: control, NODE_TOKEN: node } };
@@ -79,4 +79,45 @@ test('actual workerd / SQLite / Node bridge persists delivery and refuses unsafe
       assert.equal((await call('/control/state')).status, 503);
     });
   } finally { bridge?.close(); await mf.dispose(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('fixture bridge crosses real workerd/SQLite with a simulated Komodo transport, never repeated after lost acknowledgement', async () => {
+  const { fixtureBackend } = await import('../helpers/node-fixture.mjs');
+  const { openFixtureExecutor } = await import('../../src/fixture-node/executor.mjs');
+  const { openFixtureBridge } = await import('../../src/node-bridge/bridge.mjs');
+  const backend = fixtureBackend(), dir = mkdtempSync(join(tmpdir(), 'springbok-fixture-cloud-'));
+  const control = randomBytes(32).toString('hex'), node = randomBytes(32).toString('hex');
+  const options = { modules: ['worker.mjs', 'protocol.mjs', 'fixture-contract.mjs'].map(file => ({ type: 'ESModule', path: join(root, 'cloud', file) })), modulesRoot: root,
+    compatibilityDate: '2026-07-30', host: '127.0.0.1', port: 0, durableObjects: { TARGET: { className: 'TargetMailbox', useSQLite: true } },
+    resourcePersistencePath: join(dir, 'cloud'), telemetry: { enabled: false }, cf: false, logRequests: false,
+    bindings: { ENABLE_PROTOCOL_TEST: 'yes', CONTROL_TOKEN: control, NODE_TOKEN: node, ENABLE_FIXTURE_CYCLE: 'yes', FIXTURE_BINDING: backend.c.binding } };
+  let mf = new Miniflare(convertV4MiniflareOptions(options)), executor, bridge;
+  async function request(path, value, token = control) {
+    const r = await mf.dispatchFetch(origin + path, { method: value === undefined ? 'GET' : 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, ...(value === undefined ? {} : { body: JSON.stringify(value) }) });
+    return { status: r.status, body: await r.json() };
+  }
+  const input = { id: 'fixed-cycle', node: 'pc2-test', operation: 'fixture-cycle', challenge: backend.c.binding, revision: 0 };
+  const open = fetcher => {
+    executor = openFixtureExecutor({ directory: join(dir, 'execution'), inventory: backend.inventory, transport: backend });
+    bridge = openFixtureBridge({ directory: join(dir, 'bridge'), origin, token: node, executor, fetcher });
+  };
+  try {
+    await mf.ready;
+    assert.equal((await request('/control/submit', { ...input, challenge: '0'.repeat(64) })).status, 409);
+    assert.equal((await request('/control/submit', input, node)).status, 403);
+    assert.equal((await request('/control/submit', input)).status, 200);
+    let drop = true;
+    open(async (url, init) => { const r = await mf.dispatchFetch(url, init); if (url.endsWith('/node/report') && drop) { drop = false; await r.body.cancel(); throw new Error('lost ack'); } return r; });
+    await assert.rejects(bridge.step()); assert.equal(backend.calls.filter(c => c.path === 'execute/Deploy').length, 4);
+    bridge.close(); executor.close(); bridge = executor = null;
+    await mf.dispose(); mf = new Miniflare(convertV4MiniflareOptions(options)); await mf.ready;
+    backend.calls.length = 0; open((url, init) => mf.dispatchFetch(url, init));
+    assert.equal(await bridge.step(), 'fixture-verified'); assert.equal(backend.calls.length, 0);
+    const state = (await request('/control/state')).body;
+    assert.equal(state.jobs[0].receipt.evidence.stages.length, 4); assert.equal(state.deploymentVerified, false);
+    assert.equal((await request('/node/report', { id: input.id, challenge: input.challenge, outcome: 'observed' }, node)).status, 409);
+    bridge.close(); executor.close(); bridge = executor = null;
+    await mf.setOptions(convertV4MiniflareOptions({ ...options, bindings: { ...options.bindings, ENABLE_FIXTURE_CYCLE: 'no' } }));
+    assert.equal((await request('/control/submit', { ...input, id: 'disabled', revision: state.revision })).status, 409);
+  } finally { bridge?.close(); executor?.close(); await mf.dispose(); rmSync(dir, { recursive: true, force: true }); }
 });

@@ -25,3 +25,28 @@ jobs:
         run: npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low --prefix tests/cloud
       - name: Exercise actual local workerd and SQLite persistence with synthetic credentials
         run: npm test --prefix tests/cloud
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Validate Compose syntax with empty temporary input files; no startup
+        env:
+          SPRINGBOK_ROOTLESS_UID: '1001'
+          SPRINGBOK_MONGO_ENV_FILE: /tmp/springbok-empty-env
+          SPRINGBOK_CORE_ENV_FILE: /tmp/springbok-empty-env
+          SPRINGBOK_CORE_PASSWORD_FILE: /tmp/springbok-empty-env
+          SPRINGBOK_NODE_TOKEN_FILE: /tmp/springbok-empty-env
+          SPRINGBOK_INVENTORY_FILE: /tmp/springbok-empty-env
+          SPRINGBOK_CONTROL_ORIGIN: https://control.example.invalid
+        run: |
+          touch /tmp/springbok-empty-env
+          docker compose -f deploy/node-fixture/compose.yaml --profile acceptance config --quiet
+          rm /tmp/springbok-empty-env
+      - name: Test fixture-only containers and a fresh named volume without a daemon mount
+        run: bash scripts/ci/node-fixture-smoke.sh

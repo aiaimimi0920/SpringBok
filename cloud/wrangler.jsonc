@@ -4,7 +4,7 @@
   "compatibility_date": "2026-07-30",
   "workers_dev": false,
   "limits": { "cpu_ms": 10 },
-  "vars": { "ENABLE_PROTOCOL_TEST": "no" },
+  "vars": { "ENABLE_PROTOCOL_TEST": "no", "ENABLE_FIXTURE_CYCLE": "no" },
   "durable_objects": { "bindings": [{ "name": "TARGET", "class_name": "TargetMailbox" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TargetMailbox"] }],
   "observability": { "enabled": false }

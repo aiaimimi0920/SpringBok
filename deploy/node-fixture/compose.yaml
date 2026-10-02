@@ -1,0 +1,95 @@
+# Assembly template only. Requires a separately verified dedicated rootless daemon.
+name: springbok-node-test
+services:
+  mongo:
+    image: mongo:8.0
+    env_file: ['${SPRINGBOK_MONGO_ENV_FILE:?operator provisioned file required}']
+    command: [mongod, --quiet, --wiredTigerCacheSizeGB, '0.25']
+    volumes: [mongo-data:/data/db, mongo-config:/data/configdb]
+    networks: [control]
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 256
+    logging: {driver: none}
+    healthcheck:
+      test: [CMD-SHELL, 'mongosh --host mongo --quiet --eval ''const a=db.getSiblingDB("admin"); const r=a.auth(process.env.MONGO_INITDB_ROOT_USERNAME,process.env.MONGO_INITDB_ROOT_PASSWORD); if(r!==1&&r?.ok!==1)quit(1); const n=a.runCommand({getCmdLineOpts:1}).parsed.net; if(n.bindIp!=="*"&&n.bindIpAll!==true)quit(1); if(a.runCommand({ping:1}).ok!==1)quit(1);'' >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 24
+  core:
+    image: ghcr.io/moghtech/komodo-core:2.3.3
+    env_file: ['${SPRINGBOK_CORE_ENV_FILE:?operator provisioned file required}']
+    environment:
+      KOMODO_INIT_ADMIN_USERNAME: springbok-node
+      KOMODO_LOCAL_AUTH: 'true'
+      KOMODO_DISABLE_USER_REGISTRATION: 'true'
+      KOMODO_DISABLE_INIT_RESOURCES: 'true'
+      KOMODO_FIRST_SERVER_NAME: springbok-node-test
+      KOMODO_BIND_IP: 0.0.0.0
+      KOMODO_REPORTING_ENABLED: 'false'
+      KOMODO_HOST: http://core:9120
+      KOMODO_PERIPHERY_PUBLIC_KEY: file:/config/keys/periphery.pub
+    depends_on:
+      mongo: {condition: service_healthy}
+    volumes: [keys:/config/keys]
+    read_only: true
+    tmpfs: ['/tmp:rw,size=64m', '/backups:rw,size=64m']
+    networks: [control]
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 256
+    logging: {driver: none}
+  periphery:
+    image: ghcr.io/moghtech/komodo-periphery:2.3.3
+    environment:
+      PERIPHERY_CORE_ADDRESS: ws://core:9120
+      PERIPHERY_CONNECT_AS: springbok-node-test
+      PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
+      PERIPHERY_DISABLE_TERMINALS: 'true'
+      PERIPHERY_DISABLE_CONTAINER_TERMINALS: 'true'
+    volumes:
+      - keys:/config/keys
+      - type: bind
+        source: /run/user/${SPRINGBOK_ROOTLESS_UID:?verified dedicated account UID required}/docker.sock
+        target: /var/run/docker.sock
+        bind: {create_host_path: false}
+    read_only: true
+    tmpfs: ['/tmp:rw,size=64m', '/etc/komodo:rw,size=64m']
+    networks: [control]
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 256
+    logging: {driver: none}
+  bridge:
+    profiles: [acceptance]
+    build: {context: ../.., dockerfile: deploy/node-fixture/bridge.Dockerfile}
+    environment:
+      SPRINGBOK_ENABLE_FIXTURE_CYCLE: 'yes'
+      SPRINGBOK_CONTROL_ORIGIN: '${SPRINGBOK_CONTROL_ORIGIN:?reviewed HTTPS origin required}'
+    volumes:
+      - journal:/journal
+      - type: bind
+        source: '${SPRINGBOK_INVENTORY_FILE:?reviewed exact resource inventory required}'
+        target: /config/inventory.json
+        bind: {create_host_path: false}
+        read_only: true
+    secrets: [core-password, node-token]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [control, outbound]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    logging: {driver: none}
+networks:
+  control: {internal: true}
+  outbound: {}
+volumes:
+  mongo-data: {}
+  mongo-config: {}
+  keys: {}
+  journal: {}
+secrets:
+  core-password: {file: '${SPRINGBOK_CORE_PASSWORD_FILE:?operator provisioned file required}'}
+  node-token: {file: '${SPRINGBOK_NODE_TOKEN_FILE:?operator provisioned file required}'}

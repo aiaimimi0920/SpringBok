@@ -1,0 +1,27 @@
+name: Cloud Node Protocol
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: cloud-protocol-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  workerd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Install locked local workerd test runtime without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/cloud
+      - name: Audit all locked protocol test dependencies
+        run: npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low --prefix tests/cloud
+      - name: Exercise actual local workerd and SQLite persistence with synthetic credentials
+        run: npm test --prefix tests/cloud

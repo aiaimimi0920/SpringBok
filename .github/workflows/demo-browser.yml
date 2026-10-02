@@ -38,6 +38,8 @@ jobs:
         run: node tests/browser/demo.mjs
       - name: Exercise execution confirmation with a fake backend (no containers or credentials)
         run: node tests/browser/execution-review.mjs
+      - name: Check local user configuration UI without deployment or credentials
+        run: node tests/browser/config-review.mjs
       - name: Save demo and clearly labeled fake-backend screenshots
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -1,0 +1,15 @@
+{
+  "milestone": "M11 read-only release history",
+  "baseline_commit": "d91d8572dd820b0448c9b106f964478c41a0abc4",
+  "baseline_tree": "0c4a3e8f5fee13bc0b2fdaaac31f7f0bc01ac8ba",
+  "verification": "unit and ordinary fake-backend browser tests only; no new privileged integration",
+  "changed_inputs": [
+    "src/test-console/server.mjs",
+    "public/test-console/app.js",
+    "public/test-console/index.html",
+    "public/test-console/style.css"
+  ],
+  "new_inputs": [
+    "public/test-console/history.mjs"
+  ]
+}

@@ -29,6 +29,13 @@ jobs:
           path: .evidence/m6
           persist-credentials: false
       - run: node scripts/ci/verify-m6-evidence.mjs .evidence/m6
+      - name: Read the immutable M10 source certificate
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: d91d8572dd820b0448c9b106f964478c41a0abc4
+          path: .evidence/m10
+          persist-credentials: false
+      - run: node scripts/ci/verify-m6-evidence.mjs .evidence/m10 m10
   isolated-fixtures:
     runs-on: ubuntu-latest
     timeout-minutes: 10

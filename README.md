@@ -3,6 +3,13 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M11：发布记录查询
+
+已有持久记录按请求归并，支持固定服务筛选、每页10条、展开目标/镜像/回执与关联事件。
+准备独有记录和执行记录使用独立序号，不编造跨日志时间；原始日志不修改。
+本轮仅普通测试与假后端浏览器回归，当前UI改动不继承M10真实通过声明。
+[记录语义和验证边界](docs/release-history.md)
+
 ## M10：合并后的真实联调已通过
 
 已在一次性 GitHub Linux 机器验证 M7确认、M8只读诊断与M9固定资源检查，

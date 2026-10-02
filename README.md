@@ -3,6 +3,12 @@
 个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## M14：基线与候选发布差异
+
+同一配置检查页可额外选择基线JSON，对比镜像、双环境目标、端口、卷和密钥引用，
+识别服务增删及迁移风险，下载绑定两份配置摘要的差异草稿。基线只是用户文件，
+不代表当前部署或已批准的回滚版本。[差异语义与下一接入边界](docs/config-change-review.md)
+
 ## M13：本地配置检查页面
 
 运行 `node scripts/config-ui.mjs` 后，打开 http://127.0.0.1:3211 。选择最大64KiB的

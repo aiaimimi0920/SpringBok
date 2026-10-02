@@ -1,0 +1,8 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SpringBok · 私有管理</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head><body>
+<header><strong>SpringBok</strong><span>私有管理 · 固定节点联调</span></header>
+<main><h1>部署执行记录</h1><p>当前只验收 PC2 的固定测试应用：部署 v1、更新 v2、验证预期失败、回滚 v1。Gateway、Platform 等真实业务尚未接入，此结果不代表业务部署完成。</p>
+<p id="identity">正在验证管理员身份…</p><div class="actions"><button id="refresh">刷新记录</button><button id="start" disabled>检查并确认测试计划</button></div><p id="notice" role="status" aria-live="polite">读取持久记录…</p>
+<section><h2>当前节点</h2><p>pc2-test · 单个隔离测试应用 · 不接收任意命令</p><p id="readiness">未取得服务端状态</p></section>
+<section><h2>任务与回执</h2><p>未知结果会阻断执行。刷新只读取记录，不重发部署。页面不会自动轮询。</p><ol id="jobs"></ol></section>
+<dialog id="confirm" aria-labelledby="confirm-title"><h2 id="confirm-title">确认固定测试计划</h2><p>将通过已配置的执行节点实际运行四阶段测试。请核对绑定摘要；这不是生产晋级或业务验收。</p><dl id="plan"></dl><div class="actions"><button id="cancel">取消</button><button id="submit" disabled>确认执行</button></div></dialog>
+</main></body></html>

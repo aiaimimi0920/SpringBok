@@ -6,13 +6,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { build } from 'esbuild';
 import { openProbeBridge } from '../../src/node-bridge/bridge.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const origin = 'https://control.example.invalid';
+const bundle = (await build({ entryPoints: [join(root, 'cloud/worker.mjs')], bundle: true, write: false, format: 'esm', platform: 'browser', external: ['cloudflare:workers'] })).outputFiles[0].text;
 test('actual workerd / SQLite / Node bridge persists delivery and refuses unsafe replay', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'springbok-workerd-'));
   const control = randomBytes(32).toString('hex'), node = randomBytes(32).toString('hex');
-  const options = { modules: ['worker.mjs', 'protocol.mjs', 'fixture-contract.mjs'].map(file => ({ type: 'ESModule', path: join(root, 'cloud', file) })), modulesRoot: root,
+  const options = { modules: true, script: bundle,
     compatibilityDate: '2026-07-30', host: '127.0.0.1', port: 0,
     durableObjects: { TARGET: { className: 'TargetMailbox', useSQLite: true } }, resourcePersistencePath: join(dir, 'cloud'), telemetry: { enabled: false }, cf: false, logRequests: false,
     bindings: { ENABLE_PROTOCOL_TEST: 'yes', CONTROL_TOKEN: control, NODE_TOKEN: node } };
@@ -87,7 +89,7 @@ test('fixture bridge crosses real workerd/SQLite with a simulated Komodo transpo
   const { openFixtureBridge } = await import('../../src/node-bridge/bridge.mjs');
   const backend = fixtureBackend(), dir = mkdtempSync(join(tmpdir(), 'springbok-fixture-cloud-'));
   const control = randomBytes(32).toString('hex'), node = randomBytes(32).toString('hex');
-  const options = { modules: ['worker.mjs', 'protocol.mjs', 'fixture-contract.mjs'].map(file => ({ type: 'ESModule', path: join(root, 'cloud', file) })), modulesRoot: root,
+  const options = { modules: true, script: bundle,
     compatibilityDate: '2026-07-30', host: '127.0.0.1', port: 0, durableObjects: { TARGET: { className: 'TargetMailbox', useSQLite: true } },
     resourcePersistencePath: join(dir, 'cloud'), telemetry: { enabled: false }, cf: false, logRequests: false,
     bindings: { ENABLE_PROTOCOL_TEST: 'yes', CONTROL_TOKEN: control, NODE_TOKEN: node, ENABLE_FIXTURE_CYCLE: 'yes', FIXTURE_BINDING: backend.c.binding } };

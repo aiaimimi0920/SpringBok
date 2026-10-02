@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test protocol.test.mjs"
+    "test": "node --test protocol.test.mjs admin.test.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
     "miniflare": "5.20261001.0-alpha"
   }
 }

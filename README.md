@@ -1,6 +1,8 @@
 # SpringBok
 
-个人多服务器部署工作台，第一步是可运行、可审查的发布流程契约。
+现阶段优先把自有品牌服务可靠、可重复地部署到选定服务器；围绕真实需求推进，暂不扩展无关的通用平台功能。
+
+[实际待部署清单、交付目标与验收边界](docs/owned-service-deployment.md)：Gateway、Platform、AssetLibrary、Rauthy，以及可选的 Crow 只读查询。Hook/Loom 是桌面访问方。该清单是开发目标，不是可执行配置或已部署证明。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
 ## M14：基线与候选发布差异

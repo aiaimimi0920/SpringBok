@@ -31,6 +31,10 @@ jobs:
           node-version: "22"
       - name: Test repository security contract
         run: node --test scripts/ci/security-baseline.test.mjs
+      - name: Audit committed browser test dependencies
+        timeout-minutes: 5
+        working-directory: tests/browser
+        run: npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low
       - name: Lint workflow definitions
         shell: bash
         run: |

@@ -41,6 +41,13 @@ test("Dependabot tracks Actions with bounded pull requests", () => {
   assert.match(config, /open-pull-requests-limit: [1-5]/);
 });
 
+test("browser test dependency audit covers the committed lock without executing packages", () => {
+  const quality = read(".github/workflows/repository-quality.yml");
+  assert.match(quality, /name: Audit committed browser test dependencies\n\s+timeout-minutes: 5\n\s+working-directory: tests\/browser\n\s+run: npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low/);
+  assert.equal(existsSync(resolve(root, "tests/browser/package-lock.json")), true);
+  assert.doesNotMatch(quality, /--omit|continue-on-error|\|\| true/);
+});
+
 test("contract lab makes no unsupported product stack or release claims", () => {
   assert.match(read("README.md"), /pending evaluation/);
   assert.match(read(".github/workflows/codeql.yml"), /language: \[actions, javascript-typescript\]/);

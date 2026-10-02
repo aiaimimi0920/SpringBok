@@ -85,3 +85,40 @@ Platform/AssetLibrary/Rauthy；现有 compiler 也尚不接受本页的全部真
 参见 [配置差异及适配缺口](config-change-review.md)、
 [真实联合测试范围](combined-console-verification.md) 和
 [持久执行与恢复](execution-recovery.md)。本页更新不声称新增运行时验证。
+
+## 非执行目录与接入检查器
+
+运行 `node scripts/owned-catalog.mjs` 读取固定的 `catalog/owned-services.json`，输出
+规范化目录、摘要和逐产品阻断原因。它是后续真实多组件 resolver 的输入边界，
+不是现有四样例 `createCatalog` 的替代品，不生成 Deployment、命令或批准记录。
+有效输入返回退出码0表示结构检查通过，**不是可部署**；所有选中产品仍是 blocked，
+executionReady/executable 始终 false。无效目录返回固定错误，退出码1。
+
+目录精确绑定核查时源码：Gateway 28a3e3d、Platform cf2ded63、AssetLibrary 9b287d28、
+Rauthy dd61ac3c、Crow 3753c240；JSON 存完整40位提交。sourcePath 是该版本的声明
+依据，不是镜像构建证明、在线探测或动态源码校验。更新源码 pin 要重新核查相关
+路径和语义。摘要随源版本、组件、依赖、健康路径和选择变化；不把摘要当授权。
+
+每个产品拆为 service/migration 组件，dependsOn 是同产品内先后关系，requires
+关联外部依赖。Platform 依据 release compose 保留六个常驻组件与三个迁移任务；
+required migration 边不可删。AssetLibrary 的 api/web 是目标轻量轮廓，不是已完成的
+运行拓扑；其他 worker 取舍仍未确定。Crow query-api 尚无独立实现，sourcePath=null。
+Gateway 的 /healthz 只表示存活，/readyz 也不能替代真实路由验收；Rauthy 未在本轮
+确认完整健康契约，保留 null，不能因存在 Dockerfile 自动判健康。
+
+依赖列表是初始接入要求，**不是已核实完整运行配置**；每项保留 dependency-inventory-
+incomplete 阻断。例如 Gateway 运行模式尚未选定，Platform 仍需核对具体功能对
+Gateway/Tea 等外部服务的需求，AssetLibrary 不能直接照搬旧重型 compose，Rauthy
+需要在默认 Hiqlite 与 PostgreSQL 之间明确存储方案。secretRefs 只是未来解析器用的
+符号名称，不是应用环境变量映射；不得填真实值，合法标识符也不能证明其中未夹带
+秘密。所有 binding 必须 null；测试/生产 ID、镜像制品和可信完整配置要由后续
+经认证 resolver 取得，不能通过手填“ready”或任意 ID 绕过。
+
+Crow 默认 not-selected、无阻断原因，启用它才产生只读运行时缺失等原因；其格式
+仍接受检查。Hook/Loom 不进入此目录。此轮只读 CLI 没有网络、动态执行或写盘接口。
+
+下一步设计边界是多组件执行适配器：按目录识别迁移与常驻组件，解析可信资源和
+不可变制品，检查数据兼容及依赖顺序，再生成绑定整组配置的测试计划；必须区分
+组件成功与整个产品验收，失败/未知不允许晋级。现有单 Deployment 的四样例合同
+不能直接套用，也不能新增一个任意 shell 执行入口来绕过这个差异。该设计尚未实现，
+本轮到目录输入与阻断检查为止。

@@ -1,7 +1,9 @@
+import { historyRows, pageRows, eventRow } from './history.mjs';
 'use strict';
 const names = { gateway: 'Gateway 网关', forum: '论坛', game: '在线游戏', account: '账号服务' };
 const phases = { ready: '待测试', testing: '测试执行中', tested: '待测试验收', approved: '已测试验收', promoting: '晋级执行中', live: '测试版本已晋级', 'test-failed': '测试失败', 'production-failed': '晋级失败', 'rolling-back': '回滚执行中', 'rollback-failed': '回滚失败', 'rolled-back': '已回滚' };
 const cards = document.querySelector('#services'), notice = document.querySelector('#notice');
+let historyPage = 1, auditPage = 1;
 let state, busy = false, pendingReview = null, reviewGeneration = 0;
 const inspections = new Map();
 let readinessRequest = null, readinessResult = null, readinessGeneration = 0;
@@ -90,13 +92,13 @@ window.addEventListener('pagehide', cancelReview);
 window.addEventListener('pageshow', event => { if (event.persisted) { cancelReview(); refresh().catch(() => { notice.textContent = '读取失败'; }); } });
 function el(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function button(label, enabled, callback) { const b = el('button', label); b.type = 'button'; b.disabled = busy || !enabled; b.onclick = callback; return b; }
-async function refresh() { const response = await fetch('/api/state', { cache: 'no-store' }); if (!response.ok) throw new Error('读取记录失败'); state = await response.json(); render(); }
+async function refresh() { const response = await fetch('/api/state', { cache: 'no-store' }); if (!response.ok) throw new Error('读取记录失败'); state = await response.json(); historyPage = 1; auditPage = 1; render(); }
 async function send(path, body) {
   if (busy) return; busy = true; render();
   try {
     const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf }, body: JSON.stringify({ revision: state.revision, ...body }) });
     const result = await response.json(); if (!response.ok) throw new Error(result.error);
-    state = result; notice.textContent = '已更新真实测试记录；请查看状态与证据';
+    state = result; historyPage = 1; auditPage = 1; notice.textContent = '已更新真实测试记录；请查看状态与证据';
   } catch (error) { notice.textContent = error.message; try { await refresh(); } catch { /* Never retry a write. */ } }
   finally { busy = false; render(); }
 }
@@ -154,9 +156,47 @@ function render() {
     }
     cards.append(card);
   }
-  const history = document.querySelector('#history'); history.replaceChildren();
-  for (const event of [...state.history].reverse()) history.append(el('li', `#${event.revision} ${event.kind} · ${event.input?.service || event.requestId || ''}${event.updateId ? ` · Update ${event.updateId}` : ''}${event.evidence ? ` · ${event.kind === 'health-failure' ? '容器明确失败' : event.evidence.success ? '已验证成功' : '已验证失败'}` : ''}`));
+  renderHistory();
   document.querySelector('#refresh').disabled = busy;
 }
 document.querySelector('#refresh').onclick = () => refresh().catch(() => { notice.textContent = '读取失败'; });
 refresh().then(() => { notice.textContent = '固定样例资源已就绪；所有执行均在临时测试机'; }).catch(() => { notice.textContent = '读取失败'; });
+
+const historyLabels = { unknown: '结果未知，保持阻断', accepted: '已取得回执，结果待核对', succeeded: '已验证成功', failed: '已验证失败', completed: '本地操作已记录', revoked: '测试验收已撤销' };
+const historyOperations = { ...operationNames, candidate: '选择候选', approve: '确认测试验收' };
+function eventText(e) { return `${e.source === 'execution' ? '执行' : '准备'} #${e.revision} ${e.kind}${e.requestId ? ` · 请求 ${e.requestId}` : ''}${e.updateId ? ` · Update ${e.updateId}` : ''}`; }
+function renderHistory() {
+  const list = document.querySelector('#history'); list.replaceChildren();
+  try {
+    const model = historyRows(state), service = document.querySelector('#history-service').value;
+    const result = pageRows(model, service, historyPage); historyPage = result.page;
+    document.querySelector('#history-status').textContent = result.total ? `共 ${result.total} 条 · 第 ${result.page} / ${result.pages} 页` : '此服务暂无请求记录';
+    document.querySelector('#history-prev').disabled = result.page === 1;
+    document.querySelector('#history-next').disabled = result.page === result.pages;
+    for (const row of result.rows) {
+      const li = el('li'), details = el('details'), summary = el('summary', `${names[row.service]} · ${historyOperations[row.operation] || '未知操作'} · ${historyLabels[row.status] || '状态未知'} · ${row.source === 'execution' ? '执行' : '准备'} #${row.revision}`);
+      details.append(summary, el('p', `请求 ${row.id}`, 'digest'));
+      details.append(el('p', `${row.source === 'execution' ? '执行起始' : '准备独有；未确认执行'} #${row.revision}`));
+      if (row.target) details.append(el('p', `目标 ${row.target}`, 'digest'));
+      if (row.artifact) details.append(el('p', `镜像 ${row.artifact}`, 'digest'));
+      if (row.updateId) details.append(el('p', `Update ${row.updateId}`, 'digest'));
+      const events = el('ol'); for (const event of row.events) events.append(el('li', eventText(event))); details.append(events); li.append(details); list.append(li);
+    }
+    const source = document.querySelector('#audit-source').value;
+    const audit = (source === 'execution' ? state.history : state.preparationHistory).map(e => eventRow(e, source)).reverse();
+    const resultAudit = pageRows(audit, 'all', auditPage); auditPage = resultAudit.page;
+    const auditList = document.querySelector('#audit-events'); auditList.replaceChildren();
+    for (const event of resultAudit.rows) auditList.append(el('li', eventText(event)));
+    document.querySelector('#audit-status').textContent = `共 ${resultAudit.total} 个事件 · 第 ${resultAudit.page} / ${resultAudit.pages} 页`;
+    document.querySelector('#audit-prev').disabled = resultAudit.page === 1;
+    document.querySelector('#audit-next').disabled = resultAudit.page === resultAudit.pages;
+  } catch {
+    document.querySelector('#history-status').textContent = '记录关联不完整或不一致，无法生成摘要；请保留原始日志';
+    for (const id of ['history-prev', 'history-next', 'audit-prev', 'audit-next']) document.querySelector(`#${id}`).disabled = true;
+    document.querySelector('#audit-events').replaceChildren();
+  }
+}
+document.querySelector('#history-service').onchange = () => { historyPage = 1; renderHistory(); };
+document.querySelector('#audit-source').onchange = () => { auditPage = 1; renderHistory(); };
+for (const [id, delta] of [['history-prev', -1], ['history-next', 1]]) document.querySelector(`#${id}`).onclick = () => { historyPage += delta; renderHistory(); };
+for (const [id, delta] of [['audit-prev', -1], ['audit-next', 1]]) document.querySelector(`#${id}`).onclick = () => { auditPage += delta; renderHistory(); };

@@ -40,8 +40,10 @@ try {
   const dialog = page.getByRole('dialog', { name: '确认本次测试操作' });
   const confirm = dialog.getByRole('button', { name: '确认执行此计划', exact: true });
   const open = async () => {
+    const response = page.waitForResponse(r => r.url().endsWith('/api/preview') && r.request().method() === 'POST');
     await gateway.getByRole('button', { name: '执行真实测试', exact: true }).click();
     await dialog.getByText(image(1), { exact: true }).waitFor();
+    return (await (await response).json()).id;
   };
   await page.goto(app.origin); await gateway.waitFor();
   const before = controller.snapshot();
@@ -64,9 +66,9 @@ try {
   assert.deepEqual(backend.calls, []);
   // Native Back dismisses the pending plan. Reopening obtains a fresh request ID.
   await page.evaluate(() => history.pushState({}, '', '/#review-test'));
-  await open(); const oldId = await page.evaluate(() => pendingReview.id);
+  const oldId = await open();
   await page.goBack(); await dialog.waitFor({ state: 'hidden' });
-  await open(); assert.notEqual(await page.evaluate(() => pendingReview.id), oldId);
+  assert.notEqual(await open(), oldId);
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
   await page.goForward(); assert.equal(await dialog.isVisible(), false);
   // Another tab changes the record while the first tab is reviewing it.
@@ -174,6 +176,46 @@ try {
   holdReadiness = false;
   await checkResources.click(); await readiness.getByRole('heading', { name: '部分资源需要核对', exact: true }).waitFor();
   assert.equal(await readiness.locator('li').count(), 8); assert.deepEqual(controller.snapshot(), beforeReadiness);
+  assert.deepEqual(errors, []);
+  // Seed local-only candidate records to exercise pagination against real journals.
+  for (let i = 0; i < 24; i++) await controller.action({ revision: controller.snapshot().revision,
+    id: `history-candidate-${i}`, service: 'account', operation: 'candidate', version: i % 2 ? 'v1' : 'v2' });
+  await page.getByRole('button', { name: '刷新记录', exact: true }).click();
+  await page.locator('#history-status').filter({ hasText: '第 1 /' }).waitFor();
+  const beforeHistory = controller.snapshot(), historyCalls = structuredClone(backend.calls);
+  const history = page.locator('.history'), filter = page.locator('#history-service');
+  await filter.selectOption('account');
+  await page.locator('#history-status').getByText('共 24 条 · 第 1 / 3 页', { exact: true }).waitFor();
+  assert.equal(await page.locator('#history>li').count(), 10);
+  await page.locator('#history-next').click(); assert.equal(await page.locator('#history-status').textContent(), '共 24 条 · 第 2 / 3 页');
+  await page.locator('#history-next').click(); assert.equal(await page.locator('#history>li').count(), 4);
+  assert.equal(await page.locator('#history-next').isDisabled(), true);
+  await filter.selectOption('game'); assert.equal(await page.locator('#history>li').count(), 0);
+  assert.equal(await page.locator('#history-status').textContent(), '此服务暂无请求记录');
+  assert.equal(await page.locator('#history-prev').isDisabled(), true);
+  await filter.selectOption('forum');
+  await history.getByText('论坛 · 执行测试 · 结果未知，保持阻断 · 准备 #3', { exact: true }).click();
+  await history.getByText(/准备独有；未确认执行 #/).waitFor();
+  assert.equal(await history.getByRole('button', { name: /执行|重试|恢复/ }).count(), 0);
+  await filter.selectOption('account'); await page.locator('#history-next').click();
+  await page.locator('#history>li summary').first().click();
+  assert.equal(await page.locator('#history details[open]').count(), 1);
+  await page.getByRole('button', { name: '刷新记录', exact: true }).click();
+  await page.locator('#history-status').getByText('共 24 条 · 第 1 / 3 页', { exact: true }).waitFor();
+  assert.equal(await page.locator('#history details[open]').count(), 0);
+  await page.locator('#audit>summary').click();
+  await page.locator('#audit-next').click(); assert.match(await page.locator('#audit-status').textContent(), /第 2 \/ /);
+  await page.locator('#audit-source').selectOption('preparation');
+  assert.equal(await page.locator('#audit-prev').isDisabled(), true);
+  await page.locator('#audit>summary').click();
+  await filter.selectOption('all'); await page.locator('#history>li summary').first().click();
+  await history.evaluate(section => { const p = document.createElement('p'); p.textContent = '浏览器回归 · 假后端 · 未执行容器'; section.prepend(p); });
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await history.screenshot({ path: 'test-results/release-history-mock-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await history.screenshot({ path: 'test-results/release-history-mock-mobile.png' });
+  assert.deepEqual(controller.snapshot(), beforeHistory); assert.deepEqual(backend.calls, historyCalls);
   assert.deepEqual(errors, []);
   console.log('PASS M7/M8/M9 real Chrome with fake backend: cancel/close/Escape/late response/Back/Forward/reopen/stale tab/double confirm/restart/mobile; queued/unhealthy/ready/configuration-unknown inspections never write or unblock; fixed resource checks repeat/cancel/reopen without writes, unknown config and cached status; no Docker or credentials');
 } finally { await browser?.close(); await app?.close(); controller.close(); rmSync(directory, { recursive: true, force: true }); }

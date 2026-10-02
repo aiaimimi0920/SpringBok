@@ -5,9 +5,11 @@ import { resolve, join } from 'node:path';
 import assert from 'node:assert/strict';
 
 // This checkout is only read as evidence; none of its source is executed.
-const baseline = resolve(process.argv[2] || '.evidence/m6');
-const evidence = JSON.parse(readFileSync(new URL('../../docs/test-console-evidence.json', import.meta.url)));
-const evolution = JSON.parse(readFileSync(new URL('../../docs/test-console-evolution.json', import.meta.url)));
+const milestone = process.argv[3] || 'm6';
+assert.ok(['m6', 'm10'].includes(milestone));
+const baseline = resolve(process.argv[2] || `.evidence/${milestone}`);
+const evidence = JSON.parse(readFileSync(new URL(milestone === 'm6' ? '../../docs/test-console-evidence.json' : '../../docs/combined-console-evidence.json', import.meta.url)));
+const evolution = JSON.parse(readFileSync(new URL(milestone === 'm6' ? '../../docs/test-console-evolution.json' : '../../docs/combined-console-evolution.json', import.meta.url)));
 const git = arg => execFileSync('git', ['-C', baseline, 'rev-parse', arg], { encoding: 'utf8' }).trim();
 assert.equal(git('HEAD'), evidence.source_commit);
 assert.equal(git('HEAD^{tree}'), evidence.source_tree);
@@ -22,4 +24,4 @@ for (const [path, expected] of Object.entries(evidence.execution_files_sha256)) 
   if (hash(readFileSync(new URL(`../../${path}`, import.meta.url))) !== expected) changed.push(path);
 }
 assert.deepEqual(changed.sort(), [...evolution.changed_inputs].sort());
-console.log('PASS: exact historical M6 commit/tree and all 20 evidence hashes; current post-M6 changes explicitly declared');
+console.log(`PASS: exact historical ${milestone.toUpperCase()} commit/tree and all ${Object.keys(evidence.execution_files_sha256).length} evidence hashes; later changes explicitly declared`);

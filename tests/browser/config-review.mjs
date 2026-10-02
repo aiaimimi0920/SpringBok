@@ -99,7 +99,7 @@ try {
   await page.unrouteAll({ behavior: 'wait' });
   assert.equal(await download.isDisabled(), true); assert.equal(await comparison.isVisible(), false);
   await ready(changed); await baselineInput.setInputFiles(file(display)); await comparison.waitFor();
-  await comparison.getByText('test.deploymentName', { exact: true }).click();
+  await comparison.locator('article').filter({ has: page.getByRole('heading', { name: '论坛 · 配置有变化', exact: true }) }).getByText('test.deploymentName', { exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.screenshot({ path: 'test-results/config-comparison-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "project": "my-app",
+  "services": [
+    {
+      "id": "gateway",
+      "image": "ghcr.io/example/gateway@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "test": {
+        "serverId": "111111111111111111111111",
+        "deploymentName": "gateway-test",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18080,
+            "containerPort": 8080,
+            "protocol": "tcp"
+          }
+        ],
+        "volumes": [],
+        "secretRefs": []
+      },
+      "production": {
+        "serverId": "222222222222222222222222",
+        "deploymentName": "gateway-production",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18080,
+            "containerPort": 8080,
+            "protocol": "tcp"
+          }
+        ],
+        "volumes": [],
+        "secretRefs": []
+      }
+    },
+    {
+      "id": "forum",
+      "image": "ghcr.io/example/forum@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "test": {
+        "serverId": "111111111111111111111111",
+        "deploymentName": "forum-test",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18081,
+            "containerPort": 8080,
+            "protocol": "tcp"
+          }
+        ],
+        "volumes": [
+          {
+            "name": "forum-test-data",
+            "containerPath": "/data",
+            "readOnly": false
+          }
+        ],
+        "secretRefs": [
+          {
+            "variable": "DATABASE_URL",
+            "reference": "forum-test-db"
+          }
+        ]
+      },
+      "production": {
+        "serverId": "222222222222222222222222",
+        "deploymentName": "forum-production",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18081,
+            "containerPort": 8080,
+            "protocol": "tcp"
+          }
+        ],
+        "volumes": [
+          {
+            "name": "forum-production-data",
+            "containerPath": "/data",
+            "readOnly": false
+          }
+        ],
+        "secretRefs": [
+          {
+            "variable": "DATABASE_URL",
+            "reference": "forum-production-db"
+          }
+        ]
+      }
+    },
+    {
+      "id": "game",
+      "image": "ghcr.io/example/game@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "test": {
+        "serverId": "111111111111111111111111",
+        "deploymentName": "game-test",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18082,
+            "containerPort": 8080,
+            "protocol": "udp"
+          }
+        ],
+        "volumes": [
+          {
+            "name": "game-test-data",
+            "containerPath": "/data",
+            "readOnly": false
+          }
+        ],
+        "secretRefs": []
+      },
+      "production": {
+        "serverId": "222222222222222222222222",
+        "deploymentName": "game-production",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18082,
+            "containerPort": 8080,
+            "protocol": "udp"
+          }
+        ],
+        "volumes": [
+          {
+            "name": "game-production-data",
+            "containerPath": "/data",
+            "readOnly": false
+          }
+        ],
+        "secretRefs": []
+      }
+    },
+    {
+      "id": "account",
+      "image": "ghcr.io/example/account@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "test": {
+        "serverId": "111111111111111111111111",
+        "deploymentName": "account-test",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18083,
+            "containerPort": 8080,
+            "protocol": "tcp"
+          }
+        ],
+        "volumes": [
+          {
+            "name": "account-test-data",
+            "containerPath": "/data",
+            "readOnly": false
+          }
+        ],
+        "secretRefs": [
+          {
+            "variable": "DATABASE_URL",
+            "reference": "account-test-db"
+          }
+        ]
+      },
+      "production": {
+        "serverId": "222222222222222222222222",
+        "deploymentName": "account-production",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 18083,
+            "containerPort": 8080,
+            "protocol": "tcp"
+          }
+        ],
+        "volumes": [
+          {
+            "name": "account-production-data",
+            "containerPath": "/data",
+            "readOnly": false
+          }
+        ],
+        "secretRefs": [
+          {
+            "variable": "DATABASE_URL",
+            "reference": "account-production-db"
+          }
+        ]
+      }
+    }
+  ]
+}

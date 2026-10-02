@@ -1,0 +1,198 @@
+{
+  "source": "https://github.com/moghtech/komodo/blob/v2.3.3/ui/public/schema/resources.json",
+  "upstreamCommit": "780ac68b992094a9fccd5fffb760e0c84fd3c3d1",
+  "properties": {
+    "image": {
+      "description": "The image which the deployment deploys.\nCan either be a user inputted image, or a Komodo Build.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DeploymentImage"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "network": {
+      "description": "The network attached to the container.\nDefault is `host`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "restart": {
+      "description": "The restart mode given to the container.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RestartMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "command": {
+      "description": "This is interpolated at the end of the `docker run` command,\nwhich means they are either passed to the containers inner process,\nor replaces the container command, depending on use of ENTRYPOINT or CMD in dockerfile.\nEmpty is no command.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "extra_args": {
+      "description": "Extra args which are interpolated into the\n`docker run` / `docker service create` command,\nand affect the container configuration.\n\n- Container ref: https://docs.docker.com/reference/cli/docker/container/run/#options\n- Swarm Service ref: https://docs.docker.com/reference/cli/docker/service/create/#options",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "ports": {
+      "description": "The container port mapping.\nIrrelevant if container network is `host`.\nMaps ports on host to ports on container.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "volumes": {
+      "description": "The container volume mapping.\nMaps files / folders on host to files / folders in container.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "environment": {
+      "description": "The environment variables passed to the container / service.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "skip_secret_interp": {
+      "description": "Whether to skip secret interpolation into the deployment environment variables.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "image_registry_account": {
+      "description": "Configure the account used to pull the image from the registry.\nUsed with `docker login`.\n\n - If the field is empty string, will use the same account config as the build, or none at all if using image.\n - If the field contains an account, a token for the account must be available.\n - Will get the registry domain from the build / image",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "auto_update": {
+      "description": "Whether to automatically redeploy when\nnewer a image is found. Will implicitly\nenable `poll_for_updates`, you don't need to\nenable both.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "poll_for_updates": {
+      "description": "Whether to poll for any updates to the image.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "redeploy_on_build": {
+      "description": "Whether to redeploy the deployment whenever the attached build finishes.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "server": {
+      "description": "The Server to deploy the Deployment on, setting the Deployment into Container mode.\n\nNote. If both swarm_id and server_id are set,\nswarm_id overrides server_id and the Deployment will be in Swarm mode.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "swarm": {
+      "description": "The Swarm to deploy the Deployment on (as a Swarm Service), setting the Deployment into Swarm mode.\n\nNote. If both swarm_id and server_id are set,\nswarm_id overrides server_id and the Deployment will be in Swarm mode.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "definitions": {
+    "DeploymentImage": {
+      "oneOf": [
+        {
+          "description": "Deploy any external image.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Image"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "image": {
+                  "description": "The docker image, can be from any registry that works with docker and that the host server can reach.",
+                  "type": "string",
+                  "default": ""
+                }
+              }
+            }
+          },
+          "required": [
+            "type",
+            "params"
+          ]
+        },
+        {
+          "description": "Deploy a Komodo Build.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Build"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "build": {
+                  "description": "The id of the Build",
+                  "type": "string",
+                  "default": ""
+                },
+                "version": {
+                  "description": "Use a custom / older version of the image produced by the build.\nif version is 0.0.0, this means `latest` image.",
+                  "default": {
+                    "major": 0,
+                    "minor": 0,
+                    "patch": 0
+                  },
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Version"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "type",
+            "params"
+          ]
+        }
+      ]
+    },
+    "RestartMode": {
+      "type": "string",
+      "enum": [
+        "no",
+        "on-failure",
+        "always",
+        "unless-stopped"
+      ]
+    }
+  }
+}

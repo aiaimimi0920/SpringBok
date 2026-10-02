@@ -1,0 +1,30 @@
+import { accessSession, signSession, sameProof } from './access.mjs';
+import { exact, NODE, submission } from './protocol.mjs';
+const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" };
+const reply = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { ...headers, 'content-type': 'application/json' } });
+export async function adminRequest(request, env, readBody) {
+  try {
+    const session = await accessSession(request, env), url = new URL(request.url);
+    if (request.method === 'GET' && ['/', '/app.js', '/style.css'].includes(url.pathname)) {
+      const response = await env.ASSETS.fetch(request);
+      return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
+    }
+    const stub = env.TARGET.get(env.TARGET.idFromName(NODE));
+    if (request.method === 'GET' && url.pathname === '/api/admin/state') {
+      return reply({ ...await stub.admin('state', null, session.actor), email: session.email, csrf: await signSession(session, 'csrf', null) });
+    }
+    if (request.method !== 'POST' || !['/api/admin/preview', '/api/admin/submit'].includes(url.pathname)) return reply({ error: 'unknown admin route' }, 404);
+    if (request.headers.get('origin') !== session.origin || !sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null))) return reply({ error: 'refresh this authenticated session' }, 403);
+    const value = await readBody(request);
+    if (url.pathname === '/api/admin/preview') {
+      exact(value, ['id', 'revision']);
+      const input = submission({ id: value.id, node: NODE, operation: 'fixture-cycle', challenge: env.FIXTURE_BINDING, revision: value.revision });
+      await stub.admin('preview', input, session.actor);
+      const expiresAt = Date.now() + 120000;
+      return reply({ input, expiresAt, confirmation: await signSession(session, 'confirm', [input, expiresAt]) });
+    }
+    exact(value, ['input', 'expiresAt', 'confirmation']); const input = submission(value.input);
+    if (input.operation !== 'fixture-cycle' || !Number.isSafeInteger(value.expiresAt) || value.expiresAt < Date.now() || value.expiresAt > Date.now() + 120000 || typeof value.confirmation !== 'string' || !sameProof(value.confirmation, await signSession(session, 'confirm', [input, value.expiresAt]))) return reply({ error: 'confirmation expired or changed' }, 409);
+    return reply(await stub.admin('submit', input, session.actor));
+  } catch { return reply({ error: 'admin access denied, stale plan or persistence uncertain' }, 403); }
+}

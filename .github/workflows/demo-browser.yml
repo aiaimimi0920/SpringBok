@@ -21,6 +21,10 @@ jobs:
           node-version: '22'
       - name: Install locked browser-test dependency only
         run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/browser
+      - name: Install locked local Worker runtime and authentication for synthetic admin tests
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix cloud
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tests/cloud
       - name: Load official Ubuntu CJK fonts into the disposable user font directory
         shell: bash
         run: |
@@ -40,6 +44,8 @@ jobs:
         run: node tests/browser/execution-review.mjs
       - name: Check local user configuration UI without deployment or credentials
         run: node tests/browser/config-review.mjs
+      - name: Check private cloud management with synthetic Access JWTs and actual workerd
+        run: node tests/browser/cloud-admin.mjs
       - name: Save demo and clearly labeled fake-backend screenshots
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

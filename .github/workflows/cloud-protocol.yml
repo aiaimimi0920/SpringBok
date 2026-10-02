@@ -19,6 +19,10 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+      - name: Install locked Worker authentication dependency without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix cloud
+      - name: Audit Worker authentication dependency
+        run: npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low --prefix cloud
       - name: Install locked local workerd test runtime without lifecycle scripts
         run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/cloud
       - name: Audit all locked protocol test dependencies

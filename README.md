@@ -124,3 +124,11 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 Komodo 测试资源。运行仅限明确授权的 GitHub 临时 Linux 机，已在临时机通过四服务真实浏览器发布、更新、失败阻断、回滚与恢复测试。
 准确测试状态见 [真实测试控制台](docs/real-test-console.md)。M3演示入口保持
 独立，不连接真实服务器。生产登录、配置所有权与用户服务器接入仍待决策。
+
+## 私有云管理页（待实际身份接入）
+
+普通 Cloudflare Worker + Static Assets 复用持久任务与出站节点桥，服务端验证
+Cloudflare Access 身份后展示固定联调任务及回执。默认关闭、管理员名单为空；
+实际 Access 配置、Cloudflare 启用和 PC2 验收尚需完成。
+[身份边界与启用要求](docs/private-cloud-management.md) ·
+[固定节点执行器](docs/node-fixture-execution.md)

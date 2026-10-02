@@ -1,0 +1,379 @@
+{
+  "version": 1,
+  "kind": "owned-service-input-catalog",
+  "products": [
+    {
+      "id": "gateway",
+      "selected": true,
+      "source": {
+        "repository": "aiaimimi0920/Gateway",
+        "commit": "28a3e3d06f410adb62f594a7bfb4ddeb1ac86da2"
+      },
+      "components": [
+        {
+          "id": "gateway",
+          "kind": "service",
+          "sourcePath": "Dockerfile",
+          "dependsOn": [],
+          "requires": [
+            "database",
+            "cache",
+            "state"
+          ],
+          "health": {
+            "liveness": "/healthz",
+            "readiness": "/readyz"
+          },
+          "binding": null
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "database",
+          "kind": "database",
+          "secretRefs": [
+            "gateway.database"
+          ],
+          "binding": null
+        },
+        {
+          "id": "cache",
+          "kind": "cache",
+          "secretRefs": [
+            "gateway.cache"
+          ],
+          "binding": null
+        },
+        {
+          "id": "state",
+          "kind": "volume",
+          "secretRefs": [],
+          "binding": null
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "selected": true,
+      "source": {
+        "repository": "aiaimimi0920/Platform",
+        "commit": "cf2ded637e35af8f95c7d8cc28613df73d3d5b65"
+      },
+      "components": [
+        {
+          "id": "core-migrate",
+          "kind": "migration",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [],
+          "requires": [
+            "database"
+          ],
+          "health": null,
+          "binding": null
+        },
+        {
+          "id": "gateway-domain-migrate",
+          "kind": "migration",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "core-migrate"
+          ],
+          "requires": [
+            "database"
+          ],
+          "health": null,
+          "binding": null
+        },
+        {
+          "id": "account-domain-migrate",
+          "kind": "migration",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "gateway-domain-migrate"
+          ],
+          "requires": [
+            "database"
+          ],
+          "health": null,
+          "binding": null
+        },
+        {
+          "id": "core",
+          "kind": "service",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "core-migrate"
+          ],
+          "requires": [
+            "database",
+            "cache"
+          ],
+          "health": {
+            "liveness": null,
+            "readiness": "/ready"
+          },
+          "binding": null
+        },
+        {
+          "id": "account-api",
+          "kind": "service",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "account-domain-migrate",
+            "core"
+          ],
+          "requires": [
+            "database",
+            "identity"
+          ],
+          "health": {
+            "liveness": null,
+            "readiness": "/ready"
+          },
+          "binding": null
+        },
+        {
+          "id": "account-worker",
+          "kind": "service",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "account-domain-migrate",
+            "account-api"
+          ],
+          "requires": [
+            "database",
+            "cache"
+          ],
+          "health": {
+            "liveness": null,
+            "readiness": "/ready"
+          },
+          "binding": null
+        },
+        {
+          "id": "worker",
+          "kind": "service",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "core-migrate",
+            "core"
+          ],
+          "requires": [
+            "database",
+            "cache"
+          ],
+          "health": {
+            "liveness": null,
+            "readiness": "/ready"
+          },
+          "binding": null
+        },
+        {
+          "id": "executor",
+          "kind": "service",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "core-migrate",
+            "core"
+          ],
+          "requires": [
+            "database",
+            "object-store"
+          ],
+          "health": {
+            "liveness": null,
+            "readiness": "/ready"
+          },
+          "binding": null
+        },
+        {
+          "id": "web",
+          "kind": "service",
+          "sourcePath": "deploy/docker-compose.release.yml",
+          "dependsOn": [
+            "core",
+            "account-api"
+          ],
+          "requires": [
+            "identity"
+          ],
+          "health": {
+            "liveness": null,
+            "readiness": "/ready"
+          },
+          "binding": null
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "database",
+          "kind": "database",
+          "secretRefs": [
+            "platform.database"
+          ],
+          "binding": null
+        },
+        {
+          "id": "cache",
+          "kind": "cache",
+          "secretRefs": [
+            "platform.cache"
+          ],
+          "binding": null
+        },
+        {
+          "id": "identity",
+          "kind": "identity",
+          "secretRefs": [
+            "platform.oidc-client"
+          ],
+          "binding": null
+        },
+        {
+          "id": "object-store",
+          "kind": "object-store",
+          "secretRefs": [
+            "platform.object-store"
+          ],
+          "binding": null
+        }
+      ]
+    },
+    {
+      "id": "assetlibrary",
+      "selected": true,
+      "source": {
+        "repository": "aiaimimi0920/AssetLibrary",
+        "commit": "9b287d28142b7b515b77cbc53a60b212010b853a"
+      },
+      "components": [
+        {
+          "id": "api",
+          "kind": "service",
+          "sourcePath": "services/api/src/main.rs",
+          "dependsOn": [],
+          "requires": [
+            "database",
+            "object-store",
+            "identity"
+          ],
+          "health": {
+            "liveness": "/healthz",
+            "readiness": "/readyz"
+          },
+          "binding": null
+        },
+        {
+          "id": "web",
+          "kind": "service",
+          "sourcePath": "apps/web/package.json",
+          "dependsOn": [
+            "api"
+          ],
+          "requires": [],
+          "health": {
+            "liveness": "/healthz",
+            "readiness": "/readyz"
+          },
+          "binding": null
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "database",
+          "kind": "database",
+          "secretRefs": [
+            "assetlibrary.database"
+          ],
+          "binding": null
+        },
+        {
+          "id": "object-store",
+          "kind": "object-store",
+          "secretRefs": [
+            "assetlibrary.object-store"
+          ],
+          "binding": null
+        },
+        {
+          "id": "identity",
+          "kind": "identity",
+          "secretRefs": [
+            "assetlibrary.oidc-client"
+          ],
+          "binding": null
+        }
+      ]
+    },
+    {
+      "id": "rauthy",
+      "selected": true,
+      "source": {
+        "repository": "aiaimimi0920/rauthy",
+        "commit": "dd61ac3c84d6b238108dc8438b53043b5177a662"
+      },
+      "components": [
+        {
+          "id": "identity",
+          "kind": "service",
+          "sourcePath": "Dockerfile",
+          "dependsOn": [],
+          "requires": [
+            "identity-store",
+            "login-domain"
+          ],
+          "health": null,
+          "binding": null
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "identity-store",
+          "kind": "storage-choice",
+          "secretRefs": [
+            "rauthy.storage",
+            "rauthy.encryption"
+          ],
+          "binding": null
+        },
+        {
+          "id": "login-domain",
+          "kind": "tls-domain",
+          "secretRefs": [],
+          "binding": null
+        }
+      ]
+    },
+    {
+      "id": "crow",
+      "selected": false,
+      "source": {
+        "repository": "aiaimimi0920/Crow",
+        "commit": "3753c240afc7fc25dabd74ab8cde52378d6242e1"
+      },
+      "components": [
+        {
+          "id": "query-api",
+          "kind": "service",
+          "sourcePath": null,
+          "dependsOn": [],
+          "requires": [
+            "readonly-source"
+          ],
+          "health": null,
+          "binding": null
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "readonly-source",
+          "kind": "read-only-source",
+          "secretRefs": [
+            "crow.query-source"
+          ],
+          "binding": null
+        }
+      ]
+    }
+  ]
+}

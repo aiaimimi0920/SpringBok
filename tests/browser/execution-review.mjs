@@ -194,7 +194,7 @@ try {
   assert.equal(await page.locator('#history-status').textContent(), '此服务暂无请求记录');
   assert.equal(await page.locator('#history-prev').isDisabled(), true);
   await filter.selectOption('forum');
-  await history.getByText('论坛 · 执行测试 · 结果未知，保持阻断', { exact: true }).click();
+  await history.getByText('论坛 · 执行测试 · 结果未知，保持阻断 · 准备 #3', { exact: true }).click();
   await history.getByText(/准备独有；未确认执行 #/).waitFor();
   assert.equal(await history.getByRole('button', { name: /执行|重试|恢复/ }).count(), 0);
   await filter.selectOption('account'); await page.locator('#history-next').click();

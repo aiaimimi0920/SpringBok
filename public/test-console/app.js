@@ -174,7 +174,7 @@ function renderHistory() {
     document.querySelector('#history-prev').disabled = result.page === 1;
     document.querySelector('#history-next').disabled = result.page === result.pages;
     for (const row of result.rows) {
-      const li = el('li'), details = el('details'), summary = el('summary', `${names[row.service]} · ${historyOperations[row.operation] || '未知操作'} · ${historyLabels[row.status] || '状态未知'}`);
+      const li = el('li'), details = el('details'), summary = el('summary', `${names[row.service]} · ${historyOperations[row.operation] || '未知操作'} · ${historyLabels[row.status] || '状态未知'} · ${row.source === 'execution' ? '执行' : '准备'} #${row.revision}`);
       details.append(summary, el('p', `请求 ${row.id}`, 'digest'));
       details.append(el('p', `${row.source === 'execution' ? '执行起始' : '准备独有；未确认执行'} #${row.revision}`));
       if (row.target) details.append(el('p', `目标 ${row.target}`, 'digest'));

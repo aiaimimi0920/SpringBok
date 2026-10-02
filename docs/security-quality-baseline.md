@@ -10,6 +10,9 @@ introduced through a separately reviewed and tested pull request.
   fails on detections. New uncommitted files are covered after committing them.
 - Both tools are downloaded from official releases with fixed SHA-256 checks.
 - CodeQL analyzes Actions and the JavaScript contract/fixture tooling.
+- npm audit scans the committed `tests/browser/package-lock.json`, including
+  development and optional dependencies, without installing or executing them.
+  It fails on low-or-higher advisories or audit errors, with a five-minute bound.
 - Dependabot proposes weekly, bounded GitHub Actions updates. It does not merge.
 - `node --test scripts/ci/security-baseline.test.mjs` validates these contracts.
   Node is used for repository tooling; it does not select the future app stack.
@@ -21,7 +24,7 @@ needed to upload SARIF. Workflows do not deploy or receive real credentials.
 ## Deliberately deferred
 
 M1 adds offline contract regression tests and an isolated sample-container smoke
-job. It does not add product UI, a real executor, a lockfile dependency scan,
+job. It does not add product UI, a real executor, product dependency coverage,
 a license decision or a production release pipeline.
 Once an upstream/product is chosen, review its license, provenance, languages,
 manifests and deployment boundaries, then replace the bootstrap-specific

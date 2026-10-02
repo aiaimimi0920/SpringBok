@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Gateway | 选定服务器上的网关服务 | 明确上游、访问控制、健康检查和固定版本；具体路由由实际应用配置确定 |
 | Platform | 保留现有账户业务，接入 Rauthy 身份登录 | 区分身份认证与业务账户/权限；明确 OIDC 客户端、回调、issuer、会话及业务数据库 |
-| Rauthy | 独立身份服务，为 Platform 等已接入应用提供登录 | 固定稳定版本、登录域名/TLS、持久数据库及所需卷、密钥引用、备份恢复 |
+| Rauthy | 独立机器/平台上的原版稳定身份服务，为已接入应用提供登录 | 固定稳定版本、登录域名/TLS、持久数据库及所需卷、密钥引用、备份恢复 |
 | AssetLibrary | 新的轻量架构方向：应用服务配合托管 PostgreSQL 与对象存储 | 数据库和对象存储是外部依赖；供应商、实例、迁移实现与权限接入尚待落实，不默认在服务器再部署一套 PG/对象存储 |
 | Crow（可选） | 只读查询服务 | 仅访问明确授权的数据源；不部署采集器、采集任务或写入链路，未启用时不阻断其他服务 |
 
@@ -94,7 +94,7 @@ Platform/AssetLibrary/Rauthy；现有 compiler 也尚不接受本页的全部真
 有效输入返回退出码0表示结构检查通过，**不是可部署**；所有选中产品仍是 blocked，
 executionReady/executable 始终 false。无效目录返回固定错误，退出码1。
 
-目录精确绑定核查时源码：Gateway 28a3e3d、Platform cf2ded63、AssetLibrary 9b287d28、
+目录精确绑定核查时源码：Gateway 28a3e3d、Platform 6512fd2d、AssetLibrary 9b287d28、
 Rauthy dd61ac3c、Crow 3753c240；JSON 存完整40位提交。sourcePath 是该版本的声明
 依据，不是镜像构建证明、在线探测或动态源码校验。更新源码 pin 要重新核查相关
 路径和语义。摘要随源版本、组件、依赖、健康路径和选择变化；不把摘要当授权。
@@ -109,7 +109,7 @@ Gateway 的 /healthz 只表示存活，/readyz 也不能替代真实路由验收
 依赖列表是初始接入要求，**不是已核实完整运行配置**；每项保留 dependency-inventory-
 incomplete 阻断。例如 Gateway 运行模式尚未选定，Platform 仍需核对具体功能对
 Gateway/Tea 等外部服务的需求，AssetLibrary 不能直接照搬旧重型 compose，Rauthy
-需要在默认 Hiqlite 与 PostgreSQL 之间明确存储方案。secretRefs 只是未来解析器用的
+当前目标采用外部托管 PostgreSQL，实例与备份方案仍未绑定。secretRefs 只是未来解析器用的
 符号名称，不是应用环境变量映射；不得填真实值，合法标识符也不能证明其中未夹带
 秘密。所有 binding 必须 null；测试/生产 ID、镜像制品和可信完整配置要由后续
 经认证 resolver 取得，不能通过手填“ready”或任意 ID 绕过。
@@ -122,3 +122,41 @@ Crow 默认 not-selected、无阻断原因，启用它才产生只读运行时�
 组件成功与整个产品验收，失败/未知不允许晋级。现有单 Deployment 的四样例合同
 不能直接套用，也不能新增一个任意 shell 执行入口来绕过这个差异。该设计尚未实现，
 本轮到目录输入与阻断检查为止。
+
+## Rauthy 独立部署目标（2026-10-02 更新）
+
+用户要求只部署上游原版稳定 v0.36.2，不开发 Rauthy 本体。上述 fork 精确源码基线
+保持不变。Rauthy 与主业务服务器分开机器或平台部署；目录中的 independent-runtime
+是待绑定的独立目标要求，不是已购实例。运行机器、登录域名、托管 PG 实例和实际
+凭据尚未提供，不能购买资源、创建凭据或据此执行部署。
+
+数据库方向为外部托管 PostgreSQL，减少自行维护。目录 policy 仅约束未来解析器：
+hiqlite=false、tls=require、verifyCertificate=true、caRef=rauthy.postgres-ca。
+它不是可直接启动的 Rauthy 配置。固定 v0.36.2 的对应配置是 HIQLITE=false、
+PG_TLS=require、PG_TLS_NO_VERIFY=false；PG_TLS_ROOT_CA 在需要提供者 CA 时通过
+已核实的 CA 引用解析，使用公开可信 CA 时也必须验证证书和主机名。不得照抄
+上游示例中的 pg_tls_no_verify=true，也不允许 prefer 回落明文。HIQLITE=false
+只用于本次明确选择的外部 PG 方案，不自动修改其他服务或现有实例。
+
+Rauthy 独占其数据库、管理员初始化材料、签名私钥和加密材料，独立备份与恢复。
+Platform 不持有这些数据或挂载身份服务的卷；公开 JWKS 仅提供验签公钥。
+管理员、加密密钥轮换、邮件方案、连接权限与 CA 可信来源仍待安全配置和验收。
+所有 secretRefs 只有符号名，不能填值，也不能将 Rauthy 的数据库凭据复用给 Platform。
+
+Platform 依据 [6512fd2d 的跨机器合同](https://github.com/aiaimimi0920/Platform/blob/6512fd2d1f8781001dc83500a65d134b32907a62/docs/40-engineering/rauthy-oidc-integration.md)：
+
+- Web 通过独立 HTTPS issuer/discovery/token/JWKS 完成登录和验签，持有本应用的
+  OIDC client secret；还需独立本地 Auth.js 会话密钥、内部服务 token 和业务回调域名，
+  三类材料不可复用。当前目录的 oidc-client 引用不代表完整环境配置已齐备。
+- account-api 需要精确 issuer 配置、自己的业务数据库和 Redis 登录写入预算，
+  接受经过内部服务鉴权的 Web 身份请求；不持有 OIDC client secret，不访问身份库。
+  issuer-config 是配置要求，不是本机身份容器或数据库依赖，不能作为同机 dependsOn。
+- Web 与 account-api 的 issuer 要逐字一致，包含尾斜线。登录域名与 Platform 回调
+  域名可分属不同平台；TLS、反向代理边界和客户端登记必须按实际域名验证。
+- 登录后验证 Platform 本地 Auth.js 会话，不逐业务请求远程调用 IdP；JWKS 更新和
+  新登录仍需 IdP 可用。当前最长15分钟或 ID token 到期（取较早值），本地退出不等于
+  上游全局退出，上游撤销不即时使已有本地会话失效。这些上线限制仍须明确验收。
+
+此 pin 的合成协议/数据库/Redis测试不等于真实跨机器 Rauthy 部署验收。
+下一实际部署前仍需固定镜像、绑定两处运行位置、数据库/TLS、独立密钥配置及可恢复
+数据方案；本次目录/文档变更继续保持 blocked，不建立连接或生成可执行计划。

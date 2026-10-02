@@ -57,7 +57,7 @@
       "selected": true,
       "source": {
         "repository": "aiaimimi0920/Platform",
-        "commit": "cf2ded637e35af8f95c7d8cc28613df73d3d5b65"
+        "commit": "6512fd2d1f8781001dc83500a65d134b32907a62"
       },
       "components": [
         {
@@ -124,7 +124,8 @@
           ],
           "requires": [
             "database",
-            "identity"
+            "cache",
+            "issuer-config"
           ],
           "health": {
             "liveness": null,
@@ -195,6 +196,7 @@
             "account-api"
           ],
           "requires": [
+            "issuer-config",
             "identity"
           ],
           "health": {
@@ -235,6 +237,12 @@
           "secretRefs": [
             "platform.object-store"
           ],
+          "binding": null
+        },
+        {
+          "id": "issuer-config",
+          "kind": "issuer-config",
+          "secretRefs": [],
           "binding": null
         }
       ]
@@ -319,7 +327,9 @@
           "sourcePath": "Dockerfile",
           "dependsOn": [],
           "requires": [
-            "identity-store",
+            "external-managed-postgres",
+            "independent-runtime",
+            "identity-secrets",
             "login-domain"
           ],
           "health": null,
@@ -328,11 +338,31 @@
       ],
       "dependencies": [
         {
-          "id": "identity-store",
-          "kind": "storage-choice",
+          "id": "external-managed-postgres",
+          "kind": "database",
           "secretRefs": [
-            "rauthy.storage",
-            "rauthy.encryption"
+            "rauthy.postgres-auth"
+          ],
+          "binding": null,
+          "policy": {
+            "hiqlite": false,
+            "tls": "require",
+            "verifyCertificate": true,
+            "caRef": "rauthy.postgres-ca"
+          }
+        },
+        {
+          "id": "independent-runtime",
+          "kind": "deployment-target",
+          "secretRefs": [],
+          "binding": null
+        },
+        {
+          "id": "identity-secrets",
+          "kind": "secret-material",
+          "secretRefs": [
+            "rauthy.encryption",
+            "rauthy.bootstrap-admin"
           ],
           "binding": null
         },

@@ -41,13 +41,15 @@ export default {
 export class TargetMailbox extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.fixtureBinding = env.ENABLE_FIXTURE_CYCLE === 'yes' && validToken(env.FIXTURE_BINDING) ? env.FIXTURE_BINDING : null;
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS mailbox (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL)');
   }
   apply(operation, value) {
     return this.ctx.storage.transactionSync(() => {
       const rows = this.ctx.storage.sql.exec('SELECT state FROM mailbox WHERE id=1').toArray();
       const state = rows.length ? ledger(JSON.parse(rows[0].state)) : { revision: 0, jobs: [] };
-      if (operation === 'state') return { ...state, mode: 'protocol-test-only', deploymentVerified: false };
+      if ((operation === 'submit' && value?.operation === 'fixture-cycle' && value.challenge !== this.fixtureBinding) || (['poll', 'report'].includes(operation) && state.jobs.some(j => ['queued', 'claimed', 'unknown'].includes(j.status) && j.input.operation === 'fixture-cycle' && j.input.challenge !== this.fixtureBinding))) throw new Error('fixture execution disabled');
+      if (operation === 'state') return { ...state, mode: 'node-test-only', deploymentVerified: false };
       const result = transition(state, operation, value, Date.now());
       if (result.changed) this.ctx.storage.sql.exec('INSERT INTO mailbox(id,state) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state', JSON.stringify(result.state));
       return result.response;

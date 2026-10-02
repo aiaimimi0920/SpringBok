@@ -1,8 +1,15 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fixtureBackend } from '../helpers/node-fixture.mjs';
+import { openFixtureExecutor } from '../../src/fixture-node/executor.mjs';
+import { openFixtureBridge } from '../../src/node-bridge/bridge.mjs';
 import { adminFixture, origin } from '../cloud/admin-fixture.mjs';
-const f = await adminFixture(); let browser;
+const backend = fixtureBackend(), f = await adminFixture({ FIXTURE_BINDING: backend.c.binding });
+const directory = mkdtempSync(join(tmpdir(), 'springbok-admin-browser-'));
+let browser, executor, bridge;
 try {
   browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' });
   const context = await browser.newContext({ viewport: { width: 1280, height: 950 } });
@@ -34,5 +41,21 @@ try {
   assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   assert.deepEqual(errors, []);
   assert.equal((await f.call('/api/admin/state', { token })).json().audit.length, 1);
-  console.log('PASS synthetic Access identity in real workerd + Chrome: protected assets, cancel/escape/back/stale preview, one submit, refresh persistence, mobile');
-} finally { await browser?.close(); await f.close(); }
+  // Actual Node bridge/executor and workerd, with a simulated Komodo transport.
+  executor = openFixtureExecutor({ directory: join(directory, 'execution'), inventory: backend.inventory, transport: backend });
+  bridge = openFixtureBridge({ directory: join(directory, 'bridge'), origin, token: f.bindings.NODE_TOKEN, executor, fetcher: (url, init) => f.mf.dispatchFetch(url, init) });
+  assert.equal(await bridge.step(), 'fixture-verified');
+  assert.equal(backend.calls.filter(c => c.path === 'execute/Deploy').length, 4);
+  await page.getByRole('button', { name: '刷新记录', exact: true }).click();
+  await page.getByText(/固定测试四阶段回执齐备/).waitFor();
+  await page.getByText('查看四阶段实际节点回执', { exact: true }).click();
+  assert.equal(await page.locator('#jobs details p').count(), 4);
+  await page.getByText(/bad：expected-exit-1/).waitFor();
+  await page.getByText(/rollback-v1：healthy/).waitFor();
+  assert.equal(await start.isEnabled(), false);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: 'test-results/cloud-admin-synthetic-receipts-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.screenshot({ path: 'test-results/cloud-admin-synthetic-receipts-desktop.png', fullPage: true });
+  console.log('PASS synthetic Access identity in real workerd + Chrome: protected assets, cancel/escape/back/stale preview, one submit, refresh persistence, mobile and four-stage receipt rendering (simulated Komodo)');
+} finally { bridge?.close(); executor?.close(); await browser?.close(); await f.close(); rmSync(directory, { recursive: true, force: true }); }

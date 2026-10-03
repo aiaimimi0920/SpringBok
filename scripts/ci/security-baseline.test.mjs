@@ -30,7 +30,9 @@ test("secret and workflow scanners have exact verified releases and fail closed"
   assert.equal([...install.matchAll(/sha256=[a-f0-9]{64}/g)].length, 2);
   const quality = read(".github/workflows/repository-quality.yml");
   assert.match(quality, /fetch-depth: 0/);
-  assert.match(quality, /gitleaks" git --redact=100 --no-banner --exit-code=1/);
+  assert.match(quality, /gitleaks" git --redact=100 --no-banner --exit-code=42/);
+  assert.match(quality, /scripts\/security_findings\.py gitleaks/);
+  assert.match(quality, /if-no-files-found: error/);
   assert.doesNotMatch(quality, /continue-on-error|\|\| true/);
 });
 
@@ -43,15 +45,15 @@ test("Dependabot tracks Actions with bounded pull requests", () => {
 
 test("browser test dependency audit covers the committed lock without executing packages", () => {
   const quality = read(".github/workflows/repository-quality.yml");
-  assert.match(quality, /name: Audit committed browser test dependencies\n\s+timeout-minutes: 5\n\s+working-directory: tests\/browser\n\s+run: npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low/);
+  assert.match(quality, /name: Audit committed browser test dependencies\n\s+timeout-minutes: 5\n\s+working-directory: tests\/browser\n\s+run: python3 \.\.\/\.\.\/scripts\/run_dependency_audit\.py npm --output \.\.\/\.\.\/\.tmp\/security-reports\/browser -- npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low/);
   assert.equal(existsSync(resolve(root, "tests/browser/package-lock.json")), true);
   assert.doesNotMatch(quality, /--omit|continue-on-error|\|\| true/);
 });
 
 test("contract lab makes no unsupported product stack or release claims", () => {
   assert.match(read("README.md"), /pending evaluation/);
-  assert.match(read(".github/workflows/codeql.yml"), /language: \[actions, javascript-typescript\]/);
-  assert.doesNotMatch(workflowNames.join(" "), /release|deploy|dependency-security/);
+  assert.match(read(".github/workflows/codeql.yml"), /language: \[actions, javascript-typescript, python\]/);
+  assert.doesNotMatch(workflowNames.join(" "), /release|deploy/);
   for (const path of ["package.json", "package-lock.json", "Cargo.toml", "LICENSE"]) {
     assert.equal(existsSync(resolve(root, path)), false, path);
   }

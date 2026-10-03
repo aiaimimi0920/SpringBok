@@ -34,7 +34,7 @@ jobs:
       - name: Audit committed browser test dependencies
         timeout-minutes: 5
         working-directory: tests/browser
-        run: npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low
+        run: python3 ../../scripts/run_dependency_audit.py npm --output ../../.tmp/security-reports/browser -- npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low --json
       - name: Lint workflow definitions
         shell: bash
         run: |
@@ -44,4 +44,19 @@ jobs:
         shell: bash
         run: |
           bash scripts/ci/install-tool.sh gitleaks "$RUNNER_TEMP/ci-tools"
-          "$RUNNER_TEMP/ci-tools/gitleaks" git --redact=100 --no-banner --exit-code=1 --log-opts="--all" .
+          mkdir -p .tmp/security-reports
+          set +e
+          "$RUNNER_TEMP/ci-tools/gitleaks" git --redact=100 --no-banner --exit-code=42 \
+            --log-opts="--all" --report-format=json --report-path=.tmp/security-reports/gitleaks.json .
+          status=$?
+          set -e
+          printf '%s\n' "$status" > .tmp/security-reports/gitleaks.exit
+          python3 scripts/security_findings.py gitleaks --report .tmp/security-reports/gitleaks.json --exit-code "$status"
+      - name: Retain security reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-reports-${{ github.job }}-${{ github.run_id }}
+          path: .tmp/security-reports
+          include-hidden-files: true
+          if-no-files-found: error

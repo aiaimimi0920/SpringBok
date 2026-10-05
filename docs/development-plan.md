@@ -119,9 +119,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N06 | 执行端可重复安装包/引导 | 部分实现 | 控制客户端见 N06-S01；执行依赖装配见 N06-S02；E07 保留 | 非特权角色安装与完整执行依赖分开验收；不覆盖现有服务，不将控制 probe 当业务执行环境 | ARC-01/N03 |
 | N06-S01 | 固定版本控制客户端包与非特权单角色安装 | 已完成 | [实现与验收](node-installation.md)；负责人：主 AI；PR #39，交付见第 7.10 节 | 固定清单/摘要、私有安装、不覆盖/半完成恢复、不同 Linux uid 隔离、安装后 CLI/workerd 控制 probe 已验并提交推送；PR/main 最终状态按回执 | ARC-01/N03/N01-S02 |
 | N06-S02 | 隔离执行依赖安装与真实测试机装配 | 待开发 | E07；[执行架构](execution-architecture.md) | 明确依赖许可/来源与容量，在获准独立 rootless 环境装配 Core/Mongo/Periphery 并验收；不由 S01 提前完成 | N06-S01 |
-| N07 | 常驻运行与开机启动 | 部分实现 | 进程生命周期见 N07-S01；系统服务见 N07-S02 | 前台常驻和系统开机启动分开验收；业务执行仍受 N06-S02 限制 | N06-S01 |
+| N07 | 常驻运行与开机启动 | 已完成 | 进程生命周期见 N07-S01；用户服务见 N07-S02 | 限定控制客户端前台常驻与用户 manager 启动关联已验收；宿主 linger/实际开机重启和业务执行仍另核授权、受 N06-S02/V 项限制 | N06-S01 |
 | N07-S01 | 控制客户端常驻循环与安全退出 | 已完成 | [实现与验收](node-daemon.md)；负责人：主 AI；PR #40，交付见第 7.11 节 | execute/observe 单角色常驻、至少 30 秒间隔、有界退避、单实例、安全退出、unknown 不重放已验收并提交推送；PR/main 最终检查见回执，不含开机启动 | N06-S01 |
-| N07-S02 | 非特权系统服务与开机启动 | 进行中 | [实现与验收](node-user-service.md)；负责人：主 AI；范围见第 7.12 节 | 可信 systemd user unit、显式启停/启用、失败不自动重启和用户 manager 自启动关联；宿主 linger/部署需单独授权 | N07-S01 |
+| N07-S02 | 非特权系统服务与开机启动 | 已完成 | [实现与验收](node-user-service.md)；负责人：主 AI；PR #41；第 7.12 节 | 固定私有 unit、原生显式启停/启用、失败不自动重启、真实 manager 重建/禁用与残留锁均通过；源码已推送，最终 PR/main 按回执，宿主 linger/部署另核授权 | N07-S01 |
 | N08 | 节点心跳与离线判定 | 待开发 | E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
 | N09 | 节点运行环境预检查 | 部分实现 | E07 手工 rootless/容量要求、E09 固定资源检查 | OS/架构/版本/权限/磁盘和资源余量结构化上报；不满足时阻止部署 | N07 |
 | N10 | 节点程序安全升级 | 待开发 | 尚无发行升级链 | 校验固定产物/版本，兼容协议，失败可恢复；在途未知任务不自动重做 | N06/N07 |
@@ -437,6 +437,9 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 第三轮已越过双角色启停/drain/拒绝和 execute unknown 保留断言，但后续 prepare-enable 还有一处按名 reset-failed；此前全局 reset 后空闲 observe unit 被 manager 回收，导致同类拒绝。补齐这一剩余测试调用，不改变生产逻辑或断言；自启动重建/SIGKILL 场景仍须完整 CI 实际通过后才关闭任务。
 - 第四轮实际 `exercise` 完整通过，但系统级 `user@1002.service` 重建报 timeout，现有日志不足以确定原因。仅补失败时精确 synthetic manager 的 status/journal 与原退出码 artifact，保留 fail-closed；不改生产代码、不扩大 cgroup 权限、不放宽 manager 超时或取消重建验收。下一步按新日志诊断此 CI 平台边界。
 - 精确诊断日志显示新 manager 仍访问 `/home/runner/.config`，启动停在 `dbus.socket` 与 `gpg-agent-ssh.socket` 的 systemctl 控制进程，90 秒后被系统启动超时终止；未进入 SpringBok 自启动 unit。对新 synthetic uid 的 CI 专属 `user@<uid>` drop-in 明确自身 HOME/XDG，并移除启动期 D-Bus/SSH 会话地址，避免 socket 的 ExecStartPost 经自身未就绪 bus 形成等待；不改宿主通用模板/生产 unit、不放宽超时。新环境与完整重建结果仍须 fresh CI 核实。
+- head `789b6a4b31eb757bc8db328efbd5798e37306d46` 的 6 workflow/14 check 全部成功。实际 systemd job `37324383078` 完整通过：双角色真实 daemon/drain/401/unknown、enable 后 manager 重建启动、disable 后重建不启动、SIGKILL 保留锁及显式重启零网络拒绝。环境隔离后的两次重建通过，支持有界修复有效；没有逐个变量对照，不将具体 bus 地址自等待当唯一确诊原因，也不宣称所有 Linux 发行版通过。
+- 已下载专项 artifact `11351760680` 并匹配 GitHub SHA-256：两个角色 journal、原退出码 0 和真实 manager 成功记录有效，无 Bearer/token 材料。日志、失败 ZIP、源码匹配和工具记录均保留于 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-service-20261005/`。独立精确 head/增量只读审查完成，主 AI 负责最终提交审阅；源码与限定 CI 验收完成且推送，本次仅同步进度，不实施 N08。
+- 下一最小步骤是本项最终文档 head 检查、正常合并与 main 复核；最终 SHA/检查/固定 main 包写 PR 回执，不循环 amend。完成交付后的下一独立开发项为 N08 心跳/离线判定；真实 Cloudflare/Access、多台用户服务器、N06-S02 业务执行装配及业务部署保持未完成，不以 N07 完成代表整个开发计划完成。
 
 ### 7.13 后续交接记录模板
 

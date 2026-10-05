@@ -52,4 +52,6 @@ PR #41 首轮 CI 的契约 204/206、manager 入口失败，原因是 runner set
 
 后续实际 `exercise` 已通过，但 manager 重建曾在宿主预装的 dbus/SSH socket 控制进程超时，日志还显示 runner 的 XDG 路径污染。仅对本次新 uid 的 CI `user@<uid>` drop-in 明确自身 HOME/XDG、取消启动期会话 D-Bus/SSH 地址；不修改通用模板、生产 unit/超时，不宣称所有发行版/用户环境均已适配。失败诊断与原退出码作为 artifact 保留，完整重建结果仍以精确 CI 为准。
 
+head `789b6a4b31eb757bc8db328efbd5798e37306d46` 的 **6 workflow/14 check 全部成功**。真实 user-manager 专项 run `37324383078` 完整通过双角色/drain/401/unknown、启用后重建启动、禁用后重建不启动、SIGKILL 残留锁和显式重启拒绝。artifact `11351760680` 已下载并匹配 GitHub SHA-256，两个角色 journal、exitCode=0 和成功记录经内容核对，不含 Bearer 材料。环境隔离后实际重建通过；没有逐变量对照，不把具体继承 bus 地址自等待当唯一已确诊原因。最终文档 head/合并 main 的新鲜检查和固定版本包另记 PR 回执。
+
 未完成：用户主机安装/开机重启、完整执行依赖 N06-S02、真实 Cloudflare/Access/多服务器、心跳/指标、业务部署、凭据轮换/撤销与程序升级。不启用生产开关，不改云 schema、依赖/lockfile、历史 fixture 或既有固定包。

@@ -4,6 +4,7 @@ import { NODE, ledger, transition } from './protocol.mjs';
 import { nodeEnrollmentRequest } from './enrollment-api.mjs';
 import { nodeCredentialRequest } from './credential-api.mjs';
 import { nodeChannelRequest } from './node-channel-api.mjs';
+import { nodeHeartbeatRequest } from './heartbeat-api.mjs';
 export { OwnerCatalog } from './catalog-store.mjs';
 export { NodeMailbox } from './node-mailbox.mjs';
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
@@ -33,6 +34,7 @@ export default {
     if (new URL(request.url).pathname.startsWith('/node/v2/join/')) return nodeEnrollmentRequest(request, env, body);
     if (new URL(request.url).pathname.startsWith('/node/v2/identity/')) return nodeCredentialRequest(request, env, body);
     if (new URL(request.url).pathname.startsWith('/node/v2/channel/')) return nodeChannelRequest(request, env, body);
+    if (new URL(request.url).pathname.startsWith('/node/v2/heartbeat/')) return nodeHeartbeatRequest(request, env, body);
     const admin = env.ENABLE_ADMIN === 'yes';
     if (admin && !new URL(request.url).pathname.startsWith('/node/')) return adminRequest(request, env, body);
     if (env.ENABLE_PROTOCOL_TEST !== 'yes' || !validToken(env.NODE_TOKEN) || (!admin && (!validToken(env.CONTROL_TOKEN) || env.CONTROL_TOKEN === env.NODE_TOKEN))) return json({ error: 'protocol test disabled' }, 503);

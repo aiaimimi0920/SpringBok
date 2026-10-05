@@ -4,7 +4,7 @@
 
 ## 固定版本与运行入口
 
-当前包使用 `springbok-control-node/v2`，包含 20 个固定源文件及 manifest；协议仍是 node v2，安装记录仍是 `springbok-role-install/v1`，没有云端 schema 迁移。按可信引导流程安装后，以该安装的角色 uid 运行：
+N07-S01 当时的包是 `springbok-control-node/v2` / 20 个源文件；N08 当前包为 v3 / 22 个源文件并增加独立角色心跳，见 [心跳与兼容](node-heartbeat.md)。协议仍是 node v2，安装记录仍是 `springbok-role-install/v1`；N07-S01 本身没有云端 schema 迁移。按可信引导流程安装后，以该安装的角色 uid 运行：
 
 ```text
 node <installation>/release/scripts/node-daemon.mjs --installation <installation>
@@ -13,7 +13,7 @@ node <installation>/release/scripts/node-daemon.mjs --installation <installation
 唯一参数是安装目录。启动时验证入口自身属于该 release、安装标记、源文件摘要、私有权限、身份和 origin，不读取任意配置指定的脚本。只依赖预装 Node.js 22+；不下载运行时、不创建账号、不安装/启用服务。
 
 - `execute` 持有原 `openNodeChannelBridge`，串行处理控制 probe 与持久 `intent/result/ack`；不调用 shell、Docker 或业务部署。
-- `observe` 仅周期调用 `identity:self`，不领取 probe、不创建执行 ledger。身份核对成功不是心跳、主机在线或指标验收。
+- `observe` 周期调用 `identity:self`，不领取 probe、不创建执行 ledger。N08 另外上报独立心跳；身份核对成功本身不是心跳、主机在线或指标验收。
 - 第一次 step 在启动后立即进行；其后每次 step 完成至少等待 30 秒，不重叠、无后台并行请求。正常等待也有正向抖动。
 
 ## 重试与停止边界

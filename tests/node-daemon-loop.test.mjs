@@ -51,3 +51,19 @@ test('unknown, invalid statuses and local persistence failures cannot enter retr
   for (const step of [async () => 'deployment-ready', async () => { throw new Error('journal write uncertain'); }]) await assert.rejects(runNodeLoop({ signal: new AbortController().signal, step, wait: async () => { waits++; } }));
   assert.equal(waits, 0);
 });
+
+test('heartbeat errors do not reclassify completed work, change poll backoff or run after unknown/stop; in-flight heartbeat drains', async () => {
+  const stop = new AbortController(), events = [], waits = []; let steps = 0, beats = 0;
+  await runNodeLoop({ signal: stop.signal, random: () => 0, onEvent: e => events.push(e),
+    step: async () => { steps++; return 'observed'; }, heartbeat: async () => { if (++beats === 1) throw new RetryableNodeError(); return 'recorded'; },
+    wait: async ms => { waits.push(ms); if (waits.length === 2) stop.abort(); } });
+  assert.equal(steps, 2); assert.equal(beats, 2); assert.deepEqual(waits, [30000, 30000]);
+  assert.deepEqual(events.map(e => [e.event, e.status]), [['status', 'observed'], ['heartbeat', 'unavailable'], ['heartbeat', 'recorded']]);
+  let unwanted = 0;
+  assert.equal(await runNodeLoop({ signal: new AbortController().signal, step: async () => 'unknown', heartbeat: async () => { unwanted++; } }), 'blocked');
+  assert.equal(unwanted, 0);
+  const drain = new AbortController(); let finish, closed = false;
+  const running = runNodeLoop({ signal: drain.signal, step: async () => 'idle', heartbeat: () => new Promise(resolve => { finish = resolve; }), wait: () => { throw new Error('no wait'); } }).then(r => { closed = true; return r; });
+  await new Promise(resolve => setImmediate(resolve)); drain.abort(); assert.equal(closed, false); finish('recorded'); assert.equal(await running, 'stopped');
+  await assert.rejects(runNodeLoop({ signal: new AbortController().signal, step: async () => 'idle', heartbeat: () => { throw new Error('identity denied'); } }));
+});

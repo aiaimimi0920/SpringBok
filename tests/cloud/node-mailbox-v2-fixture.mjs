@@ -1,9 +1,9 @@
+// 只读回退夹具：冻结 main 448d53a 的 schema 2 NodeMailbox；仅改相对 import 路径。
 import { DurableObject } from 'cloudflare:workers';
-import { nodeContext, nodeMailboxName, nodeLedger, probePlan, nodeTransition, verifyNodePlans } from './node-protocol.mjs';
-import { preparedEnrollment, nodeEnrollment, joinInput, joinChallengeDigest, requireEnrollment } from './enrollment-contract.mjs';
-import { nodeRole, credentialDigest, identityResult, requireCredential } from './credential-contract.mjs';
-import { channelInput, channelResult } from './node-channel-contract.mjs';
-import { heartbeatInput, heartbeatState, heartbeatTransition, heartbeatResult, heartbeatSnapshot, requireHeartbeat } from './heartbeat-contract.mjs';
+import { nodeContext, nodeMailboxName, nodeLedger, probePlan, nodeTransition, verifyNodePlans } from '../../cloud/node-protocol.mjs';
+import { preparedEnrollment, nodeEnrollment, joinInput, joinChallengeDigest, requireEnrollment } from '../../cloud/enrollment-contract.mjs';
+import { nodeRole, credentialDigest, identityResult, requireCredential } from '../../cloud/credential-contract.mjs';
+import { channelInput, channelResult } from '../../cloud/node-channel-contract.mjs';
 
 // 保留旧内部 probe；新通道只在当前 joined 角色认证的同一事务内领取和回报。
 export class NodeMailbox extends DurableObject {
@@ -19,7 +19,7 @@ export class NodeMailbox extends DurableObject {
   }
   #read(context, initialize = true) {
     const sql = this.ctx.storage.sql;
-    const tables = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('node_meta','node_ledger','node_enrollment','node_heartbeat')").toArray();
+    const tables = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('node_meta','node_ledger','node_enrollment')").toArray();
     if (!tables.length) {
       if (!initialize) return null;
       sql.exec('CREATE TABLE node_meta (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL, owner_id TEXT NOT NULL, node_id TEXT NOT NULL)');
@@ -28,10 +28,9 @@ export class NodeMailbox extends DurableObject {
       sql.exec('INSERT INTO node_ledger VALUES(1,?)', JSON.stringify({ revision: 0, jobs: [] }));
     } else if (!tables.some(row => row.name === 'node_meta') || !tables.some(row => row.name === 'node_ledger')) throw new Error('incomplete node storage');
     const meta = sql.exec('SELECT * FROM node_meta').toArray(), rows = sql.exec('SELECT * FROM node_ledger').toArray();
-    if (meta.length !== 1 || meta[0].id !== 1 || ![1, 2, 3].includes(meta[0].schema_version) || meta[0].owner_id !== context.ownerId || meta[0].node_id !== context.nodeId || rows.length !== 1 || rows[0].id !== 1) throw new Error('invalid node storage');
-    if (tables.length && (meta[0].schema_version === 3 ? ![3, 4].includes(tables.length) : tables.length !== meta[0].schema_version + 1)) throw new Error('incomplete node storage');
-    if (meta[0].schema_version >= 2) this.#record();
-    // schema 3 的观测表/行只由心跳路径校验；不让损坏观测阻断完好的任务领取/回执。
+    if (meta.length !== 1 || meta[0].id !== 1 || ![1, 2].includes(meta[0].schema_version) || meta[0].owner_id !== context.ownerId || meta[0].node_id !== context.nodeId || rows.length !== 1 || rows[0].id !== 1) throw new Error('invalid node storage');
+    if (tables.length && tables.length !== (meta[0].schema_version === 2 ? 3 : 2)) throw new Error('incomplete node storage');
+    if (meta[0].schema_version === 2) this.#record();
     return nodeLedger(JSON.parse(rows[0].state), context);
   }
   async #run(value, operation, input = null) {
@@ -76,7 +75,7 @@ export class NodeMailbox extends DurableObject {
           sql.exec('CREATE TABLE node_enrollment (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL)');
           sql.exec('UPDATE node_meta SET schema_version=2 WHERE id=1');
         }
-        const record = meta.schema_version >= 2 || initialize ? this.#record() : null;
+        const record = meta.schema_version === 2 || initialize ? this.#record() : null;
         return perform(sql, record, context, this.#read(context, false));
       });
     });
@@ -123,37 +122,6 @@ export class NodeMailbox extends DurableObject {
   }
   credentialIdentity(value, role, token) {
     return this.#credentialRun(value, role, token, (_sql, record, verified) => identityResult(verified, record.enrollmentId, role));
-  }
-  #heartbeats() {
-    const rows = this.ctx.storage.sql.exec('SELECT * FROM node_heartbeat').toArray();
-    requireHeartbeat(rows.length === 1 && rows[0].id === 1);
-    return heartbeatState(JSON.parse(rows[0].state));
-  }
-  credentialHeartbeat(value, role, token, enrollmentId, operation, valueInput) {
-    requireHeartbeat(this.env.ENABLE_NODE_HEARTBEAT === 'yes');
-    const input = heartbeatInput(operation, valueInput);
-    return this.#credentialRun(value, role, token, (sql, record, verified) => {
-      requireHeartbeat(this.env.ENABLE_NODE_HEARTBEAT === 'yes' && record.enrollmentId === enrollmentId);
-      const version = sql.exec('SELECT schema_version FROM node_meta').one().schema_version;
-      const state = version === 3 ? this.#heartbeats() : { execute: null, observe: null };
-      const result = heartbeatTransition(state, role, operation, input, Date.now());
-      if (result.changed) {
-        if (version === 2) {
-          sql.exec('CREATE TABLE node_heartbeat (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL)');
-          sql.exec('INSERT INTO node_heartbeat VALUES(1,?)', JSON.stringify(result.state));
-          sql.exec('UPDATE node_meta SET schema_version=3 WHERE id=1');
-        } else sql.exec('UPDATE node_heartbeat SET state=? WHERE id=1', JSON.stringify(result.state));
-      }
-      return heartbeatResult(verified, record.enrollmentId, role, result.result);
-    });
-  }
-  adminHeartbeat(value) {
-    requireHeartbeat(this.env.ENABLE_NODE_CREDENTIALS === 'yes');
-    return this.#enrollmentRun(value, false, (sql, record, verified) => {
-      requireHeartbeat(this.env.ENABLE_NODE_CREDENTIALS === 'yes');
-      const state = sql && sql.exec('SELECT schema_version FROM node_meta').one().schema_version === 3 ? this.#heartbeats() : { execute: null, observe: null };
-      return heartbeatSnapshot(verified, state, Date.now(), record?.status === 'joined');
-    }, 'ENABLE_NODE_HEARTBEAT');
   }
   #probeTransition(sql, ledger, context, operation, input) {
     const result = nodeTransition(ledger, context, operation, input, Date.now());

@@ -10,7 +10,7 @@ Cloudflare 承载控制面，外部服务器承载实际业务和受控执行端
 
 目前已具备固定场景的部署契约、配置审阅、执行恢复、Worker/SQLite Durable Object、
 节点出站桥和受保护管理页。真实 Cloudflare/Access 与用户服务器验收仍未完成；
-多服务器接入和持续资源监控尚待开发。下方 M1–M14 是历史切片记录，不是产品完成比例。
+多台真实服务器接入验收与持续资源监控仍未完成。下方 M1–M14 是历史切片记录，不是产品完成比例。
 
 [首批自有服务、交付目标与验收边界](docs/owned-service-deployment.md)：Gateway、Platform、AssetLibrary、Rauthy，以及可选的 Crow 只读查询。Hook/Loom 是桌面访问方。该清单是开发目标，不是可执行配置或已部署证明。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
@@ -21,9 +21,10 @@ N06-S01 提供绑定 Git revision/文件摘要的控制客户端包，以及 Lin
 安装后可核对版本/身份、执行一次只读控制 probe；不包含 Komodo/Core/Mongo，不安装系统服务，
 不表示业务执行环境已就绪。[可信引导、命令与恢复边界](docs/node-installation.md)
 
-N07-S01 在 v2 包中增加前台常驻入口，复用持久回执、单实例锁、有界退避与信号安全退出。
-execute 仍只处理控制 probe，observe 仅身份核对；开机启动与心跳尚未实现。
+N07-S01 在 v2 包中增加前台常驻入口，N07-S02 增加显式 systemd 用户服务；N08 的当前 v3 包
+提供独立 execute/observe 心跳和云端在线/陈旧/离线判定，仍只处理控制 probe，不是业务执行器或主机指标采集器。
 [常驻命令、错误分类与旧包保留边界](docs/node-daemon.md)
+[角色心跳、阈值、重送与 schema 兼容](docs/node-heartbeat.md)
 
 ## M14：基线与候选发布差异
 

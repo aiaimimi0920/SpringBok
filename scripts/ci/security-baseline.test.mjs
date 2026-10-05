@@ -66,3 +66,15 @@ test("CodeQL initialization and analysis share an exact release pin", () => {
   assert.equal(new Set(pins.map(([, , pin]) => pin)).size, 1, "mixed CodeQL versions cannot read each other's configuration");
   assert.match(read(".github/dependabot.yml"), /groups:\s+codeql-actions:\s+patterns:\s+- "github\/codeql-action\/\*"/);
 });
+
+test("systemd acceptance remains isolated to a disposable hosted account and preserves fatal-state policy", () => {
+  const script = read("scripts/ci/node-user-service.sh");
+  assert.match(script, /GITHUB_ACTIONS:-.*true.*RUNNER_ENVIRONMENT:-.*github-hosted/);
+  assert.match(script, /! id "\$name"/);
+  assert.ok(script.indexOf('trap cleanup EXIT') < script.indexOf('sudo loginctl enable-linger'));
+  assert.match(script, /run_phase exercise/); assert.match(script, /run_phase restart/); assert.match(script, /run_phase disabled/);
+  assert.doesNotMatch(script, /--privileged|userdel|rm -rf|\|\| true/);
+  const source = read("src/node-service/user-unit.mjs");
+  assert.match(source, /Restart=no/); assert.match(source, /TimeoutStopSec=30s/);
+  assert.doesNotMatch(source, /execSync|spawn|unlinkSync\([^)]*lock|Restart=always/);
+});

@@ -20,6 +20,14 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+      - name: Use an owned private copy of the trusted setup-node executable
+        run: |
+          node=$(readlink -f "$(command -v node)")
+          stat -c 'Node runtime owner=%u mode=%a path=%n' "$node"
+          mkdir -m 700 "$RUNNER_TEMP/springbok-node"
+          install -m 700 "$node" "$RUNNER_TEMP/springbok-node/node"
+          cmp "$node" "$RUNNER_TEMP/springbok-node/node"
+          echo "$RUNNER_TEMP/springbok-node" >> "$GITHUB_PATH"
       - run: node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
       - run: node scripts/lab.mjs
       - name: Read the immutable M6 source certificate
@@ -44,3 +52,23 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/ci/container-smoke.sh
+  user-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Validate actual user manager lifecycle in a disposable synthetic account
+        run: bash scripts/ci/node-user-service.sh
+      - name: Retain synthetic systemd evidence without credentials
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: systemd-evidence-${{ github.run_id }}
+          path: .tmp/systemd-evidence
+          include-hidden-files: true
+          if-no-files-found: error

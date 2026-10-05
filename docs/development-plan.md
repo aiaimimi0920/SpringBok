@@ -119,9 +119,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N06 | 执行端可重复安装包/引导 | 部分实现 | 控制客户端见 N06-S01；执行依赖装配见 N06-S02；E07 保留 | 非特权角色安装与完整执行依赖分开验收；不覆盖现有服务，不将控制 probe 当业务执行环境 | ARC-01/N03 |
 | N06-S01 | 固定版本控制客户端包与非特权单角色安装 | 已完成 | [实现与验收](node-installation.md)；负责人：主 AI；PR #39，交付见第 7.10 节 | 固定清单/摘要、私有安装、不覆盖/半完成恢复、不同 Linux uid 隔离、安装后 CLI/workerd 控制 probe 已验并提交推送；PR/main 最终状态按回执 | ARC-01/N03/N01-S02 |
 | N06-S02 | 隔离执行依赖安装与真实测试机装配 | 待开发 | E07；[执行架构](execution-architecture.md) | 明确依赖许可/来源与容量，在获准独立 rootless 环境装配 Core/Mongo/Periphery 并验收；不由 S01 提前完成 | N06-S01 |
-| N07 | 常驻运行与开机启动 | 部分实现 | 进程生命周期见 N07-S01；系统服务见 N07-S02 | 前台常驻和系统开机启动分开验收；业务执行仍受 N06-S02 限制 | N06-S01 |
+| N07 | 常驻运行与开机启动 | 已完成 | 进程生命周期见 N07-S01；用户服务见 N07-S02 | 限定控制客户端前台常驻与用户 manager 启动关联已验收；宿主 linger/实际开机重启和业务执行仍另核授权、受 N06-S02/V 项限制 | N06-S01 |
 | N07-S01 | 控制客户端常驻循环与安全退出 | 已完成 | [实现与验收](node-daemon.md)；负责人：主 AI；PR #40，交付见第 7.11 节 | execute/observe 单角色常驻、至少 30 秒间隔、有界退避、单实例、安全退出、unknown 不重放已验收并提交推送；PR/main 最终检查见回执，不含开机启动 | N06-S01 |
-| N07-S02 | 非特权系统服务与开机启动 | 待开发 | 后续按真实 Linux service manager 单独验收 | 可信 unit/安装路径、显式启停、重启策略与开机启动；不盲删锁、不自动扩大权限或创建用户主机账号 | N07-S01 |
+| N07-S02 | 非特权系统服务与开机启动 | 已完成 | [实现与验收](node-user-service.md)；负责人：主 AI；PR #41；第 7.12 节 | 固定私有 unit、原生显式启停/启用、失败不自动重启、真实 manager 重建/禁用与残留锁均通过；源码已推送，最终 PR/main 按回执，宿主 linger/部署另核授权 | N07-S01 |
 | N08 | 节点心跳与离线判定 | 待开发 | E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
 | N09 | 节点运行环境预检查 | 部分实现 | E07 手工 rootless/容量要求、E09 固定资源检查 | OS/架构/版本/权限/磁盘和资源余量结构化上报；不满足时阻止部署 | N07 |
 | N10 | 节点程序安全升级 | 待开发 | 尚无发行升级链 | 校验固定产物/版本，兼容协议，失败可恢复；在途未知任务不自动重做 | N06/N07 |
@@ -420,7 +420,28 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 功能提交 `4892dd4f29897a0940a3676db02c72a6d63d64dc` 已推送、远程 SHA 一致，PR [#40](https://github.com/aiaimimi0920/SpringBok/pull/40)。该真实 Git revision 包 20 个源文件 / 79,703 字节，manifest SHA-256 `efde956dea9aece7aa1155f91e35d614bff9deeda1c2ce586798166448799287`；逐文件与源码一致，非 root 双角色安装/重装、version 及常驻 CLI/安全退出实测通过。Gitleaks 完整 77 commits 无检出。
 - N07-S01 的限定源码、本地验收与提交推送完成；本次仅同步状态，不开始 N07-S02。精确最终 PR head 的审阅/适用 checks、正常合并、main push 检查与固定 main 包在 PR 最终回执记录，不在提交中自嵌套 SHA 或预报成功。N07 父项保持部分实现，系统服务、真实部署和业务验收仍未完成。
 
-### 7.12 后续交接记录模板
+### 7.12 N07-S02 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `70ea7803c4cb8da838b5cf5a2b5a502bb768864f`，分支 `feat/node-user-service-20261005`；开始时 main/远程一致、工作区干净。N07-S01 PR [#40](https://github.com/aiaimimi0920/SpringBok/pull/40) 已合并，最终结果见 [回执](https://github.com/aiaimimi0920/SpringBok/pull/40#issuecomment-5994980626)，不重做常驻循环或覆盖原固定包。
+- 本轮范围：可信 checkout 为已完成 v2 私有安装生成固定 systemd 用户服务 unit；绝对路径/权限/非覆盖校验，显式 start/stop/enable/disable 使用系统管理器本身；默认 `Restart=no`，退出码 2、unknown、SIGKILL 残留锁均不自动重启或清理。复用原 daemon，不引入第二套执行/凭据或安装包格式。
+- 验收：原安装/source/state 不改写、生成幂等/拒绝注入与冲突、真实 systemd parser；一次性 GitHub 托管 Linux runner 的独立合成测试账户上验证实际 user manager 启停、身份调用、安全退出、失败不重启、enable/disable 与 manager 重建启动。测试账户/linger 仅限一次性 CI，不在用户主机运行。
+- 本地普通 Docker 的 systemd 255.4 用户 manager 因只读 cgroup 报 `Failed to create /init.scope control group: Read-only file system`；只将其用于静态 parser/单元验证，不增加 privileged、host PID 或可写宿主 cgroup。不得把 parser 通过当实际 manager 启动。
+- 不做：真实主机账号/linger/服务安装、自启动开通、Cloudflare/服务器部署、业务 executor、心跳/指标、自动重启/清锁、Node 或 systemd 自动下载、升级/凭据轮换。宿主开机时启动用户 manager 依赖获准的 linger；CI manager 重建不冒称用户服务器重启验收。完成本项后立即 scoped commit/push、精确 head 审阅与正常合并/main 复核。
+- 本轮接续原额度错误中断的领取记录，未重做 N07-S01。实现见 [用户服务](node-user-service.md)：可信 checkout 为原完整 v2 安装生成固定私有 unit，严格路径/权限与非覆盖发布；管理员显式使用原生 systemctl 管理，不写原安装/source/state 或新秘密，不改 20 文件包格式。
+- Linux Node.js 24.18.1 聚焦 14/14 通过，含 systemd 255.4 parser、注入/冲突/权限/symlink/FIFO 拒绝和原安装/锁证据保留。首轮 parser 无 XDG_RUNTIME_DIR 报 `Failed to lookup RuntimeDirectory path: No such device or address`；补测试专用私有运行目录后通过，不伪造实际 manager。早期 Docker tmpfs 缺挂载点、PowerShell credential 管道失败仅修临时包装，保留错误日志，不修改门禁。
+- 新增 GitHub-hosted 专项 job，在一次性合成账户验证真实 manager 启停、失败不重启、启用/禁用后的重建启动关联、unknown 和 SIGKILL 残留锁；test-only drop-in 合成传输不进入生产 unit/包。独立只读审查指出 execute fixture URL 错配，已修为真实 channel endpoint；Node/父路径可信前置已明确，不宣称完整路径防替换。实际 CI、精确 head/main 和 artifact 结果后续按回执核实，尚未宣称通过。
+- Linux 全量契约 206/206，失败/跳过均为 0；shell/新增源码语法通过。12 个本项文本 UTF-8 无 BOM、LF 快照哈希一致，80 个本地链接与 86 项无环依赖检查通过。actionlint/Gitleaks、精确提交与远程 CI 按本项回执记录；未改变 lockfile、云 API/schema、运行依赖或历史 evidence。当前为源码/本地验收完成，待提交推送和实际 manager CI，不提前关闭 N07/N07-S02。
+- 功能提交 `c2e5cea31dbb75b021a05310d0b1057814212197` 已推送并核对远程 SHA，PR [#41](https://github.com/aiaimimi0920/SpringBok/pull/41)。固定 Git 包 20 文件/79,703 字节，manifest SHA-256 `043d7f16b34406ea37f7cdabc51b0c8da1a77940157e2709911124e6b835d6fd`；actionlint 1.7.12/Gitleaks 8.30.1 按固定 SHA 下载校验，源码扫描及完整 79 commits 无检出。历史扫描第一次直接读 Windows CRLF 的 shell 报 `set: pipefail: invalid option name`；只改临时挂载使用 LF 快照，保留 Q01，不改源码/断言来假绿。
+- 首轮精确 head 的 Worker/浏览器/安全检查成功，但契约 204/206、真实 manager job 失败：setup-node 制品不满足新增 Node owner/写权限规则；合成账户从 runner 私有 checkout 加载入口报 `MODULE_NOT_FOUND`。追加 CI 内修复：保持产品检查，将同一可信 Node 按字节核对复制到私有 owned 目录，并从同一 Git HEAD 导出合成账户源码；不 chmod runner 检出、不放宽服务或身份安全策略。最新 CI 结果仍待核实，不绕过失败合并。
+- 第二轮契约通过，日志确认原 Node `owner=1001 mode=777`；manager 已启动并接受 API，但首次按名 `reset-failed` 拒绝尚未加载的 unit。仅测试 helper 改为此一次性专属账户的 manager reset-failed，再显式 start；生产生成器仍不调用 systemctl，不清任何 ledger/锁。保留两轮原日志，继续验证完整生命周期，不将 manager API 可用当本项验收通过。
+- 第三轮已越过双角色启停/drain/拒绝和 execute unknown 保留断言，但后续 prepare-enable 还有一处按名 reset-failed；此前全局 reset 后空闲 observe unit 被 manager 回收，导致同类拒绝。补齐这一剩余测试调用，不改变生产逻辑或断言；自启动重建/SIGKILL 场景仍须完整 CI 实际通过后才关闭任务。
+- 第四轮实际 `exercise` 完整通过，但系统级 `user@1002.service` 重建报 timeout，现有日志不足以确定原因。仅补失败时精确 synthetic manager 的 status/journal 与原退出码 artifact，保留 fail-closed；不改生产代码、不扩大 cgroup 权限、不放宽 manager 超时或取消重建验收。下一步按新日志诊断此 CI 平台边界。
+- 精确诊断日志显示新 manager 仍访问 `/home/runner/.config`，启动停在 `dbus.socket` 与 `gpg-agent-ssh.socket` 的 systemctl 控制进程，90 秒后被系统启动超时终止；未进入 SpringBok 自启动 unit。对新 synthetic uid 的 CI 专属 `user@<uid>` drop-in 明确自身 HOME/XDG，并移除启动期 D-Bus/SSH 会话地址，避免 socket 的 ExecStartPost 经自身未就绪 bus 形成等待；不改宿主通用模板/生产 unit、不放宽超时。新环境与完整重建结果仍须 fresh CI 核实。
+- head `789b6a4b31eb757bc8db328efbd5798e37306d46` 的 6 workflow/14 check 全部成功。实际 systemd job `37324383078` 完整通过：双角色真实 daemon/drain/401/unknown、enable 后 manager 重建启动、disable 后重建不启动、SIGKILL 保留锁及显式重启零网络拒绝。环境隔离后的两次重建通过，支持有界修复有效；没有逐个变量对照，不将具体 bus 地址自等待当唯一确诊原因，也不宣称所有 Linux 发行版通过。
+- 已下载专项 artifact `11351760680` 并匹配 GitHub SHA-256：两个角色 journal、原退出码 0 和真实 manager 成功记录有效，无 Bearer/token 材料。日志、失败 ZIP、源码匹配和工具记录均保留于 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-service-20261005/`。独立精确 head/增量只读审查完成，主 AI 负责最终提交审阅；源码与限定 CI 验收完成且推送，本次仅同步进度，不实施 N08。
+- 下一最小步骤是本项最终文档 head 检查、正常合并与 main 复核；最终 SHA/检查/固定 main 包写 PR 回执，不循环 amend。完成交付后的下一独立开发项为 N08 心跳/离线判定；真实 Cloudflare/Access、多台用户服务器、N06-S02 业务执行装配及业务部署保持未完成，不以 N07 完成代表整个开发计划完成。
+
+### 7.13 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

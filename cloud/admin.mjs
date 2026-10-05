@@ -1,6 +1,7 @@
 import { accessSession, signSession, sameProof } from './access.mjs';
 import { exact, NODE, submission } from './protocol.mjs';
 import { adminEnrollmentRequest, enrollmentEnabled } from './enrollment-api.mjs';
+import { adminNodeProbeRequest } from './node-channel-api.mjs';
 const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" };
 const reply = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { ...headers, 'content-type': 'application/json' } });
 export async function adminRequest(request, env, readBody) {
@@ -12,6 +13,7 @@ export async function adminRequest(request, env, readBody) {
     }
     const catalogEnabled = env.ENABLE_CATALOG === 'yes' && !!env.REGISTRY;
     if (url.pathname.startsWith('/api/admin/enrollments')) return adminEnrollmentRequest(request, env, session, readBody);
+    if (url.pathname.startsWith('/api/admin/nodes/')) return adminNodeProbeRequest(request, env, session, readBody);
     if (['/api/admin/servers', '/api/admin/services'].includes(url.pathname)) {
       if (!catalogEnabled) return reply({ error: 'server catalog disabled' }, 503);
       if (!['GET', 'POST'].includes(request.method)) return reply({ error: 'unknown catalog route' }, 404);

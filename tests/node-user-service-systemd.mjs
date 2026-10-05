@@ -31,7 +31,9 @@ async function stopped(f, failed = false) {
   const s = await state(f); assert.equal(s.NRestarts, '0'); assert.equal(s.MainPID, '0');
   assert.equal(s.ExecMainStatus, failed ? '2' : '0');
 }
-async function start(f) { await systemctl('reset-failed', f.name); await systemctl('start', f.name); }
+// 新 unit 尚未加载时按名称 reset-failed 会被真实 manager 拒绝。
+// 仅此一次性专属测试账户重置 manager 的失败计数；不处理 ledger/锁。
+async function start(f) { await systemctl('reset-failed'); await systemctl('start', f.name); }
 function fixture(role) {
   const f = packageFixture(), r = roleFixture(f.directory, role), installation = join(f.directory, 'installed');
   installNode({ packageDirectory: f.packageDirectory, expectedSha256: f.built.sha256, credentialFile: r.credentialFile, expectedOrigin: r.credential.origin, role, directory: installation });

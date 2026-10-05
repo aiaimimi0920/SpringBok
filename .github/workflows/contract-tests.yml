@@ -20,6 +20,14 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+      - name: Use an owned private copy of the trusted setup-node executable
+        run: |
+          node=$(readlink -f "$(command -v node)")
+          stat -c 'Node runtime owner=%u mode=%a path=%n' "$node"
+          mkdir -m 700 "$RUNNER_TEMP/springbok-node"
+          install -m 700 "$node" "$RUNNER_TEMP/springbok-node/node"
+          cmp "$node" "$RUNNER_TEMP/springbok-node/node"
+          echo "$RUNNER_TEMP/springbok-node" >> "$GITHUB_PATH"
       - run: node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
       - run: node scripts/lab.mjs
       - name: Read the immutable M6 source certificate

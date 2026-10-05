@@ -10,8 +10,16 @@ node=$(readlink -f "$node")
 sudo useradd --create-home --shell /bin/bash "$name"
 uid=$(id -u "$name")
 home=$(getent passwd "$name" | cut -d: -f6)
-sudo -u "$name" mkdir -p "$home/.config/systemd/user" "$home/springbok-tmp"
+sudo -u "$name" mkdir -p "$home/.config/systemd/user" "$home/springbok-tmp" "$home/checkout" "$home/runtime"
 sudo -u "$name" chmod 700 "$home/.config" "$home/.config/systemd" "$home/.config/systemd/user" "$home/springbok-tmp"
+# GitHub runner 的 home/cache 不保证其他 uid 可访问或符合产品运行时 owner 策略。
+# 在新账户内导出同一精确 Git HEAD；不放宽主检出或产品权限检查。
+git archive HEAD | sudo -u "$name" tar -x -C "$home/checkout"
+stat -c 'Node runtime owner=%u mode=%a path=%n' "$node"
+sudo chmod 700 "$home/runtime"
+sudo install -o "$name" -g "$name" -m 700 "$node" "$home/runtime/node"
+sudo cmp "$node" "$home/runtime/node"
+node="$home/runtime/node"
 cleanup() {
   sudo loginctl disable-linger "$name"
   sudo systemctl stop "user@$uid.service"
@@ -22,7 +30,7 @@ sudo systemctl start "user@$uid.service"
 run_phase() {
   sudo -u "$name" env HOME="$home" XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
     TMPDIR="$home/springbok-tmp" SPRINGBOK_DISPOSABLE_SYSTEMD_CI=1 PATH="$(dirname "$node"):/usr/bin:/bin" \
-    "$node" tests/node-user-service-systemd.mjs "$1"
+    "$node" "$home/checkout/tests/node-user-service-systemd.mjs" "$1"
 }
 run_phase exercise
 sudo systemctl restart "user@$uid.service"

@@ -431,6 +431,8 @@ git ls-remote origin refs/heads/<本子任务分支>
 - Linux Node.js 24.18.1 聚焦 14/14 通过，含 systemd 255.4 parser、注入/冲突/权限/symlink/FIFO 拒绝和原安装/锁证据保留。首轮 parser 无 XDG_RUNTIME_DIR 报 `Failed to lookup RuntimeDirectory path: No such device or address`；补测试专用私有运行目录后通过，不伪造实际 manager。早期 Docker tmpfs 缺挂载点、PowerShell credential 管道失败仅修临时包装，保留错误日志，不修改门禁。
 - 新增 GitHub-hosted 专项 job，在一次性合成账户验证真实 manager 启停、失败不重启、启用/禁用后的重建启动关联、unknown 和 SIGKILL 残留锁；test-only drop-in 合成传输不进入生产 unit/包。独立只读审查指出 execute fixture URL 错配，已修为真实 channel endpoint；Node/父路径可信前置已明确，不宣称完整路径防替换。实际 CI、精确 head/main 和 artifact 结果后续按回执核实，尚未宣称通过。
 - Linux 全量契约 206/206，失败/跳过均为 0；shell/新增源码语法通过。12 个本项文本 UTF-8 无 BOM、LF 快照哈希一致，80 个本地链接与 86 项无环依赖检查通过。actionlint/Gitleaks、精确提交与远程 CI 按本项回执记录；未改变 lockfile、云 API/schema、运行依赖或历史 evidence。当前为源码/本地验收完成，待提交推送和实际 manager CI，不提前关闭 N07/N07-S02。
+- 功能提交 `c2e5cea31dbb75b021a05310d0b1057814212197` 已推送并核对远程 SHA，PR [#41](https://github.com/aiaimimi0920/SpringBok/pull/41)。固定 Git 包 20 文件/79,703 字节，manifest SHA-256 `043d7f16b34406ea37f7cdabc51b0c8da1a77940157e2709911124e6b835d6fd`；actionlint 1.7.12/Gitleaks 8.30.1 按固定 SHA 下载校验，源码扫描及完整 79 commits 无检出。历史扫描第一次直接读 Windows CRLF 的 shell 报 `set: pipefail: invalid option name`；只改临时挂载使用 LF 快照，保留 Q01，不改源码/断言来假绿。
+- 首轮精确 head 的 Worker/浏览器/安全检查成功，但契约 204/206、真实 manager job 失败：setup-node 制品不满足新增 Node owner/写权限规则；合成账户从 runner 私有 checkout 加载入口报 `MODULE_NOT_FOUND`。追加 CI 内修复：保持产品检查，将同一可信 Node 按字节核对复制到私有 owned 目录，并从同一 Git HEAD 导出合成账户源码；不 chmod runner 检出、不放宽服务或身份安全策略。最新 CI 结果仍待核实，不绕过失败合并。
 
 ### 7.13 后续交接记录模板
 

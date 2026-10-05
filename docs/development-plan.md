@@ -113,7 +113,7 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N01-S01 | 独立节点邮箱与内部只读协议 | 已完成 | [实现与验收](node-mailbox.md)；负责人：主 AI；PR #35 已合并 | 版本化独立 DO、owner/node 不可变绑定、双节点只读 probe、一次交付/幂等/重启/未知阻断已验证；main 检查通过，公开任务通道保持不可用 | ARC-01/C04-S01 |
 | N01-S02 | 认证节点通道与出站桥接入 | 待开发 | 不复用旧 NODE_TOKEN，不接受公开自报上下文 | 将加入后权威凭据上下文接入新路由/桥；事务内认证与领取；双节点端到端身份隔离 | N01-S01/N02/N03 |
 | N02 | 服务器注册与一次性加入流程 | 已完成 | [实现与验收](node-enrollment.md)；负责人：主 AI；交付流程见第 7.7 节 | 保存后授权、一次性加入、过期/冲突拒绝和跨 DO 恢复已通过本地验收并提交推送；PR 合并检查另记回执，不代表真实服务器已接入 | N01-S01/C08 |
-| N03 | 每节点独立凭据 | 部分实现 | E05 仅一个 `NODE_TOKEN` | 每节点身份与服务端绑定，最小权限；某节点泄漏不能控制其他节点 | N02 |
+| N03 | 每节点独立凭据 | 已实现 | [实现与验收](node-credentials.md)；负责人：主 AI；交付进度见第 7.8 节 | joined 角色摘要、独立角色材料和本地 workerd 身份核对已验证；待提交/推送/PR；任务通道仍归 N01-S02 | N02 |
 | N04 | 节点凭据轮换 | 待开发 | 当前无轮换流程 | 有界切换窗口、旧凭据失效、在途任务不重复执行、全链路不回显秘密 | N03 |
 | N05 | 节点撤销接入 | 待开发 | 当前无撤销流程 | 撤销后不能领取新任务；保留历史/未知证据，不隐式卸载或删除业务数据 | N03/C09 |
 | N06 | 执行端可重复安装包/引导 | 部分实现 | E07 只有测试 Compose 与手工装配说明 | 干净 Linux 测试机按有限步骤安装、版本可核对、目录隔离；不覆盖现有服务 | ARC-01/N03 |
@@ -354,7 +354,22 @@ git ls-remote origin refs/heads/<本子任务分支>
 - PR [#36](https://github.com/aiaimimi0920/SpringBok/pull/36) 初始 head `62332bdd0336b4e877ed47fdcd10349369517324` 六 workflow 执行成功，但 CodeQL finding check 有 4 个新增告警。下载并校验完整 SARIF 后，修复浏览器测试路径 TOCTOU，并补独立 `expectedOrigin` 信任锚，拒绝篡改加入材料把 challenge 发往其他 HTTPS origin；比对在目录/秘密/journal/网络之前完成。新增零写入/零请求与 redirect 拒绝测试；这属于 N02 内修复，追加提交而非改写历史。具体审阅和剩余协议所需数据流见专题文档，不绕过保护或隐藏告警，不预报最新 CI 结果。
 - 追加修复验证：Windows 再次 8/8；Linux 加入聚焦 6/6、Chrome 加入场景再次通过；日志 `linux-enrollment-pinned-origin.log`、`linux-enrollment-browser-descriptor.log`。独立增量审阅确认固定 origin 缺口闭环；29 个本地链接/82 项依赖通过。首轮全量日志保留，最新 head 的完整 CI 和 advisory 明细另记 PR 回执，不把 scanner 运行成功当作零告警。
 
-### 7.8 后续交接记录模板
+### 7.8 N03 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `30da6a4a74917a85831cbd9a4995ee0d6d5db757`；分支 `feat/node-credentials-20261005`。前项 N02 PR [#36](https://github.com/aiaimimi0920/SpringBok/pull/36) 已正常合并；精确 head `fc6b908790b38758ef0077e0c69b0bd3ea52b1ae` 与 main 文件树 `4e03cd1cdc1586e2fab7a62477c6bf17b8500ab1` 一致。head 6 workflow/13 check、main 6 workflow/11 job 成功，契约 180/180、workerd 27/27，见 [最终回执](https://github.com/aiaimimi0920/SpringBok/pull/36#issuecomment-5991746502)。当前 main/远程一致、工作区干净，不重做加入任务。
+- 范围：`cloud/` 的角色契约、NodeMailbox 内权威摘要验证、默认关闭的仅本节点身份核对路由；Linux 从原 joined journal 导出独立 execute/observe 私有材料、单角色只读核对客户端/CLI，以及对应测试/文档。保留旧 NODE_TOKEN/TargetMailbox、加入回执、目录与 probe ledger；不引入新云 binding、schema 或依赖。
+- 方案：复用 N02 的两个 256-bit 随机秘密和服务端固定摘要，不再生成或替换秘密。角色文件只包含自身 token 和固定 owner/node/enrollment/origin；独立确认 expectedOrigin。身份核对在目标节点 DO 内以当前 joined 状态、角色与 token 摘要授权，URL ID 只是提示；不把 Worker 按调用者 ID 定位当认证。加入开关与角色核对开关独立，关闭加入不自动撤销已加入身份。
+- 验收：默认关闭；未加入、错 owner/node/role/token、加入 challenge/旧共享 token、额外字段及不安全请求拒绝；双节点/双 owner/双角色隔离；正确凭据在节点/进程重启后可核对，结果不回显秘密/摘要；只读核对不改 journal/云状态或领取任务。导出重启/重复幂等，不覆盖冲突或损坏文件，权限/symlink/不可信 origin 失败关闭。
+- 不做：任务领取/回报、用户批准、部署、指标/心跳、轮换/撤销、安装/常驻、真实 Cloudflare/服务器或账号配置。仅身份核对 capability 为 identity:self；N06 再验证不同进程/OS 账户及文件权限分离，不能把独立文件当作同 uid 下的强隔离。joined 是节点权限真相，目录收尾不确定不撤销它；active 仍不是执行就绪。
+- 先实现可验收角色材料→真实 workerd 身份核对闭环，匹配验证后立即 scoped commit/push、精确 head 审阅和正常合并；整体目标继续 active，不缩小为本项。
+- 实现见 [独立角色凭据](node-credentials.md)：原 joined journal 严格导出、hardlink 不覆盖发布、半完成精确恢复、单角色私有文件客户端；节点当前 joined/role 摘要事务内授权。独立 credentials 开关，不初始化或迁移身份库；只返回 identity:self 和 executionReady=false。
+- 实际验证：Windows Node.js 22.22.2 聚焦 7/7；Linux Node.js 24.18.1 全量契约 183/183、workerd/SQLite 34/34、新凭据聚焦 7/7，失败/跳过均为 0；管理页、服务器目录、服务目录和加入四条 Chrome 回归通过。直接覆盖 schema 1 不迁移、云 joined 但丢 ack 无 receipt 拒绝导出，以及原 journal 精确恢复后才可导出。
+- 第一轮新 workerd 5/7 通过，2 失败来自测试 RPC 寻址携带多余 role/token；修正测试辅助函数为严格 owner/node，不放宽生产授权，原失败日志保留。独立只读 dirty 实现审查未发现明确高/中严重度阻断；文档明确未知 state 的 CLI 可能初始化空 journal、可信父路径/同 uid 边界，不假称导出失败一律零写入或已完成 OS 强隔离。精确提交审阅另记交付回执。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-credentials-20261005/`；`snapshot/.tmp/linux-credentials-final.log`、`linux-unit-final.log`、`linux-cloud-final.log`、`linux-browser-final.log`。相同 lockfile 依赖只读复用、POSIX 状态用 tmpfs；actionlint 1.7.12/Gitleaks 8.30.1 本轮重新按仓库归档 SHA-256 下载验证，全部 workflow actionlint 语法通过（未额外 ShellCheck）。精确提交 Gitleaks/PR/main 检查不提前宣称成功。
+- 18 个本项变更文本 UTF-8 无 BOM、LF 源码快照哈希一致；根规则/README/总计划/新专题共 56 个本地链接、82 个唯一任务及无环依赖检查通过。未修改工作区换行配置、lockfile 或历史 evidence。
+- 当前源码/本地验收完成，交付待提交/推送/PR；完成本项后下一独立功能为 N01-S02。N04/N05/N06、真实 Cloudflare/Access、多机网络/账号安装与业务部署继续未完成，不把身份成功当在线/执行就绪或整体计划完成。
+
+### 7.9 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

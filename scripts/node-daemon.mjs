@@ -8,6 +8,7 @@ import { openNodeChannelBridge } from '../src/node-channel/bridge.mjs';
 import { lockDaemon } from '../src/node-daemon/lock.mjs';
 import { runNodeLoop } from '../src/node-daemon/loop.mjs';
 import { openHeartbeatClient } from '../src/node-heartbeat/client.mjs';
+import { openTelemetryClient } from '../src/node-telemetry/client.mjs';
 
 const emit = event => console.log(JSON.stringify(event));
 const stop = new AbortController(), requestStop = () => {
@@ -27,7 +28,8 @@ try {
   else { const client = openCredentialClient(options); step = async () => (await client.inspect()).status; }
   emit({ event: 'started', role, executionReady: false });
   const heartbeat = openHeartbeatClient(options);
-  const result = await runNodeLoop({ step, heartbeat: () => heartbeat.beat(stop.signal), signal: stop.signal, onEvent: emit });
+  const telemetry = role === 'observe' ? openTelemetryClient(options) : null;
+  const result = await runNodeLoop({ step, heartbeat: () => heartbeat.beat(stop.signal), telemetry: telemetry ? () => telemetry.upload(stop.signal) : undefined, signal: stop.signal, onEvent: emit });
   emit({ event: result, executionReady: false });
   if (result === 'blocked') process.exitCode = 2;
 } catch {

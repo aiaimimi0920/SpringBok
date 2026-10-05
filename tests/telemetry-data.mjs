@@ -1,0 +1,1 @@
+export const cpu = (usagePercent = 0) => ({ schema: 'springbok-cpu/v1', metric: 'cpu', scope: 'linux-proc-stat', unit: 'percent', status: 'available', reason: null, sampledAt: new Date(0).toISOString(), logicalCpuCount: 1, intervalMs: 30000, usagePercent });

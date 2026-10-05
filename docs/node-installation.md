@@ -3,7 +3,7 @@
 本项接续 [执行架构](execution-architecture.md)、[角色凭据](node-credentials.md) 和 [认证控制通道](node-channel.md)。总进度见 [开发计划](development-plan.md)。这是仅依赖预装 Node.js 22+ 的 Linux 非 root 控制客户端，不是完整业务执行环境或自动远程安装器。
 
 > N07-S01 更新：下文 17 文件、单次运行和验收数字保留为 N06-S01 的历史事实。
-> N07 的 v2 包为 20 个固定源文件；N08 当前新包显式为 `springbok-control-node/v3`，22 个源文件，增加独立角色心跳，见 [协议与兼容](node-heartbeat.md)。
+> N07 的 v2 包为 20 个固定源文件；N08 的 v3 包为 22 个源文件，增加独立角色心跳，见 [协议与兼容](node-heartbeat.md)。M06 当前新包显式为 `springbok-control-node/v4` / 25 文件，增加 observe CPU 上报，见 [指标与兼容](node-telemetry.md)。
 > 旧 v1 安装继续使用自身旧代码；新安装器拒绝旧包和覆盖旧安装，不迁移或清空 state。
 > 当前入口、兼容及验收边界见 [常驻客户端](node-daemon.md)，后续系统服务见 [用户服务](node-user-service.md)。
 

@@ -4,6 +4,7 @@ import { preparedEnrollment, nodeEnrollment, joinInput, joinChallengeDigest, req
 import { nodeRole, credentialDigest, identityResult, requireCredential } from './credential-contract.mjs';
 import { channelInput, channelResult } from './node-channel-contract.mjs';
 import { heartbeatInput, heartbeatState, heartbeatTransition, heartbeatResult, heartbeatSnapshot, requireHeartbeat } from './heartbeat-contract.mjs';
+import { telemetryAuthorization, requireTelemetry } from './telemetry-contract.mjs';
 
 // 保留旧内部 probe；新通道只在当前 joined 角色认证的同一事务内领取和回报。
 export class NodeMailbox extends DurableObject {
@@ -123,6 +124,20 @@ export class NodeMailbox extends DurableObject {
   }
   credentialIdentity(value, role, token) {
     return this.#credentialRun(value, role, token, (_sql, record, verified) => identityResult(verified, record.enrollmentId, role));
+  }
+  credentialTelemetry(value, role, token, enrollmentId) {
+    requireTelemetry(this.env.ENABLE_NODE_TELEMETRY === 'yes' && role === 'observe');
+    return this.#credentialRun(value, role, token, (_sql, record, verified) => {
+      requireTelemetry(this.env.ENABLE_NODE_TELEMETRY === 'yes' && record.enrollmentId === enrollmentId);
+      return telemetryAuthorization(verified, record.enrollmentId);
+    });
+  }
+  adminTelemetryContext(value) {
+    requireTelemetry(this.env.ENABLE_NODE_CREDENTIALS === 'yes');
+    return this.#enrollmentRun(value, false, (_sql, record, verified) => {
+      requireTelemetry(this.env.ENABLE_NODE_CREDENTIALS === 'yes');
+      return record?.status === 'joined' ? telemetryAuthorization(verified, record.enrollmentId) : null;
+    }, 'ENABLE_NODE_TELEMETRY');
   }
   #heartbeats() {
     const rows = this.ctx.storage.sql.exec('SELECT * FROM node_heartbeat').toArray();

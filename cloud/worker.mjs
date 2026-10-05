@@ -5,8 +5,10 @@ import { nodeEnrollmentRequest } from './enrollment-api.mjs';
 import { nodeCredentialRequest } from './credential-api.mjs';
 import { nodeChannelRequest } from './node-channel-api.mjs';
 import { nodeHeartbeatRequest } from './heartbeat-api.mjs';
+import { nodeTelemetryRequest } from './telemetry-api.mjs';
 export { OwnerCatalog } from './catalog-store.mjs';
 export { NodeMailbox } from './node-mailbox.mjs';
+export { NodeTelemetry } from './telemetry-store.mjs';
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 const validToken = token => typeof token === 'string' && /^[a-f0-9]{64}$/.test(token);
 async function equal(a, b) {
@@ -14,16 +16,16 @@ async function equal(a, b) {
   const bytes = new TextEncoder(), [x, y] = await Promise.all([crypto.subtle.digest('SHA-256', bytes.encode(a)), crypto.subtle.digest('SHA-256', bytes.encode(b))]);
   return crypto.subtle.timingSafeEqual(x, y);
 }
-async function body(request) {
+async function body(request, maximum = 2048) {
   if (request.headers.get('content-type') !== 'application/json') throw new Error('invalid body');
   const declared = request.headers.get('content-length');
-  if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > 2048)) throw new Error('large body');
+  if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maximum)) throw new Error('large body');
   if (!request.body) throw new Error('missing body');
   const reader = request.body.getReader(); let size = 0; const chunks = [];
   let timedOut = false;
   const timeout = setTimeout(() => { timedOut = true; void reader.cancel().catch(() => {}); }, 5000);
   try {
-    for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > 2048) throw new Error('large body'); chunks.push(value); }
+    for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > maximum) throw new Error('large body'); chunks.push(value); }
     if (timedOut) throw new Error('body deadline exceeded');
     const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
@@ -35,6 +37,7 @@ export default {
     if (new URL(request.url).pathname.startsWith('/node/v2/identity/')) return nodeCredentialRequest(request, env, body);
     if (new URL(request.url).pathname.startsWith('/node/v2/channel/')) return nodeChannelRequest(request, env, body);
     if (new URL(request.url).pathname.startsWith('/node/v2/heartbeat/')) return nodeHeartbeatRequest(request, env, body);
+    if (new URL(request.url).pathname.startsWith('/node/v2/telemetry/')) return nodeTelemetryRequest(request, env, request => body(request, 8192));
     const admin = env.ENABLE_ADMIN === 'yes';
     if (admin && !new URL(request.url).pathname.startsWith('/node/')) return adminRequest(request, env, body);
     if (env.ENABLE_PROTOCOL_TEST !== 'yes' || !validToken(env.NODE_TOKEN) || (!admin && (!validToken(env.CONTROL_TOKEN) || env.CONTROL_TOKEN === env.NODE_TOKEN))) return json({ error: 'protocol test disabled' }, 503);

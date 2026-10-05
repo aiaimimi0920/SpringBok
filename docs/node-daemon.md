@@ -4,7 +4,7 @@
 
 ## 固定版本与运行入口
 
-N07-S01 当时的包是 `springbok-control-node/v2` / 20 个源文件；N08 当前包为 v3 / 22 个源文件并增加独立角色心跳，见 [心跳与兼容](node-heartbeat.md)。协议仍是 node v2，安装记录仍是 `springbok-role-install/v1`；N07-S01 本身没有云端 schema 迁移。按可信引导流程安装后，以该安装的角色 uid 运行：
+N07-S01 当时的包是 `springbok-control-node/v2` / 20 个源文件；N08 的 v3 / 22 文件增加独立角色心跳，见 [心跳与兼容](node-heartbeat.md)。M06 当前新包为 v4 / 25 文件，observe 在同一只读角色进程中增加 CPU 采样/独立上报，详见 [指标协议、错误策略与兼容](node-telemetry.md)。协议仍是 node v2，安装记录仍是 `springbok-role-install/v1`；N07-S01 本身没有云端 schema 迁移。按可信引导流程安装后，以该安装的角色 uid 运行：
 
 ```text
 node <installation>/release/scripts/node-daemon.mjs --installation <installation>
@@ -20,7 +20,7 @@ node <installation>/release/scripts/node-daemon.mjs --installation <installation
 
 只在 fetch 或响应流读取边界把明确的网络错误（连接重置/拒绝、DNS 暂时不可用、网络不可达、已识别的 socket/timeout）转为脱敏 `RetryableNodeError`。HTTP 429、500、502、503、504 可重试。连续失败基础间隔为 30、60、120、240、300 秒，叠加 0–20% 正向抖动后仍不超过 300 秒；成功重置计数。没有可绕过最小间隔的 CLI 参数。
 
-401/403/409 等拒绝、redirect、TLS 校验错误、未识别异常、响应超限/非法 JSON、身份或协议不匹配及本地 journal 失败均停止，不能因 catch 过宽被当作断网无限重试。每次真实 HTTP 请求仍有原 5 秒超时、固定 HTTPS origin、`redirect: 'error'` 和 4096 字节响应上限。
+身份/任务/心跳的 401/403/409 等拒绝、redirect、TLS 校验错误、未识别异常、响应超限/非法 JSON、身份或协议不匹配及本地 journal 失败均停止，不能因 catch 过宽被当作断网无限重试。M06 指标上传单独处理：非暂时错误仅禁用指标并输出 `telemetry: unconfirmed`，身份/心跳保持原规则；暂时故障不改变 step 退避。每次真实 HTTP 请求仍有原 5 秒超时、固定 HTTPS origin、`redirect: 'error'` 和 4096 字节响应上限。
 
 收到 SIGINT/SIGTERM 后立即中断等待，不开始下一轮 step；**已经在途的完整 step 继续收尾**，可能包含该 probe 的 result/report/ack，不强制取消后留下伪成功。若 report 已提交但 ack 丢失，持久 receipt 仍由原 bridge 重送同一内容，不重做 probe。停止期间遇到暂时错误则保留未确认 receipt 并退出，不再开始重试。
 

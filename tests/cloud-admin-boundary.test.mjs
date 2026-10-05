@@ -9,9 +9,10 @@ test('private assets always enter the Worker and management defaults reject acce
   assert.equal(config.vars.ENABLE_NODE_ENROLLMENT, 'no');
   assert.equal(config.vars.ENABLE_NODE_CREDENTIALS, 'no');
   assert.equal(config.vars.ENABLE_NODE_CHANNEL, 'no');
-  assert.deepEqual(config.durable_objects.bindings, [{ name: 'TARGET', class_name: 'TargetMailbox' }, { name: 'REGISTRY', class_name: 'OwnerCatalog' }, { name: 'NODES', class_name: 'NodeMailbox' }]);
-  assert.deepEqual(config.migrations, [{ tag: 'v1', new_sqlite_classes: ['TargetMailbox'] }, { tag: 'v2-catalog', new_sqlite_classes: ['OwnerCatalog'] }, { tag: 'v3-node-mailbox', new_sqlite_classes: ['NodeMailbox'] }]);
-  for (const file of ['index.html', 'style.css', 'app.js', 'catalog.js', 'enrollment.js']) {
+  assert.equal(config.vars.ENABLE_NODE_TELEMETRY, 'no');
+  assert.deepEqual(config.durable_objects.bindings, [{ name: 'TARGET', class_name: 'TargetMailbox' }, { name: 'REGISTRY', class_name: 'OwnerCatalog' }, { name: 'NODES', class_name: 'NodeMailbox' }, { name: 'TELEMETRY', class_name: 'NodeTelemetry' }]);
+  assert.deepEqual(config.migrations, [{ tag: 'v1', new_sqlite_classes: ['TargetMailbox'] }, { tag: 'v2-catalog', new_sqlite_classes: ['OwnerCatalog'] }, { tag: 'v3-node-mailbox', new_sqlite_classes: ['NodeMailbox'] }, { tag: 'v4-node-telemetry', new_sqlite_classes: ['NodeTelemetry'] }]);
+  for (const file of ['index.html', 'style.css', 'app.js', 'catalog.js', 'enrollment.js', 'telemetry.js']) {
     const source = readFileSync(new URL(`../public/cloud-admin/${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /CONTROL_TOKEN|NODE_TOKEN|cf-access-jwt-assertion|localStorage|sessionStorage|innerHTML/);
   }

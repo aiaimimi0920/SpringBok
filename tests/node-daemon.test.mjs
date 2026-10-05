@@ -8,6 +8,7 @@ import { identityResult } from '../cloud/credential-contract.mjs';
 import { packageFixture, roleFixture } from './node-package-fixture.mjs';
 import { startDaemon, responseJson } from './node-daemon-fixture.mjs';
 import { heartbeatResponder } from './node-heartbeat-fixture.mjs';
+import { telemetryResponder } from './node-telemetry-fixture.mjs';
 
 function setup(role) {
   const f = packageFixture(), r = roleFixture(f.directory, role), directory = join(f.directory, 'installed');
@@ -22,8 +23,10 @@ test('each installed role holds one daemon instance, stops during wait and can c
     const f = setup(role), children = [];
     try {
       const beat = heartbeatResponder(f.credential);
-      const first = startDaemon(f.installed, r => beat(r) ?? responseJson(f.response)); children.push(first);
+      const telemetry = telemetryResponder(f.credential);
+      const first = startDaemon(f.installed, r => beat(r) ?? telemetry(r) ?? responseJson(f.response)); children.push(first);
       await first.until(s => s.events.some(e => e.event === 'heartbeat' && e.status === 'recorded'));
+      if (role === 'observe') await first.until(s => s.events.some(e => e.event === 'telemetry' && e.status === 'recorded'));
       assert.ok(first.events.some(e => e.status === (role === 'execute' ? 'idle' : 'authenticated')));
       const duplicate = startDaemon(f.installed, () => { throw new Error('duplicate must not request'); }); children.push(duplicate);
       await duplicate.until(s => s.closed); assert.equal(duplicate.code, 2); assert.equal(duplicate.requests.length, 0);
@@ -32,9 +35,9 @@ test('each installed role holds one daemon instance, stops during wait and can c
         await probe.until(s => s.closed); assert.equal(probe.code, 1); assert.equal(probe.requests.length, 0);
       }
       assert.equal(fs.statSync(join(f.installed, 'state/daemon.lock')).mode & 0o077, 0);
-      await first.stop('SIGTERM'); assert.equal(first.requests.length, 4); assert.equal(fs.existsSync(join(f.installed, 'state/daemon.lock')), false);
-      assert.deepEqual(first.requests.map(r => new URL(r.url).pathname.split('/').at(-1)).slice(-3), ['read', 'start', 'sample']);
-      const second = startDaemon(f.installed, r => beat(r) ?? responseJson(f.response)); children.push(second);
+      await first.stop('SIGTERM'); assert.equal(first.requests.length, role === 'observe' ? 7 : 4); assert.equal(fs.existsSync(join(f.installed, 'state/daemon.lock')), false);
+      assert.deepEqual(first.requests.filter(r => r.url.includes('/heartbeat/')).map(r => new URL(r.url).pathname.split('/').at(-1)), ['read', 'start', 'sample']);
+      const second = startDaemon(f.installed, r => beat(r) ?? telemetry(r) ?? responseJson(f.response)); children.push(second);
       await second.until(s => s.events.some(e => e.event === 'status')); await second.stop('SIGINT');
       assert.equal(role === 'observe' && fs.existsSync(join(f.installed, 'state/ledger.json')), false);
       for (const c of children) assert.equal((c.stdout + c.stderr).includes(f.credential.token), false);
@@ -66,7 +69,7 @@ test('process death preserves locks and a retryable transport failure remains st
     await second.until(s => s.closed); assert.equal(second.code, 2); assert.equal(second.requests.length, 0); assert.deepEqual(fs.readFileSync(file), bytes);
   } finally { for (const c of children) await c.dispose(); fs.rmSync(f.directory, { recursive: true, force: true }); }
   const g = setup('observe'); let c;
-  try { c = startDaemon(g.installed, () => responseJson({}, 503)); await c.until(s => s.events.some(e => e.event === 'heartbeat' && e.status === 'unavailable')); await c.stop(); assert.equal(c.requests.length, 2); }
+  try { c = startDaemon(g.installed, () => responseJson({}, 503)); await c.until(s => s.events.some(e => e.event === 'telemetry' && e.status === 'unavailable')); await c.stop(); assert.equal(c.requests.length, 3); }
   finally { await c?.dispose(); fs.rmSync(g.directory, { recursive: true, force: true }); }
 });
 

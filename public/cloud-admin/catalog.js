@@ -1,4 +1,5 @@
 import { clearEnrollment, configureEnrollment, enrollmentAction } from './enrollment.js';
+import { clearTelemetry, telemetryView } from './telemetry.js';
 const $ = id => document.getElementById(id);
 const uncertain = '目录未确认：可能身份已过期、记录已变化、达到容量上限或网络中断。请刷新目录核对，不要重复创建。';
 let catalog, csrf, catalogSession, generation = 0, controller, busy = false;
@@ -11,6 +12,7 @@ function clearHeartbeats() {
 export function clearCatalog() {
   clearEnrollment();
   clearHeartbeats();
+  clearTelemetry();
   generation++; controller?.abort(); controller = null; catalog = null; csrf = null; catalogSession = null; busy = false;
   $('catalog').hidden = true; $('servers').replaceChildren(); $('server-name').value = ''; $('server-add').disabled = true;
   $('services').replaceChildren(); $('service-server').replaceChildren(); $('service-name').value = ''; $('service-add').disabled = true;
@@ -71,6 +73,7 @@ async function readCatalog(signal) {
 }
 function render() {
   clearHeartbeats();
+  clearTelemetry();
   $('servers').replaceChildren(); $('server-add').disabled = busy || !catalog; $('server-name').disabled = busy || !catalog; $('catalog-refresh').disabled = busy;
   for (const server of catalog?.servers ?? []) {
     const item = document.createElement('li'); item.dataset.serverId = server.id;
@@ -78,6 +81,7 @@ function render() {
     const labels = { draft: '尚未接入服务器', enrolling: '加入中或待核对（不代表在线）', active: '已完成加入登记（不代表在线或部署就绪）', archived: '已归档（没有卸载或删除数据）' };
     const info = document.createElement('p'); info.textContent = `${server.id} · ${labels[server.state] ?? '未知状态，禁止操作'}`; item.append(info);
     heartbeatView(server, item);
+    telemetryView(server, item, catalogSession);
     if (server.state === 'draft') {
       const actions = document.createElement('div'); actions.className = 'actions server-actions';
       const name = document.createElement('input'); name.value = server.name; name.maxLength = 128; name.setAttribute('aria-label', `服务器名称 ${server.id}`); name.disabled = busy;

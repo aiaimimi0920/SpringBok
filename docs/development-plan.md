@@ -161,7 +161,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | ID | 独立功能/交付 | 状态 | 现有证据 / 责任入口 | 验收条件或下一缺口 | 依赖 |
 | --- | --- | --- | --- | --- | --- |
 | M01 | CPU 使用率采集 | 已完成 | [采集与验收](cpu-collection.md)；负责人：主 AI；第 7.14 节 | 独立普通用户 CLI、30 秒最小间隔、BigInt 差分与未知/失败、真实 top 空闲/有界负载对照已验收；本地/CI 与提交交付按本项回执，不代表已安装监控或用户宿主验收 | N07 |
-| M02 | 内存用量采集 | 待开发 | 当前无主机内存采集器 | 总量/可用/已用口径明确；容器限额与宿主用量不混淆；与主机对照 | N07 |
+| M02 | 内存用量采集与产品接入 | 进行中 | 拆分见 M02-S01/M02-S02；负责人：主 AI | 先验收可独立运行的采集器，再完成版本化上报和只读展示；两项未全交付不关闭父项，容器限额与宿主口径不混淆 | N07 |
+| M02-S01 | 普通用户只读内存采集器与原生对照 | 已完成 | [采集与验收](memory-collection.md)；第 7.16 节；负责人：主 AI | 限定源码与本地验收闭环；提交/PR/main 最终交付按本项回执，真实宿主和 M02-S02 上报/展示仍开放 | N07 |
+| M02-S02 | 内存指标版本化上报与只读小详情 | 待开发 | 复用 M06；必须先审阅混合版本兼容设计 | 新 observe 包采集→鉴权上报→独立 latest→只读小详情；旧 CPU 客户端/快照/安装保留，未上报不显示 0；不冒充 M07 完整总览 | M02-S01/M06 |
 | M03 | 磁盘容量采集 | 待开发 | 当前无磁盘采集器 | 明确挂载点、总量/可用/使用率，过滤伪文件系统；不能为测量写满或清理磁盘 | N07 |
 | M04 | 网络吞吐采集 | 待开发 | 当前无网络采集器 | 网卡累计计数差分、单位、重启/计数回绕处理；不抓取业务内容 | N07 |
 | M05 | 主机基础信息与运行时间 | 待开发 | N09 预检查可复用 | OS/架构/内核/运行时间/版本与时间戳；仅采集必要元数据，不上传完整环境变量 | N09 |
@@ -485,7 +487,22 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 本地管理页完整浏览器入口六组 PASS；完整 CI 的另三个页面及实际 user-manager 不在本地复跑，远程结果待本项精确 head/main 核实。34 个本轮文本 UTF-8 无 BOM/LF 快照一致，90 个相对链接和 86 项无环任务依赖通过。固定 actionlint 1.7.12/Gitleaks 8.30.1 归档重核仓库 SHA-256 后复用，workflow 语法及源码扫描通过，无 secret 检出；本地未额外运行 ShellCheck/Pyflakes。默认开关仍 no，旧三类迁移/任务数据/包保留，没有真实云迁移或安装。
 - 本项限定源码和本地验收已完成；当前 Git 交付按下述步骤推进，最终精确 SHA、CI、固定版本包与合并结果写 PR 回执，不预报未执行检查，不为了自嵌套 SHA 反复 amend。交付后下一独立项为 M02 内存用量采集；不重复 M01/N08 或启动未经授权的真实部署，整体目标保持 active。
 
-### 7.16 后续交接记录模板
+### 7.16 M02-S01 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `aca3397b7a2554b2127dba0cfadce7fc1f08f1d1`；分支 `feat/memory-collection-20261005`。领取前本地/远程 main 一致、工作区干净；前一目标回合完成 M06 的 main 验证与固定包，不是无进展等待。
+- M06 PR [#44](https://github.com/aiaimimi0920/SpringBok/pull/44) 已正常合并，最终 [回执](https://github.com/aiaimimi0920/SpringBok/pull/44#issuecomment-6000334401) 已发布读回：6 workflow/12 job/12 check 成功，契约 225/225、workerd 56/56、Chrome 9 组 PASS；精确 main v4 包 25 文件、manifest SHA-256 `007441943c35a63eaaa785b1240414c119d76a4f9583d116be407935bcce6e08`。不重做 M01/N08/M06，不将此包宣称含内存采集。
+- M02 拆为采集 M02-S01 与产品接入 M02-S02，以保留严格 CPU 协议/已发布包和未来混合版本升级边界；父任务不因独立 CLI 通过而提前完成。本次只领取 M02-S01，不执行未来上报/安装或生产部署。
+- 范围：`src/node-telemetry/memory.mjs`、无参数普通 Linux 用户 CLI、共享串行采集循环的中性命名及原 CPU alias、匹配 unit/process/native 验收、现有 contracts job 的原生对照入口与专题/总计划说明。
+- 验收：固定只读 `/proc/meminfo`、实际字节限制、严格 `MemTotal`/`MemAvailable` 与安全 bytes；`used=total-available`，不使用 `MemFree`、缓存加总或容器限额替代；数值 0 与缺失/无效/读取失败分开；第一条 gauge 可立即可用、此后串行至少 30 秒、停止丢弃迟到样本；真实 procps 对照与当前 CPU 循环回归。
+- 不做：内存压力/OOM 测试、swap/进程 RSS/cgroup 指标、root/sudo、任意路径/间隔参数、依赖或云资源增加、v4 包变更、daemon/云端/UI 接入、已有安装升级或清锁。`linux-proc-meminfo` 只表示当前可见内核入口，不证明用户宿主位置或容器可分配内存；真实宿主验收仍开放。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-memory-collection-20261005/`。完整目标保持 active；验收后立即 scoped commit/push、精确 head 审阅和正常合并/main 复核，再领取 M02-S02。
+- 已实现固定 64 KiB 接受上限（最多额外 1 字节超限探针）、BigInt 安全 bytes、独立 gauge/明确失败、无参数普通用户 CLI；指标无关循环保留 CPU alias、固定间隔和同步回调/停止语义。未改变 v4 包内的 25 个源码文件、CPU/云端协议、daemon、依赖、默认开关或既有安装。
+- 本地最终 Linux Node.js 24.18.1/uid 1000/只读 LF 快照：全量契约 233/233，0 失败/跳过；包含内存读取分段/字节/UTF-8/close、缺失与畸形优先级、safe integer、0/null、时钟非法/合法回退、恢复/并发、两种信号停止及 CPU 回归。重命名之前 CPU 专项 9/9，之后同组通过；Windows 和一次性 Linux root 的 CLI 实际拒绝均退出 2。
+- 最终真实 CLI + procps 4.0.4 两次 gauge 间隔 30,010ms：total 精确一致，可用量差异 172,032 bytes / 0 bytes，均小于该环境 20,823,337 bytes 容差；used 公式精确一致，正常 SIGTERM 收尾。不分配内存压力、不挂宿主路径；这些是本地可见 Linux 内核证据，原生 GitHub runner 结果仍须按精确 head/main 实测核对。
+- 本地失败保留：最初快照 helper 漏转换无常规扩展名的 Dockerfile，三项历史 hash 断言失败；仅修正临时快照生成，旧证据/测试不改，最终 233/233。首次 scanner 的 tmpfs 禁止执行而退出 126；仅允许临时校验工具所在 tmpfs 执行，源码挂载仍只读/普通用户/无网络。固定 actionlint 1.7.12/Gitleaks 8.30.1 归档 SHA 重新匹配仓库后运行通过，无 secret 检出；本地没有额外 ShellCheck/Pyflakes。
+- 独立只读审查未发现确定阻断问题；按反馈明确探针说明、补合法墙钟回退回归及参考进程退出 deadline，不把静态阅读当独立执行通过。10 个改动文本 UTF-8 无 BOM/匹配 LF 快照、本地链接和 88 项无环依赖验证通过。Git 交付立即按本项 scoped commit/push 和 PR/main 流程推进，精确 SHA/回执不循环 amend；下一项 M02-S02 尚未领取。
+
+### 7.17 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

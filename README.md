@@ -31,6 +31,12 @@ N07-S01 在 v2 包中增加前台常驻入口，N07-S02 增加显式 systemd 用
 它不联网、不读取凭据、不升级 v3 包，尚未装配成已部署监控角色。
 [CPU 口径、宿主边界与真实工具对照](docs/cpu-collection.md)
 
+M02-S01 增加独立内存入口 `node scripts/node-memory.mjs`：普通 Linux 用户只读
+`/proc/meminfo`，用 `MemTotal`/`MemAvailable` 输出总量、可用、已用 bytes 和占比。
+缺失/失败不显示为 0，不把容器限额冒充宿主内存；不施加内存压力或修改已有安装。
+版本化上报与管理页接入由 M02-S02 独立实施，当前 v4 包不包含这个新入口。
+[内存口径、运行与 procps 对照](docs/memory-collection.md)
+
 ## M14：基线与候选发布差异
 
 同一配置检查页可额外选择基线JSON，对比镜像、双环境目标、端口、卷和密钥引用，

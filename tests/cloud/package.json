@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test protocol.test.mjs admin.test.mjs catalog.test.mjs services.test.mjs"
+    "test": "node --test protocol.test.mjs admin.test.mjs catalog.test.mjs services.test.mjs node-mailbox.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

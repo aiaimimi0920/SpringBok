@@ -14,4 +14,5 @@ test('private assets always enter the Worker and management defaults reject acce
   const worker = readFileSync(new URL('../cloud/worker.mjs', import.meta.url), 'utf8');
   assert.match(worker, /this\.adminEnabled && \['submit', 'state'\]/);
   assert.equal(JSON.parse(readFileSync(new URL('../cloud/package.json', import.meta.url))).dependencies.jose, '6.2.12');
+  assert.match(JSON.parse(readFileSync(new URL('./cloud/package.json', import.meta.url))).scripts.test, /\bservices\.test\.mjs\b/);
 });

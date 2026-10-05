@@ -10,12 +10,13 @@ export async function adminRequest(request, env, readBody) {
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
     }
     const catalogEnabled = env.ENABLE_CATALOG === 'yes' && !!env.REGISTRY;
-    if (url.pathname === '/api/admin/servers') {
+    if (['/api/admin/servers', '/api/admin/services'].includes(url.pathname)) {
       if (!catalogEnabled) return reply({ error: 'server catalog disabled' }, 503);
       if (!['GET', 'POST'].includes(request.method)) return reply({ error: 'unknown catalog route' }, 404);
       if (request.method === 'POST' && (request.headers.get('origin') !== session.origin || !sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null)))) return reply({ error: 'refresh this authenticated session' }, 403);
       const catalog = env.REGISTRY.get(env.REGISTRY.idFromName(`catalog/v1/${session.actor}`));
-      try { return reply(request.method === 'GET' ? await catalog.snapshot(session.actor) : await catalog.mutate(session.actor, await readBody(request))); }
+      const service = url.pathname === '/api/admin/services';
+      try { return reply(request.method === 'GET' ? await catalog[service ? 'serviceSnapshot' : 'snapshot'](session.actor) : await catalog[service ? 'mutateService' : 'mutate'](session.actor, await readBody(request))); }
       catch { return reply({ error: 'catalog rejected, stale or persistence uncertain; refresh before retrying' }, 409); }
     }
     const stub = env.TARGET.get(env.TARGET.idFromName(NODE));

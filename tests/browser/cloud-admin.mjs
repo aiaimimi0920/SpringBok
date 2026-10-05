@@ -61,3 +61,4 @@ try {
 } finally { bridge?.close(); executor?.close(); await browser?.close(); await f.close(); rmSync(directory, { recursive: true, force: true }); }
 
 await import('./server-catalog.mjs');
+await import('./service-catalog.mjs');

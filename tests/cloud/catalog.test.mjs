@@ -103,6 +103,7 @@ test('server and receipt caps reject new writes without pruning reads or idempot
       await mutate(f, auth, { id: randomUUID(), revision, action: 'rename', serverId: second.id, name: `revision-${revision}` });
     }
     await mutate(f, auth, { id: randomUUID(), revision: MAX_CATALOG_REQUESTS, action: 'archive', serverId: second.id }, 409);
+    assert.equal((await f.call('/api/admin/services', { ...auth, body: { id: randomUUID(), revision: MAX_CATALOG_REQUESTS, action: 'create', serverId: second.id, name: '上限后不能写入服务' } })).status, 409);
     const full = await snapshot(f); assert.equal(full.revision, MAX_CATALOG_REQUESTS); assert.equal(full.servers.length, MAX_SERVERS);
     await f.restart(); assert.deepEqual(await snapshot(f), full); assert.deepEqual(await mutate(f, auth, request), first);
   } finally { await f.close(); }
@@ -117,13 +118,48 @@ test('catalog toggle preserves data; future schema, missing tables, metadata and
   let mf;
   const restart = async () => { await mf?.dispose(); mf = new Miniflare(convertV4MiniflareOptions(options)); await mf.ready; };
   // RPC 在 workerd 内 await，再以 JSON 穿过 Node 边界，不能把 Miniflare 的远程 RpcPromise 代理当成结果。
-  const stub = async name => Object.fromEntries(['snapshot', 'mutate', 'damage', 'inspect'].map(operation => [operation, async (...args) => {
+  const stub = async name => Object.fromEntries(['snapshot', 'mutate', 'serviceSnapshot', 'mutateService', 'legacy', 'legacySnapshot', 'damage', 'inspect'].map(operation => [operation, async (...args) => {
     const response = await mf.dispatchFetch(`https://catalog.invalid/${name}`, { method: 'POST', body: JSON.stringify({ operation, args }) });
-    assert.equal(response.status, 200); return response.json();
+    assert.equal(response.status, 200, `${name}/${operation}`); return response.json();
   }]));
   const owner = 'a'.repeat(64), request = create(0);
   try {
-    await restart(); let catalog = await stub('toggle');
+    await restart(); let catalog = await stub('migration');
+    const legacyRequest = create(0), legacyReceipt = await catalog.legacy(owner, legacyRequest);
+    const legacyArchive = { id: randomUUID(), revision: 1, action: 'archive', serverId: legacyReceipt.server.id };
+    await catalog.legacy(owner, legacyArchive);
+    const liveRequest = create(2), liveReceipt = await catalog.legacy(owner, liveRequest);
+    const legacySaved = await catalog.legacySnapshot(owner), original = await catalog.inspect();
+    assert.equal(original.metadata[0].schema_version, 1);
+    await assert.rejects(catalog.snapshot('f'.repeat(64))); assert.deepEqual(await catalog.inspect(), original);
+    assert.deepEqual(await catalog.snapshot(owner), legacySaved);
+    const expanded = await catalog.inspect();
+    assert.equal(expanded.metadata[0].schema_version, 2); assert.equal(expanded.metadata[0].revision, original.metadata[0].revision);
+    assert.deepEqual(expanded.servers, original.servers); assert.deepEqual(expanded.requests, original.requests);
+    assert.deepEqual(await catalog.mutate(owner, legacyRequest), legacyReceipt);
+    const serviceRequest = { id: randomUUID(), revision: 3, action: 'create', serverId: liveReceipt.server.id, name: '迁移后服务' };
+    const serviceReceipt = await catalog.mutateService(owner, serviceRequest);
+    await assert.rejects(catalog.legacySnapshot(owner)); // 精确旧实现必须拒绝 v2，而不是绕过服务引用归档服务器。
+    const upgraded = await catalog.inspect();
+    await restart(); catalog = await stub('migration');
+    assert.deepEqual(await catalog.inspect(), upgraded); assert.deepEqual(await catalog.mutateService(owner, serviceRequest), serviceReceipt);
+    assert.deepEqual(await catalog.mutate(owner, legacyArchive), { id: legacyArchive.id, revision: 2, server: legacySaved.servers.find(row => row.id === legacyReceipt.server.id) });
+    for (const kind of ['v1Row', 'v1Requests', 'receiptJson', 'receiptShape', 'receiptRevision']) {
+      catalog = await stub(kind); await catalog.legacy(owner, create(0)); await catalog.damage(kind);
+      const damaged = await catalog.inspect();
+      await assert.rejects(catalog.snapshot(owner)); await assert.rejects(catalog.serviceSnapshot(owner));
+      assert.deepEqual(await catalog.inspect(), damaged, 'invalid v1 must remain unchanged when migration fails');
+    }
+    for (const kind of ['receiptJson', 'receiptShape', 'receiptRevision']) {
+      catalog = await stub(`v2-${kind}`); const server = (await catalog.mutate(owner, create(0))).server;
+      const service = { id: randomUUID(), revision: 1, action: 'create', serverId: server.id, name: '服务回执' };
+      await catalog.mutateService(owner, service); await catalog.damage(kind);
+      const damaged = await catalog.inspect();
+      await restart(); catalog = await stub(`v2-${kind}`);
+      await assert.rejects(catalog.mutateService(owner, service));
+      assert.deepEqual(await catalog.inspect(), damaged, 'invalid v2 service receipt cannot become a successful replay');
+    }
+    catalog = await stub('toggle');
     const receipt = await catalog.mutate(owner, request), saved = await catalog.snapshot(owner);
     await assert.rejects(catalog.snapshot('f'.repeat(64))); await assert.rejects(catalog.mutate('f'.repeat(64), request));
     assert.deepEqual(await catalog.snapshot(owner), saved);
@@ -133,11 +169,16 @@ test('catalog toggle preserves data; future schema, missing tables, metadata and
     assert.deepEqual(await catalog.inspect(), disabled);
     options.bindings.ENABLE_CATALOG = 'yes'; await restart(); catalog = await stub('toggle');
     assert.deepEqual(await catalog.snapshot(owner), saved); assert.deepEqual(await catalog.mutate(owner, request), receipt);
-    for (const kind of ['version', 'table', 'metadata', 'column']) {
-      catalog = await stub(kind); await catalog.mutate(owner, request); await catalog.damage(kind);
+    for (const kind of ['version', 'table', 'metadata', 'column', 'serviceTable', 'serviceColumn', 'serviceName', 'serviceTime', 'serviceReference', 'linkedArchive']) {
+      catalog = await stub(kind); const created = await catalog.mutate(owner, request);
+      // 有实际子行时 SQLite 外键会阻止 DROP 父表；缺父表注入使用空服务表，其余注入保留关联服务。
+      if (kind !== 'table') await catalog.mutateService(owner, { id: randomUUID(), revision: 1, action: 'create', serverId: created.server.id, name: '保留服务' });
+      await catalog.damage(kind);
       const damaged = await catalog.inspect();
       await restart(); catalog = await stub(kind);
       await assert.rejects(catalog.snapshot(owner)); await assert.rejects(catalog.mutate(owner, create(1)));
+      await assert.rejects(catalog.serviceSnapshot(owner));
+      await assert.rejects(catalog.mutateService(owner, { id: randomUUID(), revision: 2, action: 'create', serverId: created.server.id, name: '不能修复' }));
       assert.deepEqual(await catalog.inspect(), damaged, `${kind} must not be silently reset or repaired`);
     }
   } finally { await mf?.dispose(); rmSync(directory, { recursive: true, force: true }); }

@@ -1,8 +1,18 @@
 # SpringBok
 
-现阶段优先把自有品牌服务可靠、可重复地部署到选定服务器；围绕真实需求推进，暂不扩展无关的通用平台功能。
+SpringBok 是部署在 **Cloudflare Workers** 上的统一服务部署与服务器监控管理平台：
+通过简单交互把服务部署到外部服务器，并持续查看这些服务器及服务的运行状态。
+Cloudflare 承载控制面，外部服务器承载实际业务和受控执行端；D1、KV、R2 按需选择。
 
-[实际待部署清单、交付目标与验收边界](docs/owned-service-deployment.md)：Gateway、Platform、AssetLibrary、Rauthy，以及可选的 Crow 只读查询。Hook/Loom 是桌面访问方。该清单是开发目标，不是可执行配置或已部署证明。
+**开发入口：[产品开发计划与逐功能进度](docs/development-plan.md)**。其中记录当前源码基线、
+每个功能的独立子任务、验收条件、依赖和 AI 接续停点。每完成一个子任务，更新进度后立即
+提交并推送，不积攒到整个阶段完成；执行规则见 [AGENTS.md](AGENTS.md)。
+
+目前已具备固定场景的部署契约、配置审阅、执行恢复、Worker/SQLite Durable Object、
+节点出站桥和受保护管理页。真实 Cloudflare/Access 与用户服务器验收仍未完成；
+多服务器接入和持续资源监控尚待开发。下方 M1–M14 是历史切片记录，不是产品完成比例。
+
+[首批自有服务、交付目标与验收边界](docs/owned-service-deployment.md)：Gateway、Platform、AssetLibrary、Rauthy，以及可选的 Crow 只读查询。Hook/Loom 是桌面访问方。该清单是开发目标，不是可执行配置或已部署证明。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
 ## M14：基线与候选发布差异

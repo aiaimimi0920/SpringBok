@@ -4,7 +4,10 @@ import { readFileSync } from 'node:fs';
 test('private assets always enter the Worker and management defaults reject access without credentials in the browser', () => {
   const config = JSON.parse(readFileSync(new URL('../cloud/wrangler.jsonc', import.meta.url)));
   assert.equal(config.assets.run_worker_first, true); assert.equal(config.assets.binding, 'ASSETS'); assert.equal(config.vars.ENABLE_ADMIN, 'no'); assert.equal(config.vars.ADMIN_EMAILS, '[]');
-  for (const file of ['index.html', 'style.css', 'app.js']) {
+  assert.equal(config.vars.ENABLE_CATALOG, 'no');
+  assert.deepEqual(config.durable_objects.bindings, [{ name: 'TARGET', class_name: 'TargetMailbox' }, { name: 'REGISTRY', class_name: 'OwnerCatalog' }]);
+  assert.deepEqual(config.migrations, [{ tag: 'v1', new_sqlite_classes: ['TargetMailbox'] }, { tag: 'v2-catalog', new_sqlite_classes: ['OwnerCatalog'] }]);
+  for (const file of ['index.html', 'style.css', 'app.js', 'catalog.js']) {
     const source = readFileSync(new URL(`../public/cloud-admin/${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /CONTROL_TOKEN|NODE_TOKEN|cf-access-jwt-assertion|localStorage|sessionStorage|innerHTML/);
   }

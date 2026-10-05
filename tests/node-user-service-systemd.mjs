@@ -74,7 +74,7 @@ if (phase === 'exercise') {
   await start(execute); await stopped(execute, true);
   assert.equal(events(execute).length, count); assert.deepEqual(fs.readFileSync(join(execute.installation, 'state/ledger.json')), ledger);
   await systemctl('stop', execute.name);
-  const observe = fixtures[1]; configure(observe, 'normal'); await systemctl('reset-failed', observe.name);
+  const observe = fixtures[1]; configure(observe, 'normal'); await systemctl('reset-failed');
   await systemctl('enable', observe.name); assert.equal((await state(observe)).UnitFileState, 'enabled');
   fs.writeFileSync(recordPath, JSON.stringify({ ...observe, count: events(observe).length }), { mode: 0o600, flag: 'wx' });
   console.log('systemd exercise passed: dual roles, actual daemon, drain, identity failure, unknown preservation, no restart, enable');

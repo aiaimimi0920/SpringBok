@@ -434,6 +434,7 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 功能提交 `c2e5cea31dbb75b021a05310d0b1057814212197` 已推送并核对远程 SHA，PR [#41](https://github.com/aiaimimi0920/SpringBok/pull/41)。固定 Git 包 20 文件/79,703 字节，manifest SHA-256 `043d7f16b34406ea37f7cdabc51b0c8da1a77940157e2709911124e6b835d6fd`；actionlint 1.7.12/Gitleaks 8.30.1 按固定 SHA 下载校验，源码扫描及完整 79 commits 无检出。历史扫描第一次直接读 Windows CRLF 的 shell 报 `set: pipefail: invalid option name`；只改临时挂载使用 LF 快照，保留 Q01，不改源码/断言来假绿。
 - 首轮精确 head 的 Worker/浏览器/安全检查成功，但契约 204/206、真实 manager job 失败：setup-node 制品不满足新增 Node owner/写权限规则；合成账户从 runner 私有 checkout 加载入口报 `MODULE_NOT_FOUND`。追加 CI 内修复：保持产品检查，将同一可信 Node 按字节核对复制到私有 owned 目录，并从同一 Git HEAD 导出合成账户源码；不 chmod runner 检出、不放宽服务或身份安全策略。最新 CI 结果仍待核实，不绕过失败合并。
 - 第二轮契约通过，日志确认原 Node `owner=1001 mode=777`；manager 已启动并接受 API，但首次按名 `reset-failed` 拒绝尚未加载的 unit。仅测试 helper 改为此一次性专属账户的 manager reset-failed，再显式 start；生产生成器仍不调用 systemctl，不清任何 ledger/锁。保留两轮原日志，继续验证完整生命周期，不将 manager API 可用当本项验收通过。
+- 第三轮已越过双角色启停/drain/拒绝和 execute unknown 保留断言，但后续 prepare-enable 还有一处按名 reset-failed；此前全局 reset 后空闲 observe unit 被 manager 回收，导致同类拒绝。补齐这一剩余测试调用，不改变生产逻辑或断言；自启动重建/SIGKILL 场景仍须完整 CI 实际通过后才关闭任务。
 
 ### 7.13 后续交接记录模板
 

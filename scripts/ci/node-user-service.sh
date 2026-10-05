@@ -22,6 +22,21 @@ sudo chmod 700 "$home/runtime"
 sudo install -o "$name" -g "$name" -m 700 "$node" "$home/runtime/node"
 sudo cmp "$node" "$home/runtime/node"
 node="$home/runtime/node"
+# 托管 runner 的 PAM/XDG/D-Bus 环境属于 runner，不属于新账户。
+# 避免 manager 的 dbus.socket/ssh socket 在 ExecStartPost 通过自身尚未启动的 bus 等待。
+dropin="/etc/systemd/system/user@$uid.service.d"
+sudo mkdir -p "$dropin"
+if sudo test -e "$dropin/springbok-ci.conf"; then exit 1; fi
+sudo tee "$dropin/springbok-ci.conf" >/dev/null <<EOF
+[Service]
+Environment=HOME=$home
+Environment=XDG_CONFIG_HOME=$home/.config
+Environment=XDG_CACHE_HOME=$home/.cache
+Environment=XDG_DATA_HOME=$home/.local/share
+Environment=XDG_RUNTIME_DIR=/run/user/$uid
+UnsetEnvironment=DBUS_SESSION_BUS_ADDRESS DBUS_STARTER_ADDRESS DBUS_STARTER_BUS_TYPE SSH_AUTH_SOCK
+EOF
+sudo systemctl daemon-reload
 cleanup() {
   code=$?
   printf 'CI exitCode=%s\n' "$code" > .tmp/systemd-evidence/exit.txt

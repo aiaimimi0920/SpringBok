@@ -436,6 +436,7 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 第二轮契约通过，日志确认原 Node `owner=1001 mode=777`；manager 已启动并接受 API，但首次按名 `reset-failed` 拒绝尚未加载的 unit。仅测试 helper 改为此一次性专属账户的 manager reset-failed，再显式 start；生产生成器仍不调用 systemctl，不清任何 ledger/锁。保留两轮原日志，继续验证完整生命周期，不将 manager API 可用当本项验收通过。
 - 第三轮已越过双角色启停/drain/拒绝和 execute unknown 保留断言，但后续 prepare-enable 还有一处按名 reset-failed；此前全局 reset 后空闲 observe unit 被 manager 回收，导致同类拒绝。补齐这一剩余测试调用，不改变生产逻辑或断言；自启动重建/SIGKILL 场景仍须完整 CI 实际通过后才关闭任务。
 - 第四轮实际 `exercise` 完整通过，但系统级 `user@1002.service` 重建报 timeout，现有日志不足以确定原因。仅补失败时精确 synthetic manager 的 status/journal 与原退出码 artifact，保留 fail-closed；不改生产代码、不扩大 cgroup 权限、不放宽 manager 超时或取消重建验收。下一步按新日志诊断此 CI 平台边界。
+- 精确诊断日志显示新 manager 仍访问 `/home/runner/.config`，启动停在 `dbus.socket` 与 `gpg-agent-ssh.socket` 的 systemctl 控制进程，90 秒后被系统启动超时终止；未进入 SpringBok 自启动 unit。对新 synthetic uid 的 CI 专属 `user@<uid>` drop-in 明确自身 HOME/XDG，并移除启动期 D-Bus/SSH 会话地址，避免 socket 的 ExecStartPost 经自身未就绪 bus 形成等待；不改宿主通用模板/生产 unit、不放宽超时。新环境与完整重建结果仍须 fresh CI 核实。
 
 ### 7.13 后续交接记录模板
 

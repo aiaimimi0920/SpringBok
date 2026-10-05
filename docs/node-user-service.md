@@ -50,4 +50,6 @@ unit 固定按角色命名，同一账户不能用同名 unit 悄悄切换另一
 
 PR #41 首轮 CI 的契约 204/206、manager 入口失败，原因是 runner setup-node 制品不满足产品 owner/写权限规则，以及新账户不能直接访问 runner 的 checkout。CI 改为同一可信 Node 的私有 owned 副本并 `cmp` 核对字节，合成账户源码来自同一 Git HEAD 的 archive；没有放宽产品权限检查或 runner 目录权限。首轮失败日志保留，最新精确 head 结果按 PR 回执核实。
 
+后续实际 `exercise` 已通过，但 manager 重建曾在宿主预装的 dbus/SSH socket 控制进程超时，日志还显示 runner 的 XDG 路径污染。仅对本次新 uid 的 CI `user@<uid>` drop-in 明确自身 HOME/XDG、取消启动期会话 D-Bus/SSH 地址；不修改通用模板、生产 unit/超时，不宣称所有发行版/用户环境均已适配。失败诊断与原退出码作为 artifact 保留，完整重建结果仍以精确 CI 为准。
+
 未完成：用户主机安装/开机重启、完整执行依赖 N06-S02、真实 Cloudflare/Access/多服务器、心跳/指标、业务部署、凭据轮换/撤销与程序升级。不启用生产开关，不改云 schema、依赖/lockfile、历史 fixture 或既有固定包。

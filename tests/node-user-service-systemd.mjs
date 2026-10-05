@@ -49,6 +49,8 @@ function fixture(role) {
 const phase = process.argv[2];
 if (phase === 'exercise') {
   fs.mkdirSync(root, { mode: 0o700 });
+  const { stdout: environment } = await systemctl('show-environment');
+  console.log('isolated manager environment: ' + environment.split('\n').filter(line => /^(HOME|XDG_CONFIG_HOME|XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS)=/.test(line)).join(' '));
   const fixtures = ['execute', 'observe'].map(fixture);
   await systemctl('daemon-reload');
   for (const f of fixtures) {

@@ -94,9 +94,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | C01 | Worker 同源静态资源和 API 骨架 | 已实现 | E05/E06；`cloud/wrangler.jsonc` | 资产先过 Worker；默认关闭；产品页面扩展仍待后续任务 | 无 |
 | C02 | Cloudflare Access 服务端管理员鉴权 | 已实现 | E06 | 验签与固定名单已编码；真实账号/策略验收由 V01 承担，不等于多角色系统 | C01 |
 | C03 | 固定任务的 SQLite DO 事务持久化 | 已实现 | E05；`TargetMailbox` | 当前单节点 100 条上限；保留同 ID 同输入幂等、未知不重投；多节点由 N01 扩展 | C01 |
-| C04 | 持久服务器/服务目录 | 部分实现 | 服务器目录见 C04-S01；服务目录见 C04-S02 | 服务器元数据链已实现；服务记录和服务器引用约束尚待开发 | ARC-02 |
-| C04-S01 | 持久服务器目录与管理页 | 已实现 | [实现与验收](server-catalog.md)；负责人：主 AI | owner 隔离、创建/改名/归档、幂等/revision、SQLite 重启、失败关闭、默认关闭与页面验收通过；交付待 PR 合并，不等于节点已接入 | ARC-02 |
-| C04-S02 | 持久服务目录与服务器引用 | 待开发 | [服务目录边界](storage-architecture.md) | 服务记录归属、服务器引用约束、关联服务下拒绝服务器归档；不生成可执行配置 | C04-S01 |
+| C04 | 持久服务器/服务目录 | 已实现 | 服务器目录见 C04-S01；服务目录见 C04-S02 | 两类持久元数据、owner 隔离和关联约束已实现；本项交付以精确 PR/main 回执为准，不代表节点/业务接入 | ARC-02 |
+| C04-S01 | 持久服务器目录与管理页 | 已完成 | [实现与验收](server-catalog.md)；负责人：主 AI；PR #33 已合并 | owner 隔离、创建/改名/归档、幂等/revision、SQLite 重启、失败关闭、默认关闭与页面验收通过；main 合并后 CI 通过，不等于节点已接入 | ARC-02 |
+| C04-S02 | 持久服务目录与服务器引用 | 已实现 | [实现与验收](service-catalog.md)；负责人：主 AI | 创建/改名/归档、owner/reference、服务器归档关联阻断、共享 revision/幂等、保留式迁移和页面验收通过；待 PR 交付闭环，不生成可执行配置 | C04-S01 |
 | C05 | D1 数据访问与迁移（按需） | 待决策 | 当前无 D1 binding | ARC-02 采用后才实现 schema、隔离测试与迁移恢复；不采用则记录理由，不阻断无关任务 | ARC-02 |
 | C06 | KV 非权威缓存（按需） | 待决策 | 当前无 KV binding | 明确陈旧数据容忍度、失效规则；关闭缓存不影响部署安全 | ARC-02 |
 | C07 | R2 对象归档（按需） | 待决策 | 当前无 R2 binding | 受权上传/下载、对象归属、大小/配额、保留和恢复验证；不公开原始日志或凭据 | ARC-02 |
@@ -301,10 +301,24 @@ git ls-remote origin refs/heads/<本子任务分支>
 - actionlint 1.7.12 已按仓库 SHA-256 校验后运行全部 workflow 的语法检查（未额外运行 ShellCheck）；Gitleaks 8.30.1 已校验工具来源，精确提交扫描与远程 CI 结果见 PR 回执。未修改 workflow 权限、门禁或 lockfile。
 - 证据根目录：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-storage-20261004/`。完整命令、环境、日志/截图和未验证边界见专题文档。独立审查代理因上游 503 未产出结论，不计为独立审查通过；主 AI 完成源码/diff 审阅与实际验证。
 - DOC-01 PR [#30](https://github.com/aiaimimi0920/SpringBok/pull/30) 已正常合并为 `eb602710b82953e17005c93eb63d5cd57df114bf`；ARC-01 PR [#31](https://github.com/aiaimimi0920/SpringBok/pull/31) 已正常合并为 `95b42a3048d1efee37c5b8fc14efb22a2db85a07`。ARC-02 原提交 `5711d1586f14b8f40bd097e2bb062c2dfd367d02` 已补齐独立分支与 PR [#32](https://github.com/aiaimimi0920/SpringBok/pull/32)，等待其检查/合并，不重复开发。
-- 本任务源码与本地验收已完成；交付状态待 PR 合并，最终 SHA/检查/main 以 PR 回执为准，不预报尚未完成的 CI。先立即 scoped commit/push C04-S01，再完成依赖 PR 与精确 head 的正常合并。
-- 下一停点先完成上述交付链；下一功能是 C04-S02（服务目录与服务器引用），本轮不领取。V01/V02 保持待实测，不重新触发旧 fixture 或清空持久记录。
+- 当时停点为源码与本地验收完成、待 PR 合并；该交付链现已闭环，最终 SHA/检查/main 见第 7.5 节补入的 PR 回执，保留上述原验证证据。
+- 当时未领取 C04-S02；用户后续已明确继续，当前任务见第 7.5 节。V01/V02 保持待实测，不重新触发旧 fixture 或清空持久记录。
 
-### 7.5 后续交接记录模板
+### 7.5 C04-S02 接续与验收记录
+
+- 任务日期：2026-10-04；任务 `C04-S02`；负责人：主 AI；基线 `2116c9f`，分支 `feat/service-catalog-20261004`。用户已明确继续推进。
+- 范围：现有 `OwnerCatalog` 的服务元数据/服务器引用、版本化 SQLite 扩展、同源管理员 API、目录页面与匹配测试/文档。复用现有 owner、revision、幂等回执与默认关闭开关，不增加依赖或云 binding。
+- 验收：服务创建/改名/归档、owner 隔离、有效服务器引用、有关联草稿服务时拒绝服务器归档；跨资源请求 ID 冲突与并发 revision 安全；v1 数据/原回执保留、重启和损坏 schema 失败关闭；页面可操作且响应不确定时禁写核对。
+- 不做：节点加入、真实产品/制品绑定、可执行配置、部署/停止/卸载、数据删除、真实云 migration 或凭据开通。源码与本地验收已完成；交付按本项 scoped commit/push、精确 PR head 检查和正常合并推进，不预报未完成 CI。
+- 前项最新回执：ARC-02 PR #32、C04-S01 PR #33 已合并；`main=2116c9f28711478ff19d744403103acf416cd255`，与功能 head `8732f1b7eeb59261a0574f21184730b08b381397` 的文件树一致。合并后 6 workflow/11 job 成功，见 [PR #33 闭环回执](https://github.com/aiaimimi0920/SpringBok/pull/33#issuecomment-5988673219)。不重复前项开发或 fixture 执行。
+- 实现见 [服务目录](service-catalog.md)。服务上限 256（含归档），共用 1024 回执；v1→v2 同事务扩展，保留服务器数据、revision 和原回执。测试冻结精确旧实现并证明回退失败关闭；服务路由不新增执行入口。
+- 实际验证：Windows Node.js 22.22.2 聚焦 4/4；Linux Node.js 24.18.1 契约 173/173、workerd/SQLite 19/19，失败/跳过均为 0；旧管理页、服务器目录、服务目录三条真实本地浏览器场景通过。测试覆盖迁移/旧版本拒绝、缺表/列/未知版本、v1 与 v2 损坏回执、服务行损坏、容量、引用竞争、双击、陈旧/混合 revision、丢响应、迟到 owner 响应和文本渲染；1280px/390px 截图已检查。
+- 首次 Linux 副本的 3 个历史哈希失败来自两个 Dockerfile 的 CRLF，修正仅限临时副本并核对为原证据 LF 哈希；没有改历史源码/证据/断言。故障夹具早期试图在有效服务关联下 DROP 父表，被 SQLite 外键正确拒绝；已调整测试注入与检查，最终全量 Worker 测试通过，不删生产保护。
+- 只读独立审查发现 v1 历史回执内容缺少校验，已补迁移前全面校验与全部重放严格校验，增量复核未发现其他明确问题。v2 普通读写不扫描所有历史回执，详见专题文档边界。主 AI 审阅精确源码/diff 并完成运行验收。
+- 本机证据：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-service-catalog-20261004/`；`linux-unit-final.log`、`linux-cloud-complete.log`、`linux-browser-complete.log`、截图与 15 个源码/测试文件 LF SHA-256 匹配清单。19 个变更文本 UTF-8 无 BOM；32 个本地文档链接/80 个任务的唯一性和无环依赖检查通过。actionlint 1.7.12、Gitleaks 8.30.1 按仓库 SHA-256 验证下载；actionlint workflow 语法通过（未额外执行 ShellCheck），提交后的 Gitleaks 和精确 CI 结果见 PR 回执。
+- 下一停点先完成本项提交/推送/PR/main 验证；下一独立功能 N01（多节点任务寻址与隔离）尚未领取。V01/V02 保持待实测，不配置云资源、不复跑有副作用 fixture、不清持久记录。
+
+### 7.6 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

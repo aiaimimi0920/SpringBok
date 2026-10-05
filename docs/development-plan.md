@@ -113,7 +113,7 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N01-S01 | 独立节点邮箱与内部只读协议 | 已完成 | [实现与验收](node-mailbox.md)；负责人：主 AI；PR #35 已合并 | 版本化独立 DO、owner/node 不可变绑定、双节点只读 probe、一次交付/幂等/重启/未知阻断已验证；main 检查通过，公开任务通道保持不可用 | ARC-01/C04-S01 |
 | N01-S02 | 认证节点通道与出站桥接入 | 待开发 | 不复用旧 NODE_TOKEN，不接受公开自报上下文 | 将加入后权威凭据上下文接入新路由/桥；事务内认证与领取；双节点端到端身份隔离 | N01-S01/N02/N03 |
 | N02 | 服务器注册与一次性加入流程 | 已完成 | [实现与验收](node-enrollment.md)；负责人：主 AI；交付流程见第 7.7 节 | 保存后授权、一次性加入、过期/冲突拒绝和跨 DO 恢复已通过本地验收并提交推送；PR 合并检查另记回执，不代表真实服务器已接入 | N01-S01/C08 |
-| N03 | 每节点独立凭据 | 已实现 | [实现与验收](node-credentials.md)；负责人：主 AI；交付进度见第 7.8 节 | joined 角色摘要、独立角色材料和本地 workerd 身份核对已验证；待提交/推送/PR；任务通道仍归 N01-S02 | N02 |
+| N03 | 每节点独立凭据 | 已完成 | [实现与验收](node-credentials.md)；负责人：主 AI；交付进度见第 7.8 节 | joined 角色摘要、独立角色材料和本地 workerd 身份核对已验证并提交推送；PR/main 检查另记回执，任务通道仍归 N01-S02 | N02 |
 | N04 | 节点凭据轮换 | 待开发 | 当前无轮换流程 | 有界切换窗口、旧凭据失效、在途任务不重复执行、全链路不回显秘密 | N03 |
 | N05 | 节点撤销接入 | 待开发 | 当前无撤销流程 | 撤销后不能领取新任务；保留历史/未知证据，不隐式卸载或删除业务数据 | N03/C09 |
 | N06 | 执行端可重复安装包/引导 | 部分实现 | E07 只有测试 Compose 与手工装配说明 | 干净 Linux 测试机按有限步骤安装、版本可核对、目录隔离；不覆盖现有服务 | ARC-01/N03 |
@@ -367,7 +367,7 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 第一轮新 workerd 5/7 通过，2 失败来自测试 RPC 寻址携带多余 role/token；修正测试辅助函数为严格 owner/node，不放宽生产授权，原失败日志保留。独立只读 dirty 实现审查未发现明确高/中严重度阻断；文档明确未知 state 的 CLI 可能初始化空 journal、可信父路径/同 uid 边界，不假称导出失败一律零写入或已完成 OS 强隔离。精确提交审阅另记交付回执。
 - 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-credentials-20261005/`；`snapshot/.tmp/linux-credentials-final.log`、`linux-unit-final.log`、`linux-cloud-final.log`、`linux-browser-final.log`。相同 lockfile 依赖只读复用、POSIX 状态用 tmpfs；actionlint 1.7.12/Gitleaks 8.30.1 本轮重新按仓库归档 SHA-256 下载验证，全部 workflow actionlint 语法通过（未额外 ShellCheck）。精确提交 Gitleaks/PR/main 检查不提前宣称成功。
 - 18 个本项变更文本 UTF-8 无 BOM、LF 源码快照哈希一致；根规则/README/总计划/新专题共 56 个本地链接、82 个唯一任务及无环依赖检查通过。未修改工作区换行配置、lockfile 或历史 evidence。
-- 当前源码/本地验收完成，交付待提交/推送/PR；完成本项后下一独立功能为 N01-S02。N04/N05/N06、真实 Cloudflare/Access、多机网络/账号安装与业务部署继续未完成，不把身份成功当在线/执行就绪或整体计划完成。
+- 功能提交 `7d6f20197bf5a8f3a2aeef20a0a7ce09a3cdebec` 已推送、远程分支 SHA 核对一致；本次交付元数据另作 scoped 文档提交，不 amend 自嵌套 SHA。当前待精确 PR head 审阅/CI/正常合并及 main 复核，尚不宣称已合并。完成本项后下一独立功能为 N01-S02。N04/N05/N06、真实 Cloudflare/Access、多机网络/账号安装与业务部署继续未完成，不把身份成功当在线/执行就绪或整体计划完成。
 
 ### 7.9 后续交接记录模板
 

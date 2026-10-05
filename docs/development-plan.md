@@ -116,8 +116,10 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N03 | 每节点独立凭据 | 已完成 | [实现与验收](node-credentials.md)；负责人：主 AI；交付进度见第 7.8 节 | joined 角色摘要、独立角色材料和本地 workerd 身份核对已验证并提交推送；PR/main 检查另记回执，任务通道仍归 N01-S02 | N02 |
 | N04 | 节点凭据轮换 | 待开发 | 当前无轮换流程 | 有界切换窗口、旧凭据失效、在途任务不重复执行、全链路不回显秘密 | N03 |
 | N05 | 节点撤销接入 | 待开发 | 当前无撤销流程 | 撤销后不能领取新任务；保留历史/未知证据，不隐式卸载或删除业务数据 | N03/C09 |
-| N06 | 执行端可重复安装包/引导 | 部分实现 | E07 只有测试 Compose 与手工装配说明 | 干净 Linux 测试机按有限步骤安装、版本可核对、目录隔离；不覆盖现有服务 | ARC-01/N03 |
-| N07 | 常驻运行与开机启动 | 待开发 | `scripts/node-probe.mjs`、`node-fixture.mjs` 只执行一次 | 有界轮询/退避、单实例锁、进程退出与重启；不是忙循环；后台权限可核对 | N06 |
+| N06 | 执行端可重复安装包/引导 | 部分实现 | 控制客户端见 N06-S01；执行依赖装配见 N06-S02；E07 保留 | 非特权角色安装与完整执行依赖分开验收；不覆盖现有服务，不将控制 probe 当业务执行环境 | ARC-01/N03 |
+| N06-S01 | 固定版本控制客户端包与非特权单角色安装 | 已实现 | [实现与验收](node-installation.md)；负责人：主 AI；交付见第 7.10 节 | 固定清单/摘要、私有安装、不覆盖/半完成恢复、不同 Linux uid 隔离、安装后 CLI/workerd 控制 probe 已验；精确提交/PR/main 结果按回执 | ARC-01/N03/N01-S02 |
+| N06-S02 | 隔离执行依赖安装与真实测试机装配 | 待开发 | E07；[执行架构](execution-architecture.md) | 明确依赖许可/来源与容量，在获准独立 rootless 环境装配 Core/Mongo/Periphery 并验收；不由 S01 提前完成 | N06-S01 |
+| N07 | 常驻运行与开机启动 | 待开发 | `scripts/node-probe.mjs`、`node-fixture.mjs` 只执行一次 | 先在 N06-S01 控制客户端上实现有界轮询/退避、单实例锁、退出与重启；业务执行仍受 N06-S02 限制 | N06-S01 |
 | N08 | 节点心跳与离线判定 | 待开发 | E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
 | N09 | 节点运行环境预检查 | 部分实现 | E07 手工 rootless/容量要求、E09 固定资源检查 | OS/架构/版本/权限/磁盘和资源余量结构化上报；不满足时阻止部署 | N07 |
 | N10 | 节点程序安全升级 | 待开发 | 尚无发行升级链 | 校验固定产物/版本，兼容协议，失败可恢复；在途未知任务不自动重做 | N06/N07 |
@@ -385,7 +387,20 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-channel-20261005/`；`verified-source-hashes.json`、`resume-snapshot-verification.txt`、`run-resume.ps1` 和 `snapshot/.tmp/`。原始测试证据不覆盖；actionlint 1.7.12/Gitleaks 8.30.1 按仓库固定归档 SHA-256 核验，最终工具结果和精确 PR/main 检查另记回执。
 - 本项完成范围是源码与本地控制通道验收，交付按 scoped commit/push、正常 PR 合并和 main 复核推进；本提交不自嵌套最终 SHA，不预报尚未结束的远程检查。下一独立任务为 N06（可重复安装/引导），尚未领取；常驻/心跳、轮换/撤销、监控和真实业务链继续未完成，V01/V02/V03 保持待实测或待开发。
 
-### 7.10 后续交接记录模板
+### 7.10 N06-S01 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `032052acac5490dbc9e2e7dafd66036dd77ce73b`；分支 `feat/node-install-20261005`。本地/远程 main 一致，工作区干净。前项 N01-S02 PR [#38](https://github.com/aiaimimi0920/SpringBok/pull/38) 已正常合并，head/main tree 均为 `e9269f6deda11fd69d4c80b6b838252c1952dd4b`；head 6 workflow/13 check、main push 6 workflow/11 job 成功，见 [最终回执](https://github.com/aiaimimi0920/SpringBok/pull/38#issuecomment-5993910478)。保留已审阅的 2 条 CodeQL advisory，不重复前项开发。
+- 范围：固定允许列表的本地版本包构建器、仅使用预装 Node.js 22+ 的 Linux 非 root 单角色安装器、安装后版本/身份核对与 execute 控制 probe 入口、匹配测试和文档。复用 N03 文件/身份校验与 N01-S02 bridge/journal，不新增 Worker API、schema、云 binding 或运行依赖。
+- 验收：包绑定精确已提交 Git revision、规范文件列表和摘要；安装前验证独立提供的包摘要/HTTPS origin/角色材料；只写指定的私有新目录；相同安装可核对或恢复确定的半完成文件，不覆盖冲突、完整安装的缺失文件或既有 state；不同 Linux uid 不可读取对方角色材料/日志，observe 不能运行 probe；安装后实际入口可运行，错误脱敏。
+- 不做：创建真实系统账号、sudo/chown 用户主机、远程安装、下载 Node/Docker/Komodo/Mongo、选择许可证、常驻/systemd、业务部署、轮换/撤销或清理旧目录。包是本地开发验收产物，不是公开发行授权；安装器源码及包摘要须来自可信审阅渠道，摘要本身不是签名。N06 父项保持部分实现，N06-S02 另验资源/许可和真实执行拓扑。
+- 先完成此单项源码与验证、scoped commit/push、精确 head 审阅/正常合并及 main 复核，再接续 N07；不把本次本地安装测试当真实服务器/生产部署完成。
+- 本轮接续 Session `01a10bc2-2037-72a1-af48-91d11121a346`，原任务因上游 `402 Payment Required` 中断且未运行；保留原分支安装器草稿，不重复前项开发。具体实现见 [控制客户端安装](node-installation.md)。
+- 补齐可信 checkout 引导：`--package` 只作为待校验数据，安装器不从未校验包执行；固定 17 文件、精确 Git HEAD/UTF-8 LF 摘要，使用已预装 Node.js，不增加运行依赖。完整安装只验证，半完成仅补确定缺失且不覆盖，保留 state。
+- 回归先复现并修复完整安装 ENOENT 被误吞及额外空目录问题；补 FIFO 非阻塞拒绝。安装/包测试 7/7，实际安装 CLI/workerd 链 1/1；本地全量契约 193/193。独立 uid 11001/11002 在一次性 Linux 容器安装并运行，互读角色凭据/日志为 EACCES，产品 root 安装拒绝。没有创建宿主账号或修改既有服务。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-install-20261005/`，失败与最终日志分开保留。独立审查代理返回上游 503 未产出结论，不算独立审查通过；主 AI 负责实际源码和精确 diff 审阅。工具、编码/链接、精确构建包和 PR/main 检查按交付回执记录，不预报尚未完成结果。
+- 当前为源码/本地验收完成，交付待本项 scoped commit/push、精确 head CI/正常合并/main 复核；下一独立功能 N07 尚未领取。N06-S02/真实 Cloudflare/多机/业务部署保持未完成，不将单角色控制安装当整体开发计划完成。
+
+### 7.11 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

@@ -6,7 +6,7 @@ globalThis.fetch = (url, init) => new Promise((resolve, reject) => {
   function receive(message) {
     if (message.id !== id) return;
     clearTimeout(timer); process.off('message', receive);
-    if (message.error) reject(new Error('fixture transport failed'));
+    if (message.error) reject(new Error('fixture transport failed', { cause: { code: typeof message.error === 'string' ? message.error : undefined } }));
     else resolve(new Response(message.body, { status: message.status, headers: message.headers }));
     if (!process.listenerCount('message')) process.channel.unref();
   }

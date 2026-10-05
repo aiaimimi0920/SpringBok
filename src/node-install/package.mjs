@@ -6,9 +6,10 @@ import { exact } from '../../cloud/protocol.mjs';
 export const PACKAGE_FILES = Object.freeze([
   'cloud/catalog-contract.mjs', 'cloud/credential-contract.mjs', 'cloud/enrollment-contract.mjs',
   'cloud/fixture-contract.mjs', 'cloud/node-channel-contract.mjs', 'cloud/node-protocol.mjs', 'cloud/protocol.mjs',
-  'scripts/node-run.mjs', 'src/contract.mjs',
+  'scripts/node-daemon.mjs', 'scripts/node-run.mjs', 'src/contract.mjs',
   'src/execution/journal.mjs', 'src/execution/plan.mjs', 'src/node-channel/bridge.mjs', 'src/node-channel/client.mjs',
   'src/node-credentials/client.mjs', 'src/node-credentials/files.mjs',
+  'src/node-daemon/lock.mjs', 'src/node-daemon/loop.mjs',
   'src/node-install/install.mjs', 'src/node-install/package.mjs',
 ]);
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -27,7 +28,7 @@ export function readRegular(file, maximum = 1048576, privateFile = false) {
 export function parseJson(bytes) { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
 function manifest(value) {
   exact(value, ['format', 'revision', 'protocolVersion', 'platform', 'minimumNodeMajor', 'files']);
-  requireInstall(value.format === 'springbok-control-node/v1' && /^[a-f0-9]{40}$/.test(value.revision) && value.protocolVersion === 2 && value.platform === 'linux' && value.minimumNodeMajor === 22);
+  requireInstall(value.format === 'springbok-control-node/v2' && /^[a-f0-9]{40}$/.test(value.revision) && value.protocolVersion === 2 && value.platform === 'linux' && value.minimumNodeMajor === 22);
   requireInstall(Array.isArray(value.files) && value.files.length === PACKAGE_FILES.length);
   let total = 0;
   value.files.forEach((entry, index) => {
@@ -72,7 +73,7 @@ export function buildNodePackage({ directory, revision, readSource }) {
     const source = readSource(path); requireInstall(typeof source === 'string' && !source.startsWith('\uFEFF'));
     return { path, data: Buffer.from(source.replaceAll('\r\n', '\n')) };
   });
-  const metadata = manifest({ format: 'springbok-control-node/v1', revision, protocolVersion: 2, platform: 'linux', minimumNodeMajor: 22,
+  const metadata = manifest({ format: 'springbok-control-node/v2', revision, protocolVersion: 2, platform: 'linux', minimumNodeMajor: 22,
     files: files.map(({ path, data }) => ({ path, bytes: data.length, sha256: sha256(data) })) });
   fs.mkdirSync(directory, { mode: 0o755 }); // 独占新目录；失败保留部分产物，不覆盖、不自动清理。
   for (const { path, data } of files) { fs.mkdirSync(dirname(join(directory, path)), { recursive: true, mode: 0o755 }); fs.writeFileSync(join(directory, path), data, { flag: 'wx', mode: 0o644 }); }

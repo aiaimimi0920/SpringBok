@@ -24,14 +24,14 @@ Cloudflare 负责界面/API、身份授权、任务协调、状态和数据管�
 浏览器
   → Workers + Static Assets + Cloudflare Access 验签 [已有固定管理页代码]
   → SQLite Durable Object 任务记录/操作者关联        [已有固定单节点代码]
-  ← Node 出站轮询和回执桥                            [已有单次 Linux CLI]
+  ← Node 出站轮询和回执桥                            [已有单次/前台常驻 Linux CLI]
   → Komodo Core / Mongo / Periphery / Docker          [已有固定 fixture 适配]
 
 待补齐：通用服务器目录、节点生命周期、真实服务部署适配、持续指标采集、
         多服务器总览、历史与告警，以及真实 Cloudflare/用户服务器验收。
 ```
 
-当前不是 SSH 模式，没有通用常驻 Agent。先复用已有出站桥和已测试契约；是否长期保留 Komodo/Core/Mongo、执行端的资源和许可取舍由 `ARC-01` 决定，不能在后续实现中悄悄换成新栈。
+当前不是 SSH 模式，已有单角色控制客户端前台常驻入口，但没有通用业务 Agent、系统服务或持续监控。先复用已有出站桥和已测试契约；是否长期保留 Komodo/Core/Mongo、执行端的资源和许可取舍由 `ARC-01` 决定，不能在后续实现中悄悄换成新栈。
 
 ### 2.2 Cloudflare 存储按用途选择
 
@@ -119,7 +119,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N06 | 执行端可重复安装包/引导 | 部分实现 | 控制客户端见 N06-S01；执行依赖装配见 N06-S02；E07 保留 | 非特权角色安装与完整执行依赖分开验收；不覆盖现有服务，不将控制 probe 当业务执行环境 | ARC-01/N03 |
 | N06-S01 | 固定版本控制客户端包与非特权单角色安装 | 已完成 | [实现与验收](node-installation.md)；负责人：主 AI；PR #39，交付见第 7.10 节 | 固定清单/摘要、私有安装、不覆盖/半完成恢复、不同 Linux uid 隔离、安装后 CLI/workerd 控制 probe 已验并提交推送；PR/main 最终状态按回执 | ARC-01/N03/N01-S02 |
 | N06-S02 | 隔离执行依赖安装与真实测试机装配 | 待开发 | E07；[执行架构](execution-architecture.md) | 明确依赖许可/来源与容量，在获准独立 rootless 环境装配 Core/Mongo/Periphery 并验收；不由 S01 提前完成 | N06-S01 |
-| N07 | 常驻运行与开机启动 | 待开发 | `scripts/node-probe.mjs`、`node-fixture.mjs` 只执行一次 | 先在 N06-S01 控制客户端上实现有界轮询/退避、单实例锁、退出与重启；业务执行仍受 N06-S02 限制 | N06-S01 |
+| N07 | 常驻运行与开机启动 | 部分实现 | 进程生命周期见 N07-S01；系统服务见 N07-S02 | 前台常驻和系统开机启动分开验收；业务执行仍受 N06-S02 限制 | N06-S01 |
+| N07-S01 | 控制客户端常驻循环与安全退出 | 已完成 | [实现与验收](node-daemon.md)；负责人：主 AI；PR #40，交付见第 7.11 节 | execute/observe 单角色常驻、至少 30 秒间隔、有界退避、单实例、安全退出、unknown 不重放已验收并提交推送；PR/main 最终检查见回执，不含开机启动 | N06-S01 |
+| N07-S02 | 非特权系统服务与开机启动 | 待开发 | 后续按真实 Linux service manager 单独验收 | 可信 unit/安装路径、显式启停、重启策略与开机启动；不盲删锁、不自动扩大权限或创建用户主机账号 | N07-S01 |
 | N08 | 节点心跳与离线判定 | 待开发 | E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
 | N09 | 节点运行环境预检查 | 部分实现 | E07 手工 rootless/容量要求、E09 固定资源检查 | OS/架构/版本/权限/磁盘和资源余量结构化上报；不满足时阻止部署 | N07 |
 | N10 | 节点程序安全升级 | 待开发 | 尚无发行升级链 | 校验固定产物/版本，兼容协议，失败可恢复；在途未知任务不自动重做 | N06/N07 |
@@ -403,7 +405,22 @@ git ls-remote origin refs/heads/<本子任务分支>
 - TOCTOU 修复 `16beae82c18d4f004bf86af73d38aa35969fb484` 已推送、远程 SHA 一致，聚焦 7/7 再次通过。Windows 聚焦 9/9；15 个文本 UTF-8 无 BOM、62 个本地链接与 84 项无环依赖通过。actionlint 1.7.12/Gitleaks 8.30.1 归档按仓库固定 SHA-256 重新下载校验；全部 workflow actionlint 语法通过（未额外运行 ShellCheck），Gitleaks 完整 75 commits 无检出。CodeQL 初轮 ZIP 摘要已核对并读取相关 SARIF；保留历史告警，不把报告执行成功当零漏洞。
 - N06-S01 的限定源码/本地验收与提交推送完成；本次仅同步交付状态，不开始 N07。PR 精确最终 head、全部适用 checks、正常合并及 main 的 SHA/运行结果写入 PR 最终回执，不在提交中自嵌套 SHA 或预报未完成的检查。
 
-### 7.11 后续交接记录模板
+### 7.11 N07-S01 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `b6ac813efc8c70ae92ba56786d767365dfe654fa`，分支 `feat/node-daemon-20261005`。本地/远程 main 一致，工作区干净。前项 N06-S01 PR [#39](https://github.com/aiaimimi0920/SpringBok/pull/39) 已正常合并，head/main tree `a582f9e4bb9a4a90e3a5bfcb1bb5600eab64d09b`；head 6 workflow/13 checks、main 6 workflow/11 jobs 成功，见 [最终回执](https://github.com/aiaimimi0920/SpringBok/pull/39#issuecomment-5994534182)。保留原包、失败记录和历史告警，不重复前项安装开发。
+- N07 拆分为进程生命周期 S01 与系统服务/开机启动 S02。本轮只实现已安装角色客户端的前台常驻入口、固定最小轮询/退避、单安装单实例锁、SIGINT/SIGTERM 安全退出，以及必要的传输错误分类、版本包清单和匹配测试/文档。
+- 验收：execute 使用原 bridge/持久 journal，observe 仅 identity:self（不伪造心跳或指标）；串行轮询、成功间隔至少 30 秒、网络异常指数退避加抖动且不超过 5 分钟；仅网络/选定暂时 HTTP 错误可重试，身份/协议/本地 journal 不确定必须停止；unknown 终止且不清记录；退出不发起新请求，保留在途 intent/result/ack 语义，正常释放自己的锁，异常残留锁失败关闭。
+- 新包显式升级清单格式，旧安装保留自带旧代码，不原地迁移或覆盖旧 state。相同角色复制到不同安装目录的全局进程仲裁不在本轮承诺内，云端一次交付语义仍保留。
+- 不做：systemd/开机启用、创建真实账号、修改用户主机服务、远程安装、自动清锁/重置 unknown、业务 executor、心跳/指标、凭据轮换/撤销、Cloudflare/真实多机部署。完成 S01 后立即 scoped commit/push、精确 head 审阅/正常合并及 main 验证，不把前台测试当 S02 完成。
+- 实现：`scripts/node-daemon.mjs`、`src/node-daemon/`；复用 credential/channel client 的严格响应校验，仅在传输边界分类暂时错误，不把 journal 异常混入重试。新包为 `springbok-control-node/v2` / 20 个固定源文件，保留 node 协议/安装记录版本与旧 v1 包。stdout 固定脱敏事件且状态变化才输出。
+- 实际验证：Windows loop/package 7/7；Linux loop/process/install/package 16/16，全量契约 202/202，完整 workerd 45/45，均无失败/跳过。专项 workerd 2/2；完整回归实际丢 ack 后等待 35,175ms、仅 1 次 poll/2 次同一 receipt report，SIGTERM 等在途 ack 完成后退出；真实 journal 写失败不重试/不 report，云保持 claimed。未改产品计时参数，未重复触发旧真实 fixture。
+- 保留式兼容：前项 main `b6ac813` 的真实 v1 包由旧可信代码安装/运行 probe 后，新安装器分别拒绝旧格式和新包覆盖旧安装；旧代码仍可重装核对/运行 version，release、credential、state、标记的内容/inode/device/mtime 不变。只用一次性 Linux tmpfs，没有改用户安装。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-daemon-20261005/`，含专项/全量日志、兼容脚本与结果。主 AI 已审阅源码和实际 diff；独立审查代理上游 503 未给出结论，不计独立审查通过。当前源码/本地验收完成，Git 版本包、精确 head/main 检查与远程交付另记回执；下一独立项 N07-S02 尚未领取。
+- 18 个本轮文本 UTF-8 无 BOM、LF 快照哈希一致、73 个本地链接和 86 项无环任务依赖通过。固定 actionlint 1.7.12 / Gitleaks 8.30.1 归档重核仓库 SHA-256 后复用；全部 workflow actionlint 通过（未额外运行 ShellCheck），当前源码快照 Gitleaks 无检出。首次工具执行因临时 tmpfs 默认 noexec 被拒，改为仅一次性工具 tmpfs 可执行后通过，未修改仓库权限或门禁；失败日志保留。
+- 功能提交 `4892dd4f29897a0940a3676db02c72a6d63d64dc` 已推送、远程 SHA 一致，PR [#40](https://github.com/aiaimimi0920/SpringBok/pull/40)。该真实 Git revision 包 20 个源文件 / 79,703 字节，manifest SHA-256 `efde956dea9aece7aa1155f91e35d614bff9deeda1c2ce586798166448799287`；逐文件与源码一致，非 root 双角色安装/重装、version 及常驻 CLI/安全退出实测通过。Gitleaks 完整 77 commits 无检出。
+- N07-S01 的限定源码、本地验收与提交推送完成；本次仅同步状态，不开始 N07-S02。精确最终 PR head 的审阅/适用 checks、正常合并、main push 检查与固定 main 包在 PR 最终回执记录，不在提交中自嵌套 SHA 或预报成功。N07 父项保持部分实现，系统服务、真实部署和业务验收仍未完成。
+
+### 7.12 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

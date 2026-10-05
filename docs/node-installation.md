@@ -2,6 +2,11 @@
 
 本项接续 [执行架构](execution-architecture.md)、[角色凭据](node-credentials.md) 和 [认证控制通道](node-channel.md)。总进度见 [开发计划](development-plan.md)。这是仅依赖预装 Node.js 22+ 的 Linux 非 root 控制客户端，不是完整业务执行环境或自动远程安装器。
 
+> N07-S01 更新：下文 17 文件、单次运行和验收数字保留为 N06-S01 的历史事实。
+> 当前新包已显式改为 `springbok-control-node/v2`，20 个固定源文件，增加前台常驻 CLI。
+> 旧 v1 安装继续使用自身旧代码；新安装器拒绝旧包和覆盖旧安装，不迁移或清空 state。
+> 当前入口、兼容及验收边界见 [常驻客户端](node-daemon.md)，系统服务/开机启动仍未完成。
+
 ## 包、可信引导与版本
 
 在可信审阅的 Git checkout 中构建本地开发包，输出目录必须尚不存在：

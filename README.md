@@ -26,6 +26,11 @@ N07-S01 在 v2 包中增加前台常驻入口，N07-S02 增加显式 systemd 用
 [常驻命令、错误分类与旧包保留边界](docs/node-daemon.md)
 [角色心跳、阈值、重送与 schema 兼容](docs/node-heartbeat.md)
 
+产品计划 M01 增加独立普通用户 Linux CPU 采集入口 `node scripts/node-cpu.mjs`，
+按固定 30 秒最小间隔读取 `/proc/stat`，输出整体百分比、逻辑核数、实际窗口和未知/失败状态。
+它不联网、不读取凭据、不升级 v3 包，尚未装配成已部署监控角色。
+[CPU 口径、宿主边界与真实工具对照](docs/cpu-collection.md)
+
 ## M14：基线与候选发布差异
 
 同一配置检查页可额外选择基线JSON，对比镜像、双环境目标、端口、卷和密钥引用，

@@ -29,6 +29,8 @@ jobs:
           cmp "$node" "$RUNNER_TEMP/springbok-node/node"
           echo "$RUNNER_TEMP/springbok-node" >> "$GITHUB_PATH"
       - run: node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
+      - name: Compare normal-user CPU sampling with procps top in idle and bounded-load windows
+        run: node scripts/ci/cpu-native.mjs
       - run: node scripts/lab.mjs
       - name: Read the immutable M6 source certificate
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, readFileSync, chmodSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, readFileSync, openSync, fchmodSync, fstatSync, closeSync, constants } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { adminFixture, origin } from '../cloud/admin-fixture.mjs';
@@ -34,9 +34,13 @@ try {
   async function saveGrant(row, name) {
     await row.getByRole('button', { name: '准备一次性加入', exact: true }).click(); await page.locator('#enrollment-dialog').waitFor();
     const downloadEvent = page.waitForEvent('download'); await page.locator('#enrollment-download').click();
-    const download = await downloadEvent, path = join(directory, name); await download.saveAs(path); chmodSync(path, 0o600);
-    assert.equal(statSync(path).mode & 0o077, 0);
-    const grant = JSON.parse(readFileSync(path, 'utf8')); assert.equal(grant.origin, origin); assert.equal(grant.nodeId, await row.getAttribute('data-server-id'));
+    const download = await downloadEvent, path = join(directory, name); await download.saveAs(path);
+    const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW); let grant;
+    try {
+      fchmodSync(fd, 0o600); const stat = fstatSync(fd); assert.ok(stat.isFile()); assert.equal(stat.mode & 0o077, 0);
+      grant = JSON.parse(readFileSync(fd, 'utf8'));
+    } finally { closeSync(fd); }
+    assert.equal(grant.origin, origin); assert.equal(grant.nodeId, await row.getAttribute('data-server-id'));
     await page.locator('#enrollment-confirm-saved').check(); return grant;
   }
   async function waitHeld() {
@@ -56,7 +60,7 @@ try {
   // 真实 Linux journal + Node 客户端 + workerd/SQLite，目录收尾故障可由显式管理员核对恢复。
   let nodeRequests = 0;
   const fetcher = (url, init) => { nodeRequests++; return f.mf.dispatchFetch(url, init); };
-  client = openEnrollmentClient({ directory: join(directory, 'node-a'), grant, fetcher });
+  client = openEnrollmentClient({ directory: join(directory, 'node-a'), grant, expectedOrigin: origin, fetcher });
   const joined = await client.step(); assert.equal(joined.directoryState, 'uncertain');
   await a.getByRole('button', { name: '核对加入状态', exact: true }).click(); await page.getByText(/节点 joined/).waitFor();
   assert.equal(posts('/api/admin/enrollments/reconcile'), 0);
@@ -64,7 +68,7 @@ try {
   await a.getByText(/已完成加入登记（不代表在线或部署就绪）/).waitFor(); assert.equal(posts('/api/admin/enrollments/reconcile'), 1);
   assert.equal(await a.getByRole('button', { name: '保存名称', exact: true }).count(), 0);
   const active = await client.step(); assert.equal(active.directoryState, 'active'); assert.equal(active.requestId, joined.requestId);
-  client.close(); client = openEnrollmentClient({ directory: join(directory, 'node-a'), grant, fetcher });
+  client.close(); client = openEnrollmentClient({ directory: join(directory, 'node-a'), grant, expectedOrigin: origin, fetcher });
   const before = nodeRequests; assert.equal((await client.step()).directoryState, 'active'); assert.equal(nodeRequests, before);
   await f.restart(); await page.reload(); await waitReady(); await a.getByText(/已完成加入登记/).waitFor();
   const b = await create('丢响应节点 B'); await saveGrant(b, 'grant-b.json'); loseAuthorize = true;

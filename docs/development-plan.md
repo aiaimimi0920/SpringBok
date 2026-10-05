@@ -351,6 +351,8 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-enrollment-20261005/`；`snapshot/.tmp/linux-unit-final.log`、`linux-cloud-final.log`、`linux-browser-complete.log` 和 `test-results/`。依赖/lockfile 不变；Linux 复用相同锁定依赖的只读安装，私有测试状态放 tmpfs，源码按 LF 哈希核对。工具、文档/编码和精确提交/远程检查结果按 PR 回执记录，不能预报未完成 CI。
 - 功能提交 `5c6f9b71185177cae0958566184d89707ce60902` 已推送，远程分支 SHA 核对一致；本次进度更新另作 scoped 文档提交，不重写历史。25 个变更文件 UTF-8 无 BOM/LF 快照哈希匹配；28 个本地链接、82 个唯一任务和无环依赖检查通过。actionlint 1.7.12/Gitleaks 8.30.1 按仓库固定归档 SHA-256 重新下载验证；全部 workflow 的 actionlint 语法检查通过，未额外执行 ShellCheck；精确提交 Gitleaks/CI 另记 PR 回执。
 - 下一最小步骤是审阅精确 PR head、正常合并并复核 main；完成后领取 N03，再推进 N01-S02。V01/V02/V03 保持未完成，整体目标仍 active，不缩小为只交付 N02。尚未产生的 PR/main 结果不提前宣称通过。
+- PR [#36](https://github.com/aiaimimi0920/SpringBok/pull/36) 初始 head `62332bdd0336b4e877ed47fdcd10349369517324` 六 workflow 执行成功，但 CodeQL finding check 有 4 个新增告警。下载并校验完整 SARIF 后，修复浏览器测试路径 TOCTOU，并补独立 `expectedOrigin` 信任锚，拒绝篡改加入材料把 challenge 发往其他 HTTPS origin；比对在目录/秘密/journal/网络之前完成。新增零写入/零请求与 redirect 拒绝测试；这属于 N02 内修复，追加提交而非改写历史。具体审阅和剩余协议所需数据流见专题文档，不绕过保护或隐藏告警，不预报最新 CI 结果。
+- 追加修复验证：Windows 再次 8/8；Linux 加入聚焦 6/6、Chrome 加入场景再次通过；日志 `linux-enrollment-pinned-origin.log`、`linux-enrollment-browser-descriptor.log`。独立增量审阅确认固定 origin 缺口闭环；29 个本地链接/82 项依赖通过。首轮全量日志保留，最新 head 的完整 CI 和 advisory 明细另记 PR 回执，不把 scanner 运行成功当作零告警。
 
 ### 7.8 后续交接记录模板
 

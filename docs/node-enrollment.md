@@ -71,10 +71,12 @@ finalize：revision + 1，pendingEnrollmentCount - 1
 入口是 `scripts/node-join.mjs`，不是常驻 Agent 或安装器。以下只是获准测试环境的接口说明，不是执行真实服务器安装的授权：
 
 ```text
-node scripts/node-join.mjs --grant <private-0600-file> --state <private-directory>
+node scripts/node-join.mjs --grant <private-0600-file> --state <private-directory> --expected-origin <independently-confirmed-https-origin>
 ```
 
 grant 必须是 Linux 同 uid 的私有普通文件，拒绝 symlink、超过 4096 字节或含额外字段。状态目录需要同 uid、0700 私有权限，已有 ledger 必须私有且不是 symlink。复用 `openJournal` 的独占锁、原子写入和 fsync；发送前落盘 prepared。父路径和主机本身仍须可信，不宣称抵御恶意管理员或所有本地文件竞争攻击。
+
+`expectedOrigin` 必须从管理员独立确认的控制面地址取得，不能自动读取 grant.origin 充当独立验证。两者必须严格匹配规范 HTTPS origin，拒绝 userinfo、路径、query、fragment 和未确认目标；在创建目录/journal、生成秘密或 fetch 前完成检查。请求 URL 从固定 expectedOrigin 构造，redirect 为 error。这个固定目标检查不是 grant 签名，也不能替代可信控制面、可信主机和正确材料交接。
 
 本地 journal 包含两个真实角色秘密，应按凭据保护并保留；云端只有摘要。CLI 成功/失败仅输出脱敏状态与固定错误，不输出 challenge、token、digest、JWT 或任意上游错误。已保存 active 回执的本地重复运行不发网络请求。失败时保留同一 grant/state；不得删除 journal 强行重试。节点凭据读取/认证、轮换、撤销、常驻和心跳在后续任务实现。
 
@@ -96,5 +98,17 @@ grant 必须是 Linux 同 uid 的私有普通文件，拒绝 symlink、超过 40
 第一轮新浏览器脚本错误地等待 `prepared`，而生产节点状态契约是 `pending`；只修测试期望后通过。旧浏览器回归的泛用 `dialog` locator 因新增第二个对话框产生 strict-mode 错误；改成精确定位 `confirm`，未削弱取消/确认断言。原失败日志保留。
 
 独立只读审查发现原实现没有为 finalize 保留容量，已修并通过实际临界测试；增量核验未发现新可证实阻断。独立审查不代替运行验证，也不等于未来 PR head 审阅。UTF-8/文档链接/任务依赖、actionlint、精确提交 Gitleaks、PR/main CI 与远程 SHA 按本项交付流程记录。
+
+### PR CodeQL 的后置发现与处置
+
+PR #36 首次 head `62332bdd0336b4e877ed47fdcd10349369517324` 六个 workflow 执行成功，但 GitHub CodeQL finding check 另报 4 条新增告警（1 high、3 medium），未当作安全无问题直接合并。完整 JavaScript SARIF artifact `11334149735` 下载并验证 ZIP SHA-256 `cd20f585018ae125f8cfde9dbc86ce6cc912d6662834d601801ff8fbb718f782`，与本机 `codeql-62332bd/javascript.sarif` 对应。
+
+- `js/file-system-race`：新浏览器测试按路径 stat 后重新读取，已改 `O_NOFOLLOW` 加同 descriptor 的 fchmod/fstat/read，直接消除检查/使用对象不同的窗口。
+- `js/file-access-to-http` 三条：grant 文件数据分别进入 URL、Authorization 和 body。审阅发现“只有 grant 自报 origin”的真实信任缺口，已补强制独立 expectedOrigin 和零写入/零请求拒绝回归；不能把私有文件权限当作材料来源认证。
+- challenge 和登记身份发往正确控制面是一次性加入协议所需；execute/observe 原始秘密不发出，仅提交摘要。即使目标固定，这种刻意数据流仍可能产生 advisory 告警。必须按具体 SARIF 和代码审阅记录剩余项，不能删除查询、加 blanket suppression、改门禁、自动 dismiss 或声称零漏洞。
+
+仓库 [.github/DEVELOPMENT_SECURITY.md](../.github/DEVELOPMENT_SECURITY.md) 明确 findings 为 advisory，但扫描、覆盖、解析及上传错误仍失败关闭。追加修复的实际聚焦测试、精确 head 审阅、最新 SARIF 和 main 检查以 PR 后续回执为准，首轮成功日志不冒充修复后全量复验。
+
+追加修复实际验证：Windows 聚焦再次 8/8；Linux 加入聚焦 6/6，0 失败/跳过（`snapshot/.tmp/linux-enrollment-pinned-origin.log`）；新 Chrome 加入场景再次通过（`linux-enrollment-browser-descriptor.log`）。重定向证据是注入 fetcher 的 `redirect:error` 参数及模拟 307 回执拒绝，不是实际跨站服务器实验。独立只读增量审查确认 origin 缺口闭环、未发现新阻断；最终提交和最新扫描仍按精确 SHA 复核。
 
 未验证：真实 Cloudflare/Access、真实服务器安装或加入、多机网络、运行资源限额、凭据角色认证和业务部署。没有创建云资源、配置真实凭据、执行生产迁移或远程安装，没有选择付费方案或许可。后续安全本地子任务是 N03，随后 N01-S02；总计划仍未全部完成。

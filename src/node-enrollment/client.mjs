@@ -8,10 +8,10 @@ import { isUuid } from '../../cloud/catalog-contract.mjs';
 import { isDigest, requireEnrollment } from '../../cloud/enrollment-contract.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
-export function enrollmentGrant(value) {
+export function enrollmentGrant(value, expectedOrigin) {
   exact(value, ['protocolVersion', 'origin', 'ownerId', 'nodeId', 'enrollmentId', 'challenge']);
-  const context = nodeContext({ ownerId: value.ownerId, nodeId: value.nodeId }), url = new URL(value.origin);
-  requireEnrollment(value.protocolVersion === 2 && url.protocol === 'https:' && url.origin === value.origin && !url.username && !url.password && isUuid(value.enrollmentId) && isDigest(value.challenge));
+  const context = nodeContext({ ownerId: value.ownerId, nodeId: value.nodeId }), url = new URL(expectedOrigin);
+  requireEnrollment(typeof expectedOrigin === 'string' && url.protocol === 'https:' && url.origin === expectedOrigin && !url.username && !url.password && value.origin === expectedOrigin && value.protocolVersion === 2 && isUuid(value.enrollmentId) && isDigest(value.challenge));
   return { protocolVersion: 2, origin: value.origin, ...context, enrollmentId: value.enrollmentId, challenge: value.challenge };
 }
 function privateDirectory(directory) {
@@ -45,8 +45,9 @@ function project(events, grant) {
   }
   return { prepared, receipt };
 }
-export function openEnrollmentClient({ directory, grant: value, fetcher = fetch }) {
-  const grant = enrollmentGrant(value); privateDirectory(directory);
+export function openEnrollmentClient({ directory, grant: value, expectedOrigin, fetcher = fetch }) {
+  // 固定地址必须独立于 grant 确认；比对发生在创建日志、生成秘密或联网之前。
+  const grant = enrollmentGrant(value, expectedOrigin); privateDirectory(directory);
   const journal = openJournal(directory, hash(JSON.stringify(['node-enrollment/v2', grant])), events => project(events, grant));
   let busy = false;
   const summary = () => {
@@ -67,7 +68,7 @@ export function openEnrollmentClient({ directory, grant: value, fetcher = fetch 
           state = project(journal.read(), grant);
         }
         const input = { protocolVersion: 2, enrollmentId: grant.enrollmentId, requestId: state.prepared.requestId, executeDigest: hash(state.prepared.executeToken), observeDigest: hash(state.prepared.observeToken) };
-        const response = await fetcher(`${grant.origin}/node/v2/join/${grant.ownerId}/${grant.nodeId}`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000), headers: { authorization: `Bearer ${grant.challenge}`, 'content-type': 'application/json' }, body: JSON.stringify(input) });
+        const response = await fetcher(`${expectedOrigin}/node/v2/join/${grant.ownerId}/${grant.nodeId}`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000), headers: { authorization: `Bearer ${grant.challenge}`, 'content-type': 'application/json' }, body: JSON.stringify(input) });
         if (![200, 202].includes(response.status)) { await response.body?.cancel(); throw new Error('join denied or uncertain; preserve original grant and credentials'); }
         const reader = response.body.getReader(), chunks = []; let size = 0;
         try {

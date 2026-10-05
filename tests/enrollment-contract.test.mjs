@@ -14,8 +14,9 @@ test('one-time join challenge is independent, context-bound and exact-schema onl
   assert.deepEqual(enrollmentStart(input), input);
   for (const extra of [{ ownerId: context.ownerId }, { challenge: secret }, { action: 'deploy' }, { revision: -1 }, { serverId: 'pc2-test' }]) assert.throws(() => enrollmentStart({ ...input, ...extra }));
   const grant = { protocolVersion: 2, origin: 'https://control.example.invalid', ...context, enrollmentId: id, challenge: secret };
-  assert.deepEqual(enrollmentGrant(grant), grant);
-  for (const extra of [{ origin: 'http://control.example.invalid' }, { origin: 'https://user:password@control.example.invalid' }, { ownerId: 'client-owner' }, { protocolVersion: 1 }, { nodeId: 'pc2-test' }, { executeToken: secret }]) assert.throws(() => enrollmentGrant({ ...grant, ...extra }));
+  assert.deepEqual(enrollmentGrant(grant, 'https://control.example.invalid'), grant);
+  for (const extra of [{ origin: 'http://control.example.invalid' }, { origin: 'https://user:password@control.example.invalid' }, { origin: 'https://attacker.example.invalid' }, { ownerId: 'client-owner' }, { protocolVersion: 1 }, { nodeId: 'pc2-test' }, { executeToken: secret }]) assert.throws(() => enrollmentGrant({ ...grant, ...extra }, 'https://control.example.invalid'));
+  for (const expected of [undefined, 'https://attacker.example.invalid', 'http://control.example.invalid', 'https://control.example.invalid/', 'https://user:password@control.example.invalid', 'https://control.example.invalid?secret=1']) assert.throws(() => enrollmentGrant(grant, expected));
 });
 
 test('prepared/joined records strictly preserve the ten-minute bound and separate role fingerprints', () => {

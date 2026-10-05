@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { mkdtempSync, rmSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { adminFixture, origin } from './admin-fixture.mjs';
@@ -107,7 +107,8 @@ test('every cross-DO interruption and lost acknowledgement recovers only the ori
       await f.restart();
       assert.equal((await f.call('/api/admin/enrollments/reconcile', { ...access, body: { serverId: target.id, enrollmentId: grant.enrollmentId } })).status, 200);
       let drop = stage === 'lost-response', sent;
-      client = openEnrollmentClient({ directory: join(dir, 'node'), grant, fetcher: async (url, init) => {
+      client = openEnrollmentClient({ directory: join(dir, 'node'), grant, expectedOrigin: origin, fetcher: async (url, init) => {
+        assert.equal(init.redirect, 'error');
         sent = JSON.parse(init.body); const response = await f.mf.dispatchFetch(url, init);
         if (drop) { drop = false; await response.body.cancel(); throw new Error('lost ack'); } return response;
       } });
@@ -116,7 +117,7 @@ test('every cross-DO interruption and lost acknowledgement recovers only the ori
       const prior = client.snapshot(), stored = JSON.parse(readFileSync(join(dir, 'node/ledger.json'), 'utf8')).events[0];
       assert.equal(statSync(join(dir, 'node/ledger.json')).mode & 0o077, 0);
       client.close(); client = null; await f.restart();
-      client = openEnrollmentClient({ directory: join(dir, 'node'), grant, fetcher: (url, init) => f.mf.dispatchFetch(url, init) });
+      client = openEnrollmentClient({ directory: join(dir, 'node'), grant, expectedOrigin: origin, fetcher: (url, init) => f.mf.dispatchFetch(url, init) });
       const result = await client.step(); assert.equal(result.directoryState, 'active');
       assert.equal(result.requestId, prior.requestId); assert.equal(result.executeDigest, prior.executeDigest); assert.equal(result.observeDigest, prior.observeDigest);
       assert.notEqual(sent.executeDigest, sent.observeDigest);
@@ -125,6 +126,25 @@ test('every cross-DO interruption and lost acknowledgement recovers only the ori
       assert.equal((await f.call(`/api/admin/enrollments/${target.id}`, access)).json().node.status, 'joined');
     } finally { client?.close(); await f.close(); rmSync(dir, { recursive: true, force: true }); }
   }
+});
+
+test('independently pinned control origin rejects tampered grants before writes and never accepts redirects', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'springbok-pinned-join-')), directory = join(dir, 'node'); let requests = 0, client;
+  const grant = { protocolVersion: 2, origin, ownerId: 'a'.repeat(64), nodeId: randomUUID(), enrollmentId: randomUUID(), challenge: randomBytes(32).toString('hex') };
+  const fetcher = () => { requests++; throw new Error('must not fetch'); };
+  try {
+    for (const expectedOrigin of [undefined, 'http://admin.example.invalid', `${origin}/`, 'https://user:password@admin.example.invalid', 'https://attacker.example.invalid']) {
+      assert.throws(() => openEnrollmentClient({ directory, grant, expectedOrigin, fetcher }));
+      assert.equal(existsSync(directory), false); assert.equal(requests, 0);
+    }
+    assert.throws(() => openEnrollmentClient({ directory, grant: { ...grant, origin: 'https://attacker.example.invalid' }, expectedOrigin: origin, fetcher }));
+    assert.equal(existsSync(directory), false); assert.equal(requests, 0);
+    client = openEnrollmentClient({ directory, grant, expectedOrigin: origin, fetcher: (url, init) => {
+      requests++; assert.equal(new URL(url).origin, origin); assert.equal(init.redirect, 'error');
+      return new Response(null, { status: 307, headers: { location: 'https://attacker.example.invalid' } });
+    } });
+    await assert.rejects(client.step()); assert.equal(requests, 1); assert.equal(client.snapshot().directoryState, 'unconfirmed');
+  } finally { client?.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('expired capability and corrupt/missing/future enrollment storage fail closed without clearing evidence', async () => {

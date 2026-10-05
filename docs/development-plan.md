@@ -117,7 +117,7 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N04 | 节点凭据轮换 | 待开发 | 当前无轮换流程 | 有界切换窗口、旧凭据失效、在途任务不重复执行、全链路不回显秘密 | N03 |
 | N05 | 节点撤销接入 | 待开发 | 当前无撤销流程 | 撤销后不能领取新任务；保留历史/未知证据，不隐式卸载或删除业务数据 | N03/C09 |
 | N06 | 执行端可重复安装包/引导 | 部分实现 | 控制客户端见 N06-S01；执行依赖装配见 N06-S02；E07 保留 | 非特权角色安装与完整执行依赖分开验收；不覆盖现有服务，不将控制 probe 当业务执行环境 | ARC-01/N03 |
-| N06-S01 | 固定版本控制客户端包与非特权单角色安装 | 已实现 | [实现与验收](node-installation.md)；负责人：主 AI；交付见第 7.10 节 | 固定清单/摘要、私有安装、不覆盖/半完成恢复、不同 Linux uid 隔离、安装后 CLI/workerd 控制 probe 已验；精确提交/PR/main 结果按回执 | ARC-01/N03/N01-S02 |
+| N06-S01 | 固定版本控制客户端包与非特权单角色安装 | 已完成 | [实现与验收](node-installation.md)；负责人：主 AI；PR #39，交付见第 7.10 节 | 固定清单/摘要、私有安装、不覆盖/半完成恢复、不同 Linux uid 隔离、安装后 CLI/workerd 控制 probe 已验并提交推送；PR/main 最终状态按回执 | ARC-01/N03/N01-S02 |
 | N06-S02 | 隔离执行依赖安装与真实测试机装配 | 待开发 | E07；[执行架构](execution-architecture.md) | 明确依赖许可/来源与容量，在获准独立 rootless 环境装配 Core/Mongo/Periphery 并验收；不由 S01 提前完成 | N06-S01 |
 | N07 | 常驻运行与开机启动 | 待开发 | `scripts/node-probe.mjs`、`node-fixture.mjs` 只执行一次 | 先在 N06-S01 控制客户端上实现有界轮询/退避、单实例锁、退出与重启；业务执行仍受 N06-S02 限制 | N06-S01 |
 | N08 | 节点心跳与离线判定 | 待开发 | E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
@@ -400,6 +400,8 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-install-20261005/`，失败与最终日志分开保留。独立审查代理返回上游 503 未产出结论，不算独立审查通过；主 AI 负责实际源码和精确 diff 审阅。工具、编码/链接、精确构建包和 PR/main 检查按交付回执记录，不预报尚未完成结果。
 - 当前为源码/本地验收完成，交付待本项 scoped commit/push、精确 head CI/正常合并/main 复核；下一独立功能 N07 尚未领取。N06-S02/真实 Cloudflare/多机/业务部署保持未完成，不将单角色控制安装当整体开发计划完成。
 - 功能提交 `d5a3365ad3aee448f380b5b9941ff5980e435d13` 已推送且远程 SHA 一致，PR [#39](https://github.com/aiaimimi0920/SpringBok/pull/39)；真实 Git revision 包 17 文件/72,682 字节，manifest SHA-256 `56f7abd214aa6ea715fbc36228efadbd39223c249deb5ad97bdc42e6f69088bc`，非 root 安装/重装/版本入口实测通过。初轮 CodeQL finding check 有两条测试快照 TOCTOU，已按同一 descriptor 改正并增强 inode/device 保留断言，追加本任务修复而非 suppress 或重写历史；最终检查另核。
+- TOCTOU 修复 `16beae82c18d4f004bf86af73d38aa35969fb484` 已推送、远程 SHA 一致，聚焦 7/7 再次通过。Windows 聚焦 9/9；15 个文本 UTF-8 无 BOM、62 个本地链接与 84 项无环依赖通过。actionlint 1.7.12/Gitleaks 8.30.1 归档按仓库固定 SHA-256 重新下载校验；全部 workflow actionlint 语法通过（未额外运行 ShellCheck），Gitleaks 完整 75 commits 无检出。CodeQL 初轮 ZIP 摘要已核对并读取相关 SARIF；保留历史告警，不把报告执行成功当零漏洞。
+- N06-S01 的限定源码/本地验收与提交推送完成；本次仅同步交付状态，不开始 N07。PR 精确最终 head、全部适用 checks、正常合并及 main 的 SHA/运行结果写入 PR 最终回执，不在提交中自嵌套 SHA 或预报未完成的检查。
 
 ### 7.11 后续交接记录模板
 

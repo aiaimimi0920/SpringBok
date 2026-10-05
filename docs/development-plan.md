@@ -161,9 +161,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | ID | 独立功能/交付 | 状态 | 现有证据 / 责任入口 | 验收条件或下一缺口 | 依赖 |
 | --- | --- | --- | --- | --- | --- |
 | M01 | CPU 使用率采集 | 已完成 | [采集与验收](cpu-collection.md)；负责人：主 AI；第 7.14 节 | 独立普通用户 CLI、30 秒最小间隔、BigInt 差分与未知/失败、真实 top 空闲/有界负载对照已验收；本地/CI 与提交交付按本项回执，不代表已安装监控或用户宿主验收 | N07 |
-| M02 | 内存用量采集与产品接入 | 进行中 | 拆分见 M02-S01/M02-S02；负责人：主 AI | 先验收可独立运行的采集器，再完成版本化上报和只读展示；两项未全交付不关闭父项，容器限额与宿主口径不混淆 | N07 |
+| M02 | 内存用量采集与产品接入 | 已完成 | M02-S01/M02-S02；第 7.16/7.17 节；负责人：主 AI | 限定采集→版本化上报→独立 latest→只读小详情源码/验收闭环；精确 Git 交付以本项回执为准，真实宿主/Cloudflare 与 M07 完整总览仍开放 | N07 |
 | M02-S01 | 普通用户只读内存采集器与原生对照 | 已完成 | [采集与验收](memory-collection.md)；第 7.16 节；负责人：主 AI | 限定源码与本地验收闭环；提交/PR/main 最终交付按本项回执，真实宿主和 M02-S02 上报/展示仍开放 | N07 |
-| M02-S02 | 内存指标版本化上报与只读小详情 | 待开发 | 复用 M06；必须先审阅混合版本兼容设计 | 新 observe 包采集→鉴权上报→独立 latest→只读小详情；旧 CPU 客户端/快照/安装保留，未上报不显示 0；不冒充 M07 完整总览 | M02-S01/M06 |
+| M02-S02 | 内存指标版本化上报与只读小详情 | 已完成 | [版本化指标](node-telemetry.md)；第 7.17 节；负责人：主 AI | 新 v5 observe 包采集→鉴权上报→独立 latest→只读小详情；旧 v4 CPU 客户端/快照/安装保留，未上报不显示 0；精确 Git 交付按回执，不冒充 M07 完整总览 | M02-S01/M06 |
 | M03 | 磁盘容量采集 | 待开发 | 当前无磁盘采集器 | 明确挂载点、总量/可用/使用率，过滤伪文件系统；不能为测量写满或清理磁盘 | N07 |
 | M04 | 网络吞吐采集 | 待开发 | 当前无网络采集器 | 网卡累计计数差分、单位、重启/计数回绕处理；不抓取业务内容 | N07 |
 | M05 | 主机基础信息与运行时间 | 待开发 | N09 预检查可复用 | OS/架构/内核/运行时间/版本与时间戳；仅采集必要元数据，不上传完整环境变量 | N09 |
@@ -502,7 +502,26 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 本地失败保留：最初快照 helper 漏转换无常规扩展名的 Dockerfile，三项历史 hash 断言失败；仅修正临时快照生成，旧证据/测试不改，最终 233/233。首次 scanner 的 tmpfs 禁止执行而退出 126；仅允许临时校验工具所在 tmpfs 执行，源码挂载仍只读/普通用户/无网络。固定 actionlint 1.7.12/Gitleaks 8.30.1 归档 SHA 重新匹配仓库后运行通过，无 secret 检出；本地没有额外 ShellCheck/Pyflakes。
 - 独立只读审查未发现确定阻断问题；按反馈明确探针说明、补合法墙钟回退回归及参考进程退出 deadline，不把静态阅读当独立执行通过。10 个改动文本 UTF-8 无 BOM/匹配 LF 快照、本地链接和 88 项无环依赖验证通过。Git 交付立即按本项 scoped commit/push 和 PR/main 流程推进，精确 SHA/回执不循环 amend；下一项 M02-S02 尚未领取。
 
-### 7.17 后续交接记录模板
+### 7.17 M02-S02 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `202d658ad066aa0d6d5ed8e27bc2f0ce0403518e`；分支 `feat/memory-telemetry-20261005`。领取前本地/远程 main 一致、工作区干净；上一目标回合已完成 M02-S01 scoped 交付，不是无进展等待。
+- M02-S01 功能提交 `2f8eaf16cb9ea655d6fefc8e880402f4095b488b`、PR [#45](https://github.com/aiaimimi0920/SpringBok/pull/45) 已合并；最终 [回执](https://github.com/aiaimimi0920/SpringBok/pull/45#issuecomment-6000802153) 已发布读回。main 6 条项目 push workflow/12 job 成功，233/233 契约、56/56 workerd、9 组 Chrome PASS；原生内存 CLI 相隔 30,033ms，free 可用量差异 4,972,544 bytes / 0 bytes。M02 父项仍进行中，旧 v4 包不包含新内存入口，不重做采集公式或把历史验收覆盖。
+- 范围：严格版本化 CPU+memory 上报/回执、SQLite meta1→2 同事务扩展及混合版本/保留式回退验证；observe client 消费 M02-S01、显式 v5 /26 文件固定包；目录行一次 GET 的独立 CPU/内存小详情与 unit/workerd/真实安装/browser 验收及文档。
+- 兼容设计：旧五字段 sample/latest 保持原形，不默认补 memory；新增 `sampleVersion: 2` 与固定 memory 的严格新形状，完整重送比较覆盖两指标和版本。旧 v4 客户端在新 Worker 可继续 CPU-only，上报缺内存显示“未上报”而非 0。首次成功持久接收新形状时，同事务把 telemetry meta.schema_version 1 升为 2；meta1 只读旧 latest，meta2 读旧/新 latest，绝不降回 1。DO name/binding/两张表/身份/任务不变，旧 Worker 不认识 meta2 时失败关闭，不清库假装回退成功；新版 reader 恢复后原数据仍可读。
+- 验收：严格 memory schema/status/null、安全 bytes/已用关系/BigInt 百分比；版本或 memory 改写不能重送成功；旧/新客户端及 SQLite 重启、升级前后故障、旧 reader 拒绝与数据保留；新 v5 实际双角色安装→workerd→admin GET，execute 无指标请求；单 GET 小详情的真 0、未上报、失败、局部未确认、陈旧/过期、迟到 owner/render 和 390px。CPU/内存局部异常不互相遮蔽或假绿。
+- 不做：新指标、M07 完整总览/M08 历史/告警、凭据 epoch/轮换/撤销、自动安装升级或清锁、schema 降级/删除、真实 Cloudflare/Access/用户服务器部署、资源采购。保留默认关闭、8KiB 路由、30 秒接收限频/90 秒 pending 丢弃、新鲜度以持久 receivedAt 判定，以及在途授权/真实 fetch ACK 的既有边界。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-memory-telemetry-20261005/`。本项完成后立即 scoped commit/push、精确 head 审阅和正常合并/main 核验；完成两子项才关闭 M02 限定开发范围，整体目标仍 active。
+
+本地实施与验收记录：
+
+- 已实现严格旧/新 sample/latest union，node protocolVersion 仍 2；完整 CPU/memory/version 重送与 ACK 校验。真实 SQLite meta1→2 与 state 同事务，写入途中故障回滚、deferred 不升级、重启/混合旧样本不降级、固定旧 reader read/start/sample/snapshot 拒绝且保留库、切回新版恢复和矛盾 schema 不修复均通过。DO/binding/两表与任务/心跳职责不变。
+- 固定 Linux Node.js 24.18.1/uid1000/只读 LF 快照：全量契约 237/237、workerd 58/58，无失败/跳过；最终邻近补强 22/22 聚焦通过。真实 v5 双角色安装→真实 CPU/内存→workerd/admin GET，第二次间隔 33,910ms、CPU 窗口 33,949ms，execute 指标请求 0，正常 SIGTERM 收尾、无任务 ledger、凭据/自有锁边界保持。
+- 真实 Chrome/workerd 专项通过：内存真 0/1 byte、GiB+精确 bytes、极大安全整数/100% 的 390px、旧未上报/失败/坏新版/未知版本、CPU/内存两向局部独立、首 render 每节点单 GET、共同过期/请求耗时/迟到不同两指标 render/owner、visibility/pagehide/BFCache；无 browser storage 或持久写入。截图与原日志保留。
+- 实际固定 Git `aca3397` 的 v4 /25 文件包完成自身双角色安装/daemon→新 Worker/重装/version，latest 仍五字段、meta1；v5 /26 文件拒绝旧包/覆盖，release/credential/markers/state/锁的 bytes/inode/device/mode/uid/mtime 全保持。不是随源码变化的旧 fixture；固定旧 reader 两文件反向还原 import 后校验原 SHA。
+- 两项只读静态审查未发现阻断问题，不计独立执行测试；采用反馈补 89,999ms/90,000ms 相邻 pending 边界、旧 reader 写入口拒绝、单 GET 和迟到 memory 区分力。固定 actionlint1.7.12/Gitleaks8.30.1 按归档 SHA 重新核对通过；不声称额外 ShellCheck/Pyflakes。首轮 ACK 单测 strict context 参数错误只修测试，原失败保留；workerd 重启 Broken pipe 诊断保留，不抹日志。
+- 两子项的限定源码与本地验收均完成；本项立即 scoped 提交推送/精确 head 审阅/正常合并/main 核对，最终精确 SHA、CI、安全扫描和 fresh Git v5 包以 PR 回执为准，不循环 amend。下一独立开发项 M03 磁盘采集，未在本项提前实施；真实部署和整体目标保持开放。
+
+### 7.18 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

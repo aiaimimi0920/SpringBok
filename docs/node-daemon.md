@@ -4,7 +4,7 @@
 
 ## 固定版本与运行入口
 
-N07-S01 当时的包是 `springbok-control-node/v2` / 20 个源文件；N08 的 v3 / 22 文件增加独立角色心跳，见 [心跳与兼容](node-heartbeat.md)。M06 当前新包为 v4 / 25 文件，observe 在同一只读角色进程中增加 CPU 采样/独立上报，详见 [指标协议、错误策略与兼容](node-telemetry.md)。协议仍是 node v2，安装记录仍是 `springbok-role-install/v1`；N07-S01 本身没有云端 schema 迁移。按可信引导流程安装后，以该安装的角色 uid 运行：
+N07-S01 当时的包是 `springbok-control-node/v2` / 20 个源文件；N08 的 v3 / 22 文件增加独立角色心跳，见 [心跳与兼容](node-heartbeat.md)。M06 的 v4 /25 文件在 observe 只读角色增加 CPU 采样/独立上报；M02-S02 当前包为 v5 /26 文件，pending 同时保存 CPU 和内存，重送不重新采样，详见 [指标协议、错误策略与兼容](node-telemetry.md)。协议仍是 node v2，安装记录仍是 `springbok-role-install/v1`；N07-S01 本身没有云端 schema 迁移。按可信引导流程安装后，以该安装的角色 uid 运行：
 
 ```text
 node <installation>/release/scripts/node-daemon.mjs --installation <installation>

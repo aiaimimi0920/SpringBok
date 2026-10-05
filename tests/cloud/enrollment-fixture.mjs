@@ -3,6 +3,7 @@ import { OwnerCatalog as Catalog } from '../../cloud/catalog-store.mjs';
 import { NodeMailbox as Mailbox } from '../../cloud/node-mailbox.mjs';
 import { OwnerCatalog as LegacyCatalog } from './catalog-v2-fixture.mjs';
 import { NodeMailbox as LegacyMailbox } from './node-mailbox-v1-fixture.mjs';
+import { NodeMailbox as Schema2Mailbox } from './node-mailbox-v2-fixture.mjs';
 import { nodeMailboxName } from '../../cloud/node-protocol.mjs';
 export { TargetMailbox };
 
@@ -16,7 +17,7 @@ function failOnce(object, stage) {
   throw new Error('injected enrollment interruption');
 }
 function inspect(object) {
-  return object.ctx.storage.sql.exec("SELECT name,sql FROM sqlite_master WHERE type='table' AND name IN ('catalog_meta','servers','catalog_requests','services','server_enrollments','node_meta','node_ledger','node_enrollment') ORDER BY name").toArray().map(table => ({ ...table, rows: object.ctx.storage.sql.exec(`SELECT * FROM ${table.name}`).toArray() }));
+  return object.ctx.storage.sql.exec("SELECT name,sql FROM sqlite_master WHERE type='table' AND name IN ('catalog_meta','servers','catalog_requests','services','server_enrollments','node_meta','node_ledger','node_enrollment','node_heartbeat') ORDER BY name").toArray().map(table => ({ ...table, rows: object.ctx.storage.sql.exec(`SELECT * FROM ${table.name}`).toArray() }));
 }
 export class OwnerCatalog extends Catalog {
   prepareEnrollment(owner, value) { const result = super.prepareEnrollment(owner, value); failOnce(this, 'catalog-prepare-after'); return result; }
@@ -45,11 +46,20 @@ export class NodeMailbox extends Mailbox {
   async joinEnrollment(context, challenge, value) { const result = await super.joinEnrollment(context, challenge, value); failOnce(this, 'node-join-after'); return result; }
   inspect() { return inspect(this); }
   legacySnapshot(context) { return new LegacyMailbox(this.ctx, this.env).snapshot(context); }
-  damage(kind) {
+  schema2Identity(...args) { return new Schema2Mailbox(this.ctx, this.env).credentialIdentity(...args); }
+  damage(kind, role, age) {
     const sql = this.ctx.storage.sql;
     if (kind === 'table') sql.exec('DROP TABLE node_enrollment');
     else if (kind === 'version') sql.exec('UPDATE node_meta SET schema_version=99');
     else if (kind === 'record') sql.exec("UPDATE node_enrollment SET state='{}'");
+    else if (kind === 'heartbeat-table') sql.exec('DROP TABLE node_heartbeat');
+    else if (kind === 'heartbeat-record') sql.exec("UPDATE node_heartbeat SET state='{}'");
+    else if (kind === 'heartbeat-age') {
+      if (!['execute', 'observe'].includes(role) || !Number.isSafeInteger(age) || age < 0) throw new Error('invalid age');
+      const state = JSON.parse(sql.exec('SELECT state FROM node_heartbeat').one().state);
+      state[role].latest.receivedAt = Date.now() - age; state[role].startedAt = state[role].latest.receivedAt;
+      sql.exec('UPDATE node_heartbeat SET state=?', JSON.stringify(state));
+    }
     else if (kind === 'probe-expire') {
       const ledger = JSON.parse(sql.exec('SELECT state FROM node_ledger').one().state);
       for (const job of ledger.jobs) job.expiresAt = 0;
@@ -68,7 +78,7 @@ export default { async fetch(request, env) {
   if (new URL(request.url).pathname !== '/__enrollment_fixture') return worker.fetch(request, env);
   try {
     const { resource, context, operation, args = [] } = await request.json();
-    if (!['inspect', 'legacySnapshot', 'snapshot', 'submitProbe', 'pollProbe', 'damage', 'fillToRevision', 'credentialIdentity', 'credentialProbe', 'adminProbe'].includes(operation)) throw new Error('unknown test method');
+    if (!['inspect', 'legacySnapshot', 'snapshot', 'submitProbe', 'pollProbe', 'damage', 'fillToRevision', 'credentialIdentity', 'credentialProbe', 'adminProbe', 'schema2Identity'].includes(operation)) throw new Error('unknown test method');
     const namespace = resource === 'catalog' ? env.REGISTRY : env.NODES;
     const name = resource === 'catalog' ? `catalog/v1/${context.ownerId}` : nodeMailboxName(context);
     return Response.json(await namespace.get(namespace.idFromName(name))[operation](...args));

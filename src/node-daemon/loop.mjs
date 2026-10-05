@@ -11,8 +11,8 @@ export function pollDelay(failures, random = Math.random) {
   const base = MIN_POLL_MS * 2 ** Math.min(Math.max(failures - 1, 0), 4);
   return Math.min(MAX_BACKOFF_MS, Math.floor(base * (1 + sample * 0.2)));
 }
-export async function runNodeLoop({ step, signal, onEvent = () => {}, random = Math.random, wait = (ms, abort) => delay(ms, undefined, { signal: abort }) }) {
-  let failures = 0, previous;
+export async function runNodeLoop({ step, heartbeat, signal, onEvent = () => {}, random = Math.random, wait = (ms, abort) => delay(ms, undefined, { signal: abort }) }) {
+  let failures = 0, previous, previousHeartbeat;
   function emit(status) {
     if (status !== previous) { onEvent({ event: 'status', status, executionReady: false }); previous = status; }
   }
@@ -26,6 +26,13 @@ export async function runNodeLoop({ step, signal, onEvent = () => {}, random = M
       if (!(error instanceof RetryableNodeError)) throw error;
       if (signal.aborted) break;
       failures = Math.min(failures + 1, 5); emit('retrying');
+    }
+    // 执行状态与心跳传输分开；已落盘的 result/ack 不因心跳丢包而再次执行。
+    if (!signal.aborted && heartbeat) {
+      let status;
+      try { status = await heartbeat(); if (!['recorded', 'deferred', undefined].includes(status)) throw new Error('invalid heartbeat status'); }
+      catch (error) { if (!(error instanceof RetryableNodeError)) throw error; status = 'unavailable'; }
+      if (status && status !== previousHeartbeat) { onEvent({ event: 'heartbeat', status, executionReady: false }); previousHeartbeat = status; }
     }
     if (signal.aborted) break;
     const milliseconds = pollDelay(failures, random);

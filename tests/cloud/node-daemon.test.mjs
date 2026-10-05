@@ -12,7 +12,7 @@ import { startDaemon } from '../node-daemon-fixture.mjs';
 import { MIN_POLL_MS } from '../../src/node-daemon/loop.mjs';
 
 async function prepared() {
-  const p = packageFixture(), f = await adminFixture({ ENABLE_CATALOG: 'yes', ENABLE_NODE_MAILBOX: 'yes', ENABLE_NODE_ENROLLMENT: 'yes', ENABLE_NODE_CREDENTIALS: 'yes', ENABLE_NODE_CHANNEL: 'yes', ENABLE_PROTOCOL_TEST: 'no', ENABLE_FIXTURE_CYCLE: 'no' });
+  const p = packageFixture(), f = await adminFixture({ ENABLE_CATALOG: 'yes', ENABLE_NODE_MAILBOX: 'yes', ENABLE_NODE_ENROLLMENT: 'yes', ENABLE_NODE_CREDENTIALS: 'yes', ENABLE_NODE_CHANNEL: 'yes', ENABLE_NODE_HEARTBEAT: 'yes', ENABLE_PROTOCOL_TEST: 'no', ENABLE_FIXTURE_CYCLE: 'no' });
   try {
     const token = f.jwt(), session = (await f.call('/api/admin/state', { token })).json(), headers = { 'x-csrf-token': session.csrf };
     const server = await f.call('/api/admin/servers', { token, headers, body: { id: randomUUID(), revision: 0, action: 'create', name: '常驻验收节点' } }); assert.equal(server.status, 200);
@@ -36,11 +36,12 @@ async function dispatch(f, request) {
 }
 
 test('real installed daemon waits at least 30 seconds after lost ack, resends only receipt and drains SIGTERM in-flight', { timeout: 65000 }, async () => {
-  const p = await prepared(), children = [], reports = []; let release;
+  const p = await prepared(), children = [], reports = []; let release, heartbeatLost = false;
   const hold = new Promise(resolve => { release = resolve; });
   try {
     const c = startDaemon(p.installed, async request => {
       const response = await dispatch(p.f, request);
+      if (request.url.includes('/heartbeat/') && request.url.endsWith('/sample') && !heartbeatLost) { heartbeatLost = true; return { error: 'ECONNRESET' }; }
       if (request.url.endsWith('/report')) {
         reports.push({ body: request.init.body, time: Date.now() });
         if (reports.length === 1) return { error: 'ECONNRESET' }; // 云回执已提交，仅丢失 ack。
@@ -49,6 +50,7 @@ test('real installed daemon waits at least 30 seconds after lost ack, resends on
       return response;
     }); children.push(c);
     await c.until(s => s.events.some(e => e.status === 'retrying'));
+    await c.until(s => s.events.some(e => e.event === 'heartbeat' && e.status === 'unavailable'));
     const ledger = join(p.installed, 'state/ledger.json'), saved = readFileSync(ledger);
     assert.deepEqual(JSON.parse(saved).events.map(e => e.kind), ['started', 'result']);
     await c.until(s => s.requests.filter(r => r.url.endsWith('/report')).length === 2);
@@ -62,9 +64,11 @@ test('real installed daemon waits at least 30 seconds after lost ack, resends on
     await p.f.restart(); const completed = readFileSync(ledger);
     const next = startDaemon(p.installed, request => dispatch(p.f, request)); children.push(next);
     await next.until(s => s.events.some(e => e.status === 'idle')); await next.stop();
-    assert.equal(next.requests.length, 1); assert.deepEqual(readFileSync(ledger), completed);
+    assert.equal(next.requests.filter(r => !r.url.includes('/heartbeat/')).length, 1); assert.deepEqual(readFileSync(ledger), completed);
     const cloud = await p.f.call(p.path, { token: p.token }); assert.equal(cloud.json().jobs[0].status, 'observed');
     assert.equal(cloud.json().jobs[0].input.requestId, p.request.requestId);
+    const heartbeat = (await p.f.call(p.path.replace('/probe', '/heartbeat'), { token: p.token })).json();
+    assert.equal(heartbeat.roles.execute.status, 'online'); assert.equal(heartbeat.roles.observe.status, 'unknown'); assert.equal(heartbeatLost, true);
     console.log(JSON.stringify({ retryDelayMs: reports[1].time - reports[0].time, polls: 1, identicalReceiptReports: 2, gracefulDrain: true, executionReady: false }));
   } finally { release(); for (const c of children) await c.dispose(); await p.close(); }
 });

@@ -54,7 +54,7 @@ if (phase === 'exercise') {
   const fixtures = ['execute', 'observe'].map(fixture);
   await systemctl('daemon-reload');
   for (const f of fixtures) {
-    await start(f); await until(() => events(f).some(e => e.event === 'response'));
+    await start(f); await until(() => events(f).some(e => e.event === 'response' && e.heartbeat && e.operation === 'sample'));
     assert.equal((await state(f)).ActiveState, 'active');
     await systemctl('stop', f.name); await stopped(f);
     assert.equal(fs.existsSync(join(f.installation, 'state/daemon.lock')), false);

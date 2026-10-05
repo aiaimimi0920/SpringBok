@@ -122,7 +122,7 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N07 | 常驻运行与开机启动 | 已完成 | 进程生命周期见 N07-S01；用户服务见 N07-S02 | 限定控制客户端前台常驻与用户 manager 启动关联已验收；宿主 linger/实际开机重启和业务执行仍另核授权、受 N06-S02/V 项限制 | N06-S01 |
 | N07-S01 | 控制客户端常驻循环与安全退出 | 已完成 | [实现与验收](node-daemon.md)；负责人：主 AI；PR #40，交付见第 7.11 节 | execute/observe 单角色常驻、至少 30 秒间隔、有界退避、单实例、安全退出、unknown 不重放已验收并提交推送；PR/main 最终检查见回执，不含开机启动 | N06-S01 |
 | N07-S02 | 非特权系统服务与开机启动 | 已完成 | [实现与验收](node-user-service.md)；负责人：主 AI；PR #41；第 7.12 节 | 固定私有 unit、原生显式启停/启用、失败不自动重启、真实 manager 重建/禁用与残留锁均通过；源码已推送，最终 PR/main 按回执，宿主 linger/部署另核授权 | N07-S01 |
-| N08 | 节点心跳与离线判定 | 待开发 | E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
+| N08 | 节点心跳与离线判定 | 进行中 | 负责人：主 AI；领取见第 7.13 节；E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
 | N09 | 节点运行环境预检查 | 部分实现 | E07 手工 rootless/容量要求、E09 固定资源检查 | OS/架构/版本/权限/磁盘和资源余量结构化上报；不满足时阻止部署 | N07 |
 | N10 | 节点程序安全升级 | 待开发 | 尚无发行升级链 | 校验固定产物/版本，兼容协议，失败可恢复；在途未知任务不自动重做 | N06/N07 |
 | N11 | 固定 fixture 生命周期执行器 | 已实现 | E07；`src/fixture-node/executor.mjs` | 固定一次 v1→v2→bad→v1，核对容器/镜像/卷/回执；不是实际业务执行器，真实链由 V02 验收 | N00 |
@@ -441,7 +441,20 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 已下载专项 artifact `11351760680` 并匹配 GitHub SHA-256：两个角色 journal、原退出码 0 和真实 manager 成功记录有效，无 Bearer/token 材料。日志、失败 ZIP、源码匹配和工具记录均保留于 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-service-20261005/`。独立精确 head/增量只读审查完成，主 AI 负责最终提交审阅；源码与限定 CI 验收完成且推送，本次仅同步进度，不实施 N08。
 - 下一最小步骤是本项最终文档 head 检查、正常合并与 main 复核；最终 SHA/检查/固定 main 包写 PR 回执，不循环 amend。完成交付后的下一独立开发项为 N08 心跳/离线判定；真实 Cloudflare/Access、多台用户服务器、N06-S02 业务执行装配及业务部署保持未完成，不以 N07 完成代表整个开发计划完成。
 
-### 7.13 后续交接记录模板
+### 7.13 N08 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `448d53a776ec4043c86ea72e0322508b46bc6557`，分支 `feat/node-heartbeat-20261005`；本地/远程 main 一致、工作区干净。N07-S02 PR [#41](https://github.com/aiaimimi0920/SpringBok/pull/41) 已正常合并，最终 head `da112a250a8a8beb5a9537d618f37f2dd4bdad4a` 与 main tree 一致；head 6 workflows/14 checks、main 6 workflows/12 jobs 全成功，见 [回执](https://github.com/aiaimimi0920/SpringBok/pull/41#issuecomment-5996866921)。原 20 文件 main 包与失败证据保留，不重做系统服务。
+- 范围：`cloud/` 的心跳契约/API、节点 DO 独立角色观测字段及保留式 schema 迁移；已安装 daemon 心跳客户端/循环、显式新版固定包；`public/cloud-admin/` 只读角色展示；对应 node/workerd/browser 回归及专题文档。不新增 DO 类、D1/KV/R2 或运行依赖。
+- 验收：joined 角色在最终事务鉴权；至少 30 秒上报，分别保留 sampledAt/receivedAt/bootId/sequence；云端接收时间与固定阈值判定未知/在线/陈旧/离线；代次与序号防重启/乱序倒写；重送不刷新接收时间；保留任务/enrollment 和旧 schema，损坏失败关闭；角色/node/owner 隔离、默认关闭和开关恢复、页面迟到身份/窄屏验证。心跳传输失败不重放任务或修改执行结果。
+- 不做：主机指标/历史/告警、凭据 epoch 轮换或撤销、业务执行装配、真实 Cloudflare/Access/服务器部署、用户主机安装/linger、升级现有安装或自动清锁。固定包仅本地/CI 验收，不宣称公开签名发行。
+- 证据目录：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-heartbeat-20261005/`。完成该单项后立即 scoped commit/push、精确 head 审阅/正常合并/main 复核，再接续 M01/M06；整体目标仍未完成。
+- 本地源码闭环：默认关闭的受权心跳/API、节点 schema 2→3 单行双角色观测、CAS/序号/30 秒限频/精确重送、v3 22 文件包与 daemon 独立传输状态、管理页云端阈值/快照失效已实现。独立审查发现共用读取验证心跳行会阻断任务，已把观测数据校验限制到心跳路径；workerd 实测坏行/缺表时 identity/report 仍可完成，核心 schema/ledger/enrollment 保持失败关闭。非暂时心跳错误仍按明确策略停止 daemon，保留现场；不承诺复制同角色凭据的多安装会话仲裁。
+- Linux 聚焦 node 16/16、心跳 workerd 4/4；全量契约 211/211、全量 workerd 49/49，无失败/跳过。真实 v3 安装进程同时丢 report ack 与 heartbeat ack 后等待 35,297ms，仅 1 次 poll/2 次原样 receipt report，SIGTERM drain 后 ledger 完成；journal 失败仍不重试。浏览器入口 5 条 PASS，真实 Chrome/workerd/SQLite 覆盖独立角色、未来采样、enrolling-but-joined、未知/在线/陈旧/离线、失败保目录、快照过期、迟到 owner、GET-only/390px；已查看中文窄屏截图，无横向溢出。
+- 原 main `448d53a` 精确 v2 包由自身旧可信代码实际安装/重装/运行 version；新版拒绝旧格式和拿 v3 包覆盖旧安装，release/credential/state/标记的内容/inode/device/mode/mtime 不变。只用非 root 一次性 Linux tmpfs，不修改真实安装。首次 Windows client 测试因 Linux-only 私有文件保护失败、Linux fixture 传入完整 credential 违反精确 context、测试在途 IPC 时 SIGKILL、空 browser 依赖缓存等均保留日志；仅修测试接线/锁定依赖安装，不放宽产品 guard。
+- 当前为源码与本地验收完成；精确 Git 包、安全工具、远程提交/PR/user-manager/head/main CI 结果按本项后续回执记录，不提前宣称已合并或真实部署。
+- 32 个本轮文本 UTF-8 无 BOM/LF 快照一致、84 个本地链接和 86 项无环依赖通过。actionlint 1.7.12/Gitleaks 8.30.1 归档与仓库固定 SHA-256 重核后复用，全部 workflow 语法通过（未额外运行 ShellCheck/Pyflakes），当前源码快照无 secret 检出。首次工具包装误指不存在的自定义 config、后续 Docker 到 GitHub 暂时连接失败均保留原日志；最终用已核固定归档运行默认规则，不放宽门禁或宣称新下载成功。
+
+### 7.14 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

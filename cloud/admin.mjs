@@ -2,6 +2,7 @@ import { accessSession, signSession, sameProof } from './access.mjs';
 import { exact, NODE, submission } from './protocol.mjs';
 import { adminEnrollmentRequest, enrollmentEnabled } from './enrollment-api.mjs';
 import { adminNodeProbeRequest } from './node-channel-api.mjs';
+import { adminHeartbeatRequest, heartbeatEnabled } from './heartbeat-api.mjs';
 const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" };
 const reply = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { ...headers, 'content-type': 'application/json' } });
 export async function adminRequest(request, env, readBody) {
@@ -13,6 +14,7 @@ export async function adminRequest(request, env, readBody) {
     }
     const catalogEnabled = env.ENABLE_CATALOG === 'yes' && !!env.REGISTRY;
     if (url.pathname.startsWith('/api/admin/enrollments')) return adminEnrollmentRequest(request, env, session, readBody);
+    if (/^\/api\/admin\/nodes\/[^/]+\/heartbeat$/.test(url.pathname)) return adminHeartbeatRequest(request, env, session);
     if (url.pathname.startsWith('/api/admin/nodes/')) return adminNodeProbeRequest(request, env, session, readBody);
     if (['/api/admin/servers', '/api/admin/services'].includes(url.pathname)) {
       if (!catalogEnabled) return reply({ error: 'server catalog disabled' }, 503);
@@ -25,7 +27,7 @@ export async function adminRequest(request, env, readBody) {
     }
     const stub = env.TARGET.get(env.TARGET.idFromName(NODE));
     if (request.method === 'GET' && url.pathname === '/api/admin/state') {
-      return reply({ ...await stub.admin('state', null, session.actor), email: session.email, csrf: await signSession(session, 'csrf', null), catalogEnabled, enrollmentEnabled: enrollmentEnabled(env), ownerId: session.actor });
+      return reply({ ...await stub.admin('state', null, session.actor), email: session.email, csrf: await signSession(session, 'csrf', null), catalogEnabled, enrollmentEnabled: enrollmentEnabled(env), heartbeatEnabled: heartbeatEnabled(env), ownerId: session.actor });
     }
     if (request.method !== 'POST' || !['/api/admin/preview', '/api/admin/submit'].includes(url.pathname)) return reply({ error: 'unknown admin route' }, 404);
     if (request.headers.get('origin') !== session.origin || !sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null))) return reply({ error: 'refresh this authenticated session' }, 403);

@@ -7,6 +7,7 @@ import { openCredentialClient } from '../src/node-credentials/client.mjs';
 import { openNodeChannelBridge } from '../src/node-channel/bridge.mjs';
 import { lockDaemon } from '../src/node-daemon/lock.mjs';
 import { runNodeLoop } from '../src/node-daemon/loop.mjs';
+import { openHeartbeatClient } from '../src/node-heartbeat/client.mjs';
 
 const emit = event => console.log(JSON.stringify(event));
 const stop = new AbortController(), requestStop = () => {
@@ -25,7 +26,8 @@ try {
   if (role === 'execute') { bridge = openNodeChannelBridge({ ...options, directory: installed.stateDirectory }); step = () => bridge.step(); }
   else { const client = openCredentialClient(options); step = async () => (await client.inspect()).status; }
   emit({ event: 'started', role, executionReady: false });
-  const result = await runNodeLoop({ step, signal: stop.signal, onEvent: emit });
+  const heartbeat = openHeartbeatClient(options);
+  const result = await runNodeLoop({ step, heartbeat: () => heartbeat.beat(stop.signal), signal: stop.signal, onEvent: emit });
   emit({ event: result, executionReady: false });
   if (result === 'blocked') process.exitCode = 2;
 } catch {

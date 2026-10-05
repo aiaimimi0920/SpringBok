@@ -2,6 +2,8 @@
 
 本项接续 [私有安装](node-installation.md) 与 [前台常驻](node-daemon.md)，总进度见 [开发计划](development-plan.md)。复用已安装的 v2 daemon；不改变包格式、节点协议、身份、ledger 或云端开关。服务只执行现有控制客户端，始终 `executionReady=false`，不是业务部署执行器或主机监控采集器。
 
+以上与本页验收数字保留 N07-S02 当时范围。N08 当前可信生成器读取 v3 完整安装，unit 结构不变；当前 22 文件包/独立角色心跳及迁移边界见 [心跳](node-heartbeat.md)。旧 v2 安装及服务保持不变，由旧可信 checkout 维护，不用新版生成器自动接管或覆盖。
+
 ## 可信生成与显式操作
 
 前提是获准的 Linux 非 root 角色账户、预装 Node.js 22+、systemd user manager，以及已通过 N06-S01 验证的完整私有 v2 安装。Node 可执行文件、安装、unit 目录及其父路径必须来自可信来源、不可由其他不可信 uid 改写；不抵御恶意同 uid/root，也不承诺全路径竞争隔离。生成器检查 Node 文件本身的类型、owner 和写/执行权限，不遍历所有父路径。

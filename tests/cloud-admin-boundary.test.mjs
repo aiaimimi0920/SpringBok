@@ -6,9 +6,10 @@ test('private assets always enter the Worker and management defaults reject acce
   assert.equal(config.assets.run_worker_first, true); assert.equal(config.assets.binding, 'ASSETS'); assert.equal(config.vars.ENABLE_ADMIN, 'no'); assert.equal(config.vars.ADMIN_EMAILS, '[]');
   assert.equal(config.vars.ENABLE_CATALOG, 'no');
   assert.equal(config.vars.ENABLE_NODE_MAILBOX, 'no');
+  assert.equal(config.vars.ENABLE_NODE_ENROLLMENT, 'no');
   assert.deepEqual(config.durable_objects.bindings, [{ name: 'TARGET', class_name: 'TargetMailbox' }, { name: 'REGISTRY', class_name: 'OwnerCatalog' }, { name: 'NODES', class_name: 'NodeMailbox' }]);
   assert.deepEqual(config.migrations, [{ tag: 'v1', new_sqlite_classes: ['TargetMailbox'] }, { tag: 'v2-catalog', new_sqlite_classes: ['OwnerCatalog'] }, { tag: 'v3-node-mailbox', new_sqlite_classes: ['NodeMailbox'] }]);
-  for (const file of ['index.html', 'style.css', 'app.js', 'catalog.js']) {
+  for (const file of ['index.html', 'style.css', 'app.js', 'catalog.js', 'enrollment.js']) {
     const source = readFileSync(new URL(`../public/cloud-admin/${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /CONTROL_TOKEN|NODE_TOKEN|cf-access-jwt-assertion|localStorage|sessionStorage|innerHTML/);
   }

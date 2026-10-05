@@ -110,9 +110,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | --- | --- | --- | --- | --- | --- |
 | N00 | 固定节点出站任务桥 | 已实现 | E05/E07；`src/node-bridge/bridge.mjs` | 单次 Linux CLI、HTTPS 固定 origin、写前日志与回执重送；非后台 Agent | C03 |
 | N01 | 多节点任务寻址与隔离 | 部分实现 | 内部持久隔离见 N01-S01；真实认证接入见 N01-S02 | 两个节点各有 mailbox/任务所有权；不能跨节点领取、回报或串用固定 fixture；旧协议兼容；完成内部协议不等于已接入节点 | ARC-01/C04-S01 |
-| N01-S01 | 独立节点邮箱与内部只读协议 | 已实现 | [实现与验收](node-mailbox.md)；负责人：主 AI；本轮记录见第 7.6 节 | 版本化独立 DO、owner/node 不可变绑定、双节点只读 probe、一次交付/幂等/重启/未知阻断已验证；待 PR 交付闭环，公开通道保持不可用 | ARC-01/C04-S01 |
+| N01-S01 | 独立节点邮箱与内部只读协议 | 已完成 | [实现与验收](node-mailbox.md)；负责人：主 AI；PR #35 已合并 | 版本化独立 DO、owner/node 不可变绑定、双节点只读 probe、一次交付/幂等/重启/未知阻断已验证；main 检查通过，公开任务通道保持不可用 | ARC-01/C04-S01 |
 | N01-S02 | 认证节点通道与出站桥接入 | 待开发 | 不复用旧 NODE_TOKEN，不接受公开自报上下文 | 将加入后权威凭据上下文接入新路由/桥；事务内认证与领取；双节点端到端身份隔离 | N01-S01/N02/N03 |
-| N02 | 服务器注册与一次性加入流程 | 待开发 | 无注册 API/UI；拟 `cloud/` + 管理页 | 添加服务器取得短期一次性加入凭据；过期/重复/伪造拒绝；不预先信任自报节点 ID | N01-S01/C08 |
+| N02 | 服务器注册与一次性加入流程 | 已实现 | [实现与验收](node-enrollment.md)；负责人：主 AI；交付流程见第 7.7 节 | 保存后授权、一次性加入、过期/冲突拒绝和跨 DO 恢复已通过本地验收；待本项 scoped commit/push/PR，不代表真实服务器已接入 | N01-S01/C08 |
 | N03 | 每节点独立凭据 | 部分实现 | E05 仅一个 `NODE_TOKEN` | 每节点身份与服务端绑定，最小权限；某节点泄漏不能控制其他节点 | N02 |
 | N04 | 节点凭据轮换 | 待开发 | 当前无轮换流程 | 有界切换窗口、旧凭据失效、在途任务不重复执行、全链路不回显秘密 | N03 |
 | N05 | 节点撤销接入 | 待开发 | 当前无撤销流程 | 撤销后不能领取新任务；保留历史/未知证据，不隐式卸载或删除业务数据 | N03/C09 |
@@ -336,7 +336,22 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 11 个变更文本的 UTF-8 无 BOM、32 个本地链接、82 个唯一任务及无环依赖检查通过。actionlint 1.7.12/Gitleaks 8.30.1 本轮按仓库固定归档 SHA-256 重新下载验证；全部 workflow 的 actionlint 语法检查通过，未额外执行 ShellCheck。临时 Git archive 不含 `.git`，首次无参数 actionlint 找不到项目；改用显式 workflow 文件列表后通过，未改 workflow。精确提交 Gitleaks 和远程 CI 另记交付回执。
 - 下一独立任务 N02 尚未领取；N01-S02/N03 和 V01/V02/V03 继续保持未完成，不将本地 workerd 当真实节点鉴权或 Cloudflare 验收。
 
-### 7.7 后续交接记录模板
+### 7.7 N02 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `eabe5ee1716a3547036b6387b0ae3c4b909c40fb`；分支 `feat/node-enrollment-20261005`。用户已给出持续目标“完成整个开发计划中的内容”；按独立子任务逐项交付，不把单项完成当整体完成。
+- 前项 N01-S01 功能 head `e9308be6864b7db6be960694f07c53b4d60c0589`、PR [#35](https://github.com/aiaimimi0920/SpringBok/pull/35) 已合并为上述基线；文件树 `fc6d4174b8e9aadb5ffddcb89fc6a00de290372c`；head 6 workflow/13 check、main 6 workflow/11 job 成功，见 [最终回执](https://github.com/aiaimimi0920/SpringBok/pull/35#issuecomment-5989983714)。不重复前项开发。
+- 范围：`cloud/` 的目录 schema v3/注册 CAS、NodeMailbox schema v2/一次性加入、Access 管理员 API 与仅加入的公开端点；`public/cloud-admin/` 的准备/保存加入材料/授权/核对交互；Linux 一次性加入客户端及相应测试/文档。
+- 方案：浏览器 CSPRNG 生成至少 256-bit 加入挑战，先显式保存材料，再由管理员授权其绑定摘要；服务端只存摘要和 10 分钟期限，不以 session JWT 派生秘密，不承诺服务器能恢复未保存的挑战。节点先持久保存独立 execute/observe 材料，再提交摘要；N02 仅固定这些摘要，实际角色鉴权和任务通道仍归 N03/N01-S02。
+- 验收：owner/服务器归属、同源/CSRF、默认关闭、加入过期/伪造/一次消费/精确重放、双节点隔离、跨 DO 每阶段失败与丢响应后的相同 enrollment 核对；enrolling/active 不得普通归档/改名；旧行、回执、revision 和 probe ledger 保留，旧实现遇新 schema 拒绝；页面可操作，客户端重启不重建秘密。
+- 不做：真实账户/服务器注册、云资源/生产迁移、远程安装、角色凭据认证/轮换/撤销、开放 probe/deploy 通道、业务执行或数据清理。整体目标保持 active，未授权真实环境任务留待明确条件，继续推进可安全本地实施的计划项。
+- 实现与恢复说明见 [一次性加入](node-enrollment.md)。OwnerCatalog schema 3、NodeMailbox schema 2 保留式扩展；冻结精确旧实现证明回退失败关闭。管理员先保存浏览器随机加入材料再授权摘要，Linux 客户端先 fsync 两套独立秘密，再由节点持久能力消费；active 只表示登记完成，始终 `executionReady=false`。
+- Windows Node.js 22.22.2 聚焦 8/8；Linux Node.js 24.18.1 全量契约 180/180、workerd/SQLite 26/26，失败/跳过均为 0。旧管理页、两类目录和新加入四条本地 Chrome 场景全部通过；涵盖保存/取消/双击、丢响应、实际 journal/client/DO 加入、显式恢复、重启、迟到 owner 和 390px。1280px/390px 截图已查看；仅合成身份，无真实服务器/Access 登录。
+- 独立只读审查发现 finalize 容量可被抢占，已修为每个 enrolling 保留一个槽，所有普通写入遵守同一容量不变量；真实 1022→1023→1024、多 pending/竞争/重启/满库精确重放通过，增量审查未发现新可证实阻断。过期未收尾仍保留槽，无自动取消/重新签发/清理流程；角色摘要尚未用于任务认证。
+- 修复目录刷新丢失加入会话配置和旧 generation 的 finally 按钮污染；新浏览器脚本第一轮误等 prepared，按实际 pending 契约修正。新增对话框使旧测试泛用 dialog locator 产生歧义，改为精确 confirm 选择器后四条组合回归通过；原失败日志保留，不降低断言或门禁。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-enrollment-20261005/`；`snapshot/.tmp/linux-unit-final.log`、`linux-cloud-final.log`、`linux-browser-complete.log` 和 `test-results/`。依赖/lockfile 不变；Linux 复用相同锁定依赖的只读安装，私有测试状态放 tmpfs，源码按 LF 哈希核对。工具、文档/编码和精确提交/远程检查结果按 PR 回执记录，不能预报未完成 CI。
+- 当前源码与本地验收完成，下一最小步骤是立即提交推送本项、审阅精确 PR head、正常合并并复核 main；完成后领取 N03，再推进 N01-S02。V01/V02/V03 保持未完成，整体目标仍 active，不缩小为只交付 N02。
+
+### 7.8 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

@@ -1,8 +1,10 @@
+import { clearEnrollment, configureEnrollment, enrollmentAction } from './enrollment.js';
 const $ = id => document.getElementById(id);
 const uncertain = '目录未确认：可能身份已过期、记录已变化、达到容量上限或网络中断。请刷新目录核对，不要重复创建。';
-let catalog, csrf, generation = 0, controller, busy = false;
+let catalog, csrf, catalogSession, generation = 0, controller, busy = false;
 export function clearCatalog() {
-  generation++; controller?.abort(); controller = null; catalog = null; csrf = null; busy = false;
+  clearEnrollment();
+  generation++; controller?.abort(); controller = null; catalog = null; csrf = null; catalogSession = null; busy = false;
   $('catalog').hidden = true; $('servers').replaceChildren(); $('server-name').value = ''; $('server-add').disabled = true;
   $('services').replaceChildren(); $('service-server').replaceChildren(); $('service-name').value = ''; $('service-add').disabled = true;
 }
@@ -23,7 +25,8 @@ function render() {
   for (const server of catalog?.servers ?? []) {
     const item = document.createElement('li'); item.dataset.serverId = server.id;
     const title = document.createElement('strong'); title.textContent = server.name; item.append(title);
-    const info = document.createElement('p'); info.textContent = `${server.id} · ${server.state === 'draft' ? '尚未接入服务器' : '已归档（没有卸载或删除数据）'}`; item.append(info);
+    const labels = { draft: '尚未接入服务器', enrolling: '加入中或待核对（不代表在线）', active: '已完成加入登记（不代表在线或部署就绪）', archived: '已归档（没有卸载或删除数据）' };
+    const info = document.createElement('p'); info.textContent = `${server.id} · ${labels[server.state] ?? '未知状态，禁止操作'}`; item.append(info);
     if (server.state === 'draft') {
       const actions = document.createElement('div'); actions.className = 'actions server-actions';
       const name = document.createElement('input'); name.value = server.name; name.maxLength = 128; name.setAttribute('aria-label', `服务器名称 ${server.id}`); name.disabled = busy;
@@ -33,13 +36,14 @@ function render() {
       if (linked) { const note = document.createElement('p'); note.textContent = '有关联的未归档服务，暂不能归档此服务器条目。'; item.append(note); }
       actions.append(name, rename, archive); item.append(actions);
     }
+    const enrollment = enrollmentAction(server, catalog.revision); if (enrollment) item.append(enrollment);
     $('servers').append(item);
   }
   if (catalog && !catalog.servers.length) { const empty = document.createElement('li'); empty.textContent = '尚无服务器目录条目'; $('servers').append(empty); }
   const selected = $('service-server').value;
   $('service-server').replaceChildren();
   for (const server of catalog?.servers ?? []) {
-    if (server.state !== 'draft') continue;
+    if (!['draft', 'enrolling', 'active'].includes(server.state)) continue;
     const option = document.createElement('option'); option.value = server.id; option.textContent = `${server.name} · ${server.id}`; $('service-server').append(option);
   }
   if ([...$('service-server').options].some(option => option.value === selected)) $('service-server').value = selected;
@@ -63,6 +67,8 @@ function render() {
 }
 export async function refreshCatalog(session) {
   clearCatalog(); if (!session.catalogEnabled) return;
+  catalogSession = session;
+  configureEnrollment(session, () => refreshCatalog(session));
   csrf = session.csrf; $('catalog').hidden = false; $('catalog-notice').textContent = '读取服务器目录…'; render();
   const version = generation; controller = new AbortController();
   try { const next = await readCatalog(AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])); if (version !== generation) return; catalog = next; render(); $('catalog-notice').textContent = `目录版本 ${catalog.revision}；这里仅登记元数据，不连接或部署服务器。`; }
@@ -84,4 +90,4 @@ async function mutate(change, resource = 'servers') {
 }
 $('server-form').addEventListener('submit', event => { event.preventDefault(); void mutate({ action: 'create', name: $('server-name').value }); });
 $('service-form').addEventListener('submit', event => { event.preventDefault(); void mutate({ action: 'create', serverId: $('service-server').value, name: $('service-name').value }, 'services'); });
-$('catalog-refresh').addEventListener('click', () => { if (!busy && csrf) void refreshCatalog({ catalogEnabled: true, csrf }); });
+$('catalog-refresh').addEventListener('click', () => { if (!busy && catalogSession) void refreshCatalog(catalogSession); });

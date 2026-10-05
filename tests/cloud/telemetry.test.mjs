@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { adminFixture, origin } from './admin-fixture.mjs';
 import { heartbeatRpc as nodeRpc, heartbeatSample, heartbeatCall } from './heartbeat-fixture.mjs';
-import { telemetryFlags, telemetryOptions, telemetryNode, telemetryCall as call, telemetrySample, telemetryRpc as rpc, cpu } from './telemetry-helper.mjs';
+import { telemetryFlags, telemetryOptions, telemetryNode, telemetryCall as call, telemetrySample, telemetryRpc as rpc, cpu, memory } from './telemetry-helper.mjs';
 import { telemetryAuthorization } from '../../cloud/telemetry-contract.mjs';
 
 test('CPU telemetry is default-off, joined observe-only, owner/node/enrollment bound and never stores credentials or changes task/catalog/heartbeat', async () => {
@@ -22,7 +22,7 @@ test('CPU telemetry is default-off, joined observe-only, owner/node/enrollment b
     await call(f, c, 'read', { protocolVersion: 2 }); assert.deepEqual(await rpc(f, a.telemetryContext, 'inspect'), []);
     assert.equal((await f.call(a.path, { token: null })).status, 403); assert.equal((await f.call(a.path, { token: other.token })).status, 409);
     assert.equal((await f.call(a.path, { token: a.token, body: {} })).status, 404); assert.equal((await f.call(a.path + '?ownerId=other', { token: a.token })).status, 403);
-    await telemetrySample(f, c); const snapshot = (await f.call(a.path, { token: a.token })).json(); assert.equal(snapshot.sample.cpu.usagePercent, 0); assert.equal(snapshot.freshness, 'fresh'); assert.equal(snapshot.executionReady, false);
+    await telemetrySample(f, c, cpu(), memory()); const snapshot = (await f.call(a.path, { token: a.token })).json(); assert.equal(snapshot.sample.cpu.usagePercent, 0); assert.equal(snapshot.sample.sampleVersion, 2); assert.deepEqual(snapshot.sample.memory, memory()); assert.equal(snapshot.freshness, 'fresh'); assert.equal(snapshot.executionReady, false);
     assert.equal((await f.call(b.path, { token: b.token })).json().sample, null);
     assert.deepEqual(await nodeRpc(f, a.context, 'inspect'), before); assert.deepEqual((await f.call('/api/admin/servers', { token: a.token })).json(), catalog);
     const tables = await rpc(f, a.telemetryContext, 'inspect'); assert.equal(tables.length, 2); assert.equal(tables.find(t => t.name === 'telemetry_state').rows.length, 1);
@@ -71,10 +71,11 @@ test('telemetry write-before failure has no receipt, write-after lost ack replay
     try {
       const n = await telemetryNode(f), c = n.roles.observe;
       const started = await call(f, c, 'start', { protocolVersion: 2, bootId: randomUUID(), previousGeneration: 0 });
-      const input = { protocolVersion: 2, bootId: started.result.bootId, generation: 1, sequence: 1, cpu: cpu() };
+      const input = { protocolVersion: 2, bootId: started.result.bootId, generation: 1, sequence: 1, cpu: cpu(), sampleVersion: 2, memory: memory() };
       await call(f, c, 'sample', input, 409);
       const state = JSON.parse((await rpc(f, n.telemetryContext, 'inspect')).find(t => t.name === 'telemetry_state').rows[0].state);
       assert.equal(state.latest === null, fault === 'before');
+      assert.equal((await rpc(f, n.telemetryContext, 'inspect')).find(t => t.name === 'telemetry_meta').rows[0].schema_version, fault === 'before' ? 1 : 2);
       const retry = await call(f, c, 'sample', input); assert.equal(retry.result.status, 'recorded');
       if (fault === 'after') assert.deepEqual(retry.result.sample, state.latest);
       const before = await rpc(f, n.telemetryContext, 'inspect'); f.bindings.ENABLE_NODE_TELEMETRY = 'no'; await f.restart();
@@ -84,6 +85,41 @@ test('telemetry write-before failure has no receipt, write-after lost ack replay
       Object.assign(f.bindings, { ENABLE_CATALOG: 'yes', ENABLE_NODE_CREDENTIALS: 'no' }); await f.restart(); await call(f, c, 'read', { protocolVersion: 2 }, 503); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), before);
     } finally { await f.close(); }
   }
+});
+test('SQLite memory expansion upgrades only recorded writes atomically, survives restart and never downgrades mixed latest', async () => {
+  const f = await adminFixture(telemetryFlags, telemetryOptions);
+  try {
+    const n = await telemetryNode(f), c = n.roles.observe, first = await telemetrySample(f, c);
+    const meta = async () => (await rpc(f, n.telemetryContext, 'inspect')).find(t => t.name === 'telemetry_meta').rows[0];
+    const next = { ...first.input, sequence: 2, sampleVersion: 2, memory: memory(1) };
+    const unchanged = await rpc(f, n.telemetryContext, 'inspect');
+    for (const malformed of [{ ...next, sequence: 1 }, { ...next, sampleVersion: 3 }, { ...first.input, memory: memory() }, { ...next, memory: { ...memory(), availableBytes: -1 } }]) await call(f, c, 'sample', malformed, 409);
+    assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), unchanged);
+    assert.equal((await call(f, c, 'sample', next)).result.status, 'deferred'); assert.equal((await meta()).schema_version, 1);
+    await rpc(f, n.telemetryContext, 'damage', ['age', 90000]);
+    await rpc(f, n.telemetryContext, 'damage', ['upgrade-write']); const original = await rpc(f, n.telemetryContext, 'inspect');
+    await call(f, c, 'sample', next, 409); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), original);
+    await rpc(f, n.telemetryContext, 'damage', ['remove-upgrade-write']);
+    const recorded = await call(f, c, 'sample', next); assert.equal(recorded.result.status, 'recorded'); assert.equal((await meta()).schema_version, 2);
+    await call(f, c, 'sample', { ...next, memory: memory(2) }, 409); await call(f, c, 'sample', { ...first.input, sequence: 2 }, 409);
+    const expanded = await rpc(f, n.telemetryContext, 'inspect'); await f.restart(); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), expanded); assert.deepEqual(await call(f, c, 'sample', next), recorded);
+    f.bindings.TELEMETRY_READER = 'legacy'; await f.restart();
+    await call(f, c, 'read', { protocolVersion: 2 }, 409); await call(f, c, 'start', { protocolVersion: 2, bootId: randomUUID(), previousGeneration: 1 }, 409); await call(f, c, 'sample', first.input, 409);
+    assert.equal((await f.call(n.path, { token: n.token })).status, 409); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), expanded);
+    f.bindings.TELEMETRY_READER = 'current'; await f.restart(); assert.deepEqual((await f.call(n.path, { token: n.token })).json().sample, recorded.result.sample);
+    await rpc(f, n.telemetryContext, 'damage', ['age', 90000]);
+    assert.equal((await call(f, c, 'sample', { ...first.input, sequence: 3 })).result.status, 'recorded'); assert.equal((await meta()).schema_version, 2);
+    const oldLatest = (await f.call(n.path, { token: n.token })).json().sample; assert.equal(Object.hasOwn(oldLatest, 'memory'), false); assert.equal(Object.keys(oldLatest).length, 5);
+    await f.restart(); assert.equal((await meta()).schema_version, 2);
+  } finally { await f.close(); }
+});
+test('schema one with versioned latest is corruption, not an automatic repair or migration', async () => {
+  const f = await adminFixture(telemetryFlags, telemetryOptions);
+  try {
+    const n = await telemetryNode(f); await telemetrySample(f, n.roles.observe, cpu(), memory()); await rpc(f, n.telemetryContext, 'damage', ['schema-one']);
+    const before = await rpc(f, n.telemetryContext, 'inspect'); await f.restart(); await call(f, n.roles.observe, 'read', { protocolVersion: 2 }, 409);
+    assert.equal((await f.call(n.path, { token: n.token })).status, 409); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), before);
+  } finally { await f.close(); }
 });
 async function probe(f, n) {
   const path = n.path.replace('/telemetry', '/probe'), c = n.roles.execute;

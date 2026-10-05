@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { nodeCredential } from '../../cloud/credential-contract.mjs';
-import { cpuSample, telemetryInput, verifyTelemetryResult, requireTelemetry } from '../../cloud/telemetry-contract.mjs';
+import { cpuSample, memorySample, telemetryInput, verifyTelemetryResult, requireTelemetry } from '../../cloud/telemetry-contract.mjs';
 import { readPrivateNodeJson } from '../node-credentials/files.mjs';
 import { fetchCredentialJson } from '../node-credentials/client.mjs';
 import { createCpuSampler } from './cpu.mjs';
+import { createMemorySampler } from './memory.mjs';
 
 export const MAX_PENDING_MS = 90000;
-export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, bootId = randomUUID(), sampler = createCpuSampler(), monotonic = () => performance.now() }) {
+export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, bootId = randomUUID(), sampler = createCpuSampler(), memorySampler = createMemorySampler(), monotonic = () => performance.now() }) {
   const credential = nodeCredential(readPrivateNodeJson(file), expectedOrigin); requireTelemetry(credential.role === 'observe');
   telemetryInput('start', { protocolVersion: 2, bootId, previousGeneration: 0 });
   let previousGeneration, generation, sequence = 0, pending, inFlight = false;
@@ -26,7 +27,9 @@ export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, boo
       if (!pending) {
         const createdAt = clock(), cpu = cpuSample(await sampler.sample());
         if (signal.aborted) return;
-        pending = { cpu, createdAt };
+        const memory = memorySample(await memorySampler.sample());
+        if (signal.aborted) return;
+        pending = { cpu, memory, createdAt };
       }
       if (previousGeneration === undefined) previousGeneration = (await call('read', { protocolVersion: 2 }, signal)).generation;
       if (signal.aborted) return;
@@ -34,7 +37,7 @@ export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, boo
       if (signal.aborted) return;
       const age = clock() - pending.createdAt;
       if (age < 0 || age >= MAX_PENDING_MS) { pending = undefined; return 'dropped'; }
-      pending.input ??= telemetryInput('sample', { protocolVersion: 2, bootId, generation, sequence: ++sequence, cpu: pending.cpu });
+      pending.input ??= telemetryInput('sample', { protocolVersion: 2, bootId, generation, sequence: ++sequence, cpu: pending.cpu, sampleVersion: 2, memory: pending.memory });
       const result = await call('sample', pending.input, signal);
       if (result.status === 'recorded') pending = undefined;
       return result.status;

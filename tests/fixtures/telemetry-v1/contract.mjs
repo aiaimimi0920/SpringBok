@@ -1,6 +1,6 @@
-import { exact } from './protocol.mjs';
-import { isUuid } from './catalog-contract.mjs';
-import { nodeContext } from './node-protocol.mjs';
+import { exact } from '../../../cloud/protocol.mjs';
+import { isUuid } from '../../../cloud/catalog-contract.mjs';
+import { nodeContext } from '../../../cloud/node-protocol.mjs';
 
 export const TELEMETRY_INTERVAL_MS = 30000;
 export const TELEMETRY_STALE_MS = 90000;
@@ -24,27 +24,6 @@ export function cpuSample(value) {
   }
   return Object.fromEntries(keys.map(key => [key, value[key]]));
 }
-export function memorySample(value) {
-  const keys = ['schema', 'metric', 'scope', 'unit', 'status', 'reason', 'sampledAt', 'totalBytes', 'availableBytes', 'usedBytes', 'usagePercent'];
-  exact(value, keys);
-  requireTelemetry(value.schema === 'springbok-memory/v1' && value.metric === 'memory' && value.scope === 'linux-proc-meminfo' && value.unit === 'bytes');
-  if (value.status === 'unavailable') {
-    requireTelemetry(['read-failed', 'invalid-meminfo', 'memavailable-missing', 'clock-unavailable'].includes(value.reason) && ['sampledAt', 'totalBytes', 'availableBytes', 'usedBytes', 'usagePercent'].every(key => value[key] === null));
-  } else {
-    requireTelemetry(value.status === 'available' && value.reason === null && iso(value.sampledAt) && ['totalBytes', 'availableBytes', 'usedBytes'].every(key => integer(value[key])) && value.totalBytes > 0 && value.availableBytes <= value.totalBytes && value.usedBytes === value.totalBytes - value.availableBytes);
-    requireTelemetry(value.usagePercent === Number((BigInt(value.usedBytes) * 10000n + BigInt(value.totalBytes) / 2n) / BigInt(value.totalBytes)) / 100);
-  }
-  return Object.fromEntries(keys.map(key => [key, value[key]]));
-}
-// 旧 CPU-only 不补字段；新形状必须显式版本化。所有重送/ACK 共用完整 payload。
-function samplePayload(value) {
-  const base = { bootId: value.bootId, generation: value.generation, sequence: value.sequence, cpu: cpuSample(value.cpu) };
-  return Object.hasOwn(value, 'sampleVersion') ? { ...base, sampleVersion: 2, memory: memorySample(value.memory) } : base;
-}
-function sampleKeys(value, keys) {
-  if (Object.hasOwn(value, 'sampleVersion')) { requireTelemetry(value.sampleVersion === 2); exact(value, [...keys, 'sampleVersion', 'memory']); }
-  else exact(value, keys);
-}
 export function telemetryContext(value) {
   exact(value, ['ownerId', 'nodeId', 'enrollmentId']);
   const context = nodeContext({ ownerId: value.ownerId, nodeId: value.nodeId }); requireTelemetry(isUuid(value.enrollmentId));
@@ -67,15 +46,14 @@ export function telemetryInput(operation, value) {
     requireTelemetry(value.protocolVersion === 2 && isUuid(value.bootId) && integer(value.previousGeneration) && value.previousGeneration < Number.MAX_SAFE_INTEGER);
     return { protocolVersion: 2, bootId: value.bootId, previousGeneration: value.previousGeneration };
   }
-  requireTelemetry(operation === 'sample'); sampleKeys(value, ['protocolVersion', 'bootId', 'generation', 'sequence', 'cpu']);
+  requireTelemetry(operation === 'sample'); exact(value, ['protocolVersion', 'bootId', 'generation', 'sequence', 'cpu']);
   requireTelemetry(value.protocolVersion === 2 && isUuid(value.bootId) && integer(value.generation) && value.generation > 0 && integer(value.sequence) && value.sequence > 0);
-  return { protocolVersion: 2, ...samplePayload(value) };
+  return { protocolVersion: 2, bootId: value.bootId, generation: value.generation, sequence: value.sequence, cpu: cpuSample(value.cpu) };
 }
 function accepted(value) {
-  sampleKeys(value, ['bootId', 'generation', 'sequence', 'cpu', 'receivedAt']);
-  const { receivedAt, ...payload } = value;
-  const input = telemetryInput('sample', { protocolVersion: 2, ...payload });
-  requireTelemetry(timestamp(receivedAt)); return { ...samplePayload(input), receivedAt };
+  exact(value, ['bootId', 'generation', 'sequence', 'cpu', 'receivedAt']);
+  const input = telemetryInput('sample', { protocolVersion: 2, bootId: value.bootId, generation: value.generation, sequence: value.sequence, cpu: value.cpu });
+  requireTelemetry(timestamp(value.receivedAt)); return { bootId: input.bootId, generation: input.generation, sequence: input.sequence, cpu: input.cpu, receivedAt: value.receivedAt };
 }
 export function telemetryState(value) {
   if (value === null) return null;
@@ -99,9 +77,9 @@ export function telemetryTransition(valueState, operation, valueInput, now) {
     return { state: next, changed: true, result: { generation: next.generation, bootId: next.bootId } };
   }
   requireTelemetry(state && input.generation === generation && input.bootId === state.bootId);
-  const latest = state.latest, normalized = samplePayload(input);
+  const latest = state.latest, normalized = { bootId: input.bootId, generation, sequence: input.sequence, cpu: input.cpu };
   if (latest?.generation === generation && input.sequence === latest.sequence) {
-    requireTelemetry(JSON.stringify(normalized) === JSON.stringify(samplePayload(latest)));
+    requireTelemetry(JSON.stringify(normalized) === JSON.stringify({ bootId: latest.bootId, generation: latest.generation, sequence: latest.sequence, cpu: latest.cpu }));
     return { state, changed: false, result: { status: 'recorded', sample: latest } };
   }
   requireTelemetry(!latest || latest.generation < generation || input.sequence > latest.sequence);
@@ -124,7 +102,7 @@ export function verifyTelemetryResult(value, credential, operation, input) {
     if (result.status === 'deferred') requireTelemetry(result.sample === null);
     else {
       const sample = accepted(result.sample);
-      requireTelemetry(JSON.stringify(samplePayload(sample)) === JSON.stringify(samplePayload(telemetryInput('sample', input))));
+      requireTelemetry(JSON.stringify(telemetryInput('sample', { protocolVersion: 2, bootId: sample.bootId, generation: sample.generation, sequence: sample.sequence, cpu: sample.cpu })) === JSON.stringify(telemetryInput('sample', input)));
     }
   }
   return result;

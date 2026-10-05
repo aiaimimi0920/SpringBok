@@ -1,6 +1,6 @@
 # M02-S01：普通用户只读内存采集
 
-总进度见 [开发计划](development-plan.md)，权限和宿主职责见 [执行架构](execution-architecture.md)。M02 分为本项采集与 M02-S02 版本化上报/只读展示；本项不是已部署监控、云端内存展示或 M07 完整总览，父任务尚未完成。
+总进度见 [开发计划](development-plan.md)，权限和宿主职责见 [执行架构](execution-architecture.md)。M02 分为本项采集与 M02-S02 版本化上报/只读展示；本项自身不是已部署监控、云端内存展示或 M07 完整总览。后续产品接入见 [指标协议与兼容](node-telemetry.md)，两项验收不代表真实用户宿主已部署。
 
 ## 运行入口与权限
 
@@ -60,4 +60,4 @@ node scripts/ci/memory-native.mjs
 
 CI 在既有 Ubuntu contracts job 中执行原生对照；本地固定 Linux Docker 镜像 `sha256:fee853fafa59550d162cef52bca02d907694b44ebf6ef9fb075bcc0c65d8dedb`、Node.js 24.18.1、uid 1000、只读 LF 快照和一次性 tmpfs 只证明该环境的可见 Linux 内核口径，不替代原生 runner 或用户宿主。证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-memory-collection-20261005/`；已执行结果、精确提交/PR/main 见总计划与回执，不预报未完成 CI。
 
-未完成：M02-S02 混合版本兼容设计、observe 包/daemon 装配、鉴权上报/独立 latest/只读小详情，以及真实用户宿主验收。现有 v4 格式/文件清单、CPU schema 和生产默认开关不变，不将旧固定包宣称包含本入口，不升级或覆盖现有安装。
+M02-S01 当时不包含 observe 包/云端接入；该历史证据不改写。M02-S02 后续在独立 v5 包装配采集器并完成版本化上报/只读小详情，见指标专题与总计划。旧固定 v4 包及 CPU schema 保留，不将它宣称包含本入口，不升级或覆盖现有安装；生产默认开关、真实 Cloudflare/用户宿主验收仍不变。

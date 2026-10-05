@@ -21,7 +21,7 @@ N06-S01 提供绑定 Git revision/文件摘要的控制客户端包，以及 Lin
 安装后可核对版本/身份、执行一次只读控制 probe；不包含 Komodo/Core/Mongo，不安装系统服务，
 不表示业务执行环境已就绪。[可信引导、命令与恢复边界](docs/node-installation.md)
 
-N07-S01 在 v2 包中增加前台常驻入口，N07-S02 增加显式 systemd 用户服务；N08 的当前 v3 包
+N07-S01 在 v2 包中增加前台常驻入口，N07-S02 增加显式 systemd 用户服务；N08 当时的 v3 包
 提供独立 execute/observe 心跳和云端在线/陈旧/离线判定，仍只处理控制 probe，不是业务执行器或主机指标采集器。
 [常驻命令、错误分类与旧包保留边界](docs/node-daemon.md)
 [角色心跳、阈值、重送与 schema 兼容](docs/node-heartbeat.md)
@@ -34,8 +34,10 @@ N07-S01 在 v2 包中增加前台常驻入口，N07-S02 增加显式 systemd 用
 M02-S01 增加独立内存入口 `node scripts/node-memory.mjs`：普通 Linux 用户只读
 `/proc/meminfo`，用 `MemTotal`/`MemAvailable` 输出总量、可用、已用 bytes 和占比。
 缺失/失败不显示为 0，不把容器限额冒充宿主内存；不施加内存压力或修改已有安装。
-版本化上报与管理页接入由 M02-S02 独立实施，当前 v4 包不包含这个新入口。
+M02-S02 在显式 v5 /26 文件包中装配 CPU+内存上报；管理页以一次 GET 展示独立指标小详情。
+旧 v4 包继续 CPU-only，内存“未上报”不显示为 0；新安装不覆盖旧安装，不代表生产已部署。
 [内存口径、运行与 procps 对照](docs/memory-collection.md)
+[版本化指标、SQLite 保留式扩展与兼容](docs/node-telemetry.md)
 
 ## M14：基线与候选发布差异
 

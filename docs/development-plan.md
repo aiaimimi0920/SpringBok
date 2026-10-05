@@ -122,7 +122,7 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | N07 | 常驻运行与开机启动 | 已完成 | 进程生命周期见 N07-S01；用户服务见 N07-S02 | 限定控制客户端前台常驻与用户 manager 启动关联已验收；宿主 linger/实际开机重启和业务执行仍另核授权、受 N06-S02/V 项限制 | N06-S01 |
 | N07-S01 | 控制客户端常驻循环与安全退出 | 已完成 | [实现与验收](node-daemon.md)；负责人：主 AI；PR #40，交付见第 7.11 节 | execute/observe 单角色常驻、至少 30 秒间隔、有界退避、单实例、安全退出、unknown 不重放已验收并提交推送；PR/main 最终检查见回执，不含开机启动 | N06-S01 |
 | N07-S02 | 非特权系统服务与开机启动 | 已完成 | [实现与验收](node-user-service.md)；负责人：主 AI；PR #41；第 7.12 节 | 固定私有 unit、原生显式启停/启用、失败不自动重启、真实 manager 重建/禁用与残留锁均通过；源码已推送，最终 PR/main 按回执，宿主 linger/部署另核授权 | N07-S01 |
-| N08 | 节点心跳与离线判定 | 进行中 | 负责人：主 AI；领取见第 7.13 节；E09 的 Core 缓存不能替代心跳 | 带采样/接收时间与过期阈值；断网显示离线/陈旧，时钟偏差不伪造在线 | N07 |
+| N08 | 节点心跳与离线判定 | 已完成 | [实现与验收](node-heartbeat.md)；负责人：主 AI；PR #42；第 7.13 节 | 双角色持久心跳/云端阈值、重启/乱序/时钟偏差/限频/未知/默认关闭和完整本地及 CI 验收已提交推送；PR/main 最终按回执，不代表真实主机断网验收 | N07 |
 | N09 | 节点运行环境预检查 | 部分实现 | E07 手工 rootless/容量要求、E09 固定资源检查 | OS/架构/版本/权限/磁盘和资源余量结构化上报；不满足时阻止部署 | N07 |
 | N10 | 节点程序安全升级 | 待开发 | 尚无发行升级链 | 校验固定产物/版本，兼容协议，失败可恢复；在途未知任务不自动重做 | N06/N07 |
 | N11 | 固定 fixture 生命周期执行器 | 已实现 | E07；`src/fixture-node/executor.mjs` | 固定一次 v1→v2→bad→v1，核对容器/镜像/卷/回执；不是实际业务执行器，真实链由 V02 验收 | N00 |
@@ -453,6 +453,9 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 原 main `448d53a` 精确 v2 包由自身旧可信代码实际安装/重装/运行 version；新版拒绝旧格式和拿 v3 包覆盖旧安装，release/credential/state/标记的内容/inode/device/mode/mtime 不变。只用非 root 一次性 Linux tmpfs，不修改真实安装。首次 Windows client 测试因 Linux-only 私有文件保护失败、Linux fixture 传入完整 credential 违反精确 context、测试在途 IPC 时 SIGKILL、空 browser 依赖缓存等均保留日志；仅修测试接线/锁定依赖安装，不放宽产品 guard。
 - 当前为源码与本地验收完成；精确 Git 包、安全工具、远程提交/PR/user-manager/head/main CI 结果按本项后续回执记录，不提前宣称已合并或真实部署。
 - 32 个本轮文本 UTF-8 无 BOM/LF 快照一致、84 个本地链接和 86 项无环依赖通过。actionlint 1.7.12/Gitleaks 8.30.1 归档与仓库固定 SHA-256 重核后复用，全部 workflow 语法通过（未额外运行 ShellCheck/Pyflakes），当前源码快照无 secret 检出。首次工具包装误指不存在的自定义 config、后续 Docker 到 GitHub 暂时连接失败均保留原日志；最终用已核固定归档运行默认规则，不放宽门禁或宣称新下载成功。
+- 功能提交 `248eafdc016e95115a1fb39f914ad4147a649823` 已推送、远程 SHA 一致，PR [#42](https://github.com/aiaimimi0920/SpringBok/pull/42)。精确 Git v3 包 22 文件/89,803 字节，manifest SHA-256 `bf86a152e26ae68630da4f194ebc63eb3214d75217729800e2acbf11e47c1ce5`；逐文件匹配 Git，非 root 双角色实际安装/版本/daemon 心跳与安全退出、用户服务 CLI/parser 通过。Gitleaks 完整 86 commits 无检出。独立精确 head 增量审查确认观测隔离修复与失败策略口径，无仍然成立的确定问题；主 AI 负责实际测试/提交审阅。
+- 该功能 head 的 6 workflows/14 checks 全部成功；真实 user-manager job 双角色已包含 recorded 心跳，再通过原启停/drain/身份/unknown/enable/disable/manager 重建/SIGKILL 保留。专项 artifact `11354943979` 已下载并核 GitHub SHA-256、原退出码 0、双角色 journal 的 heartbeat recorded 和成功 marker。JavaScript CodeQL SARIF 10 条既有结果，本项变更路径 0 条；扫描执行成功不等于零漏洞。API 读取曾出现 TLS EOF，旧 JSON 没当新状态使用；临时单请求 IPv4/直连已恢复元数据/下载和 Git 查询，没有关闭 TLS 验证、改全局代理或创建网络映射。
+- N08 的限定源码/本地及 CI 验收、提交推送已完成；本次同步状态，最终文档 head 的检查、正常合并/main 新鲜复核和固定 main 包写 PR 最终回执，不自嵌套提交 SHA、不预报尚未完成的检查。下一独立开发项 M01/M06 尚未领取；真实 Cloudflare/Access/服务器、指标/业务部署、凭据生命周期和整体计划保持未完成。
 
 ### 7.14 后续交接记录模板
 

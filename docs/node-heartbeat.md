@@ -67,4 +67,6 @@ NodeMailbox 原 schema 1/2、node_ledger 和 node_enrollment 保留。只有受�
 - `tests/browser/node-heartbeat.mjs`：真实 Chrome/Worker/SQLite 的不同角色/节点/状态、未来采样、enrolling-but-joined、未知、读失败、快照过期/迟到 owner、GET-only/390px；浏览器时钟加速只验证 UI 失效，不替代真实后端阈值测试。
 - 既有全量契约/Worker/浏览器、user-manager CI、安全流程和精确 Git 包兼容另核实际结果；源码存在不预报检查通过。
 
+本地 Linux 全量契约 **211/211**、workerd **49/49**，无失败/跳过；浏览器入口五条 PASS，中文 390px 截图已视觉核对。功能 head `248eafdc016e95115a1fb39f914ad4147a649823` 的 6 workflows/14 checks 全部成功，实际 user-manager 双角色 journal 已确认 recorded 心跳并通过原重建/失败/锁保留矩阵；artifact `11354943979` 的 GitHub SHA-256 与内容匹配。精确 Git 包 22 文件/89,803 字节，manifest SHA-256 `bf86a152e26ae68630da4f194ebc63eb3214d75217729800e2acbf11e47c1ce5`，非 root 双角色安装/version/实际 daemon 心跳与安全退出、服务 CLI/parser 通过。旧 `448d53a` main 的 v2 安装/重装/version 与内容/inode/device/mode/mtime/state 保留实测通过。最终文档 head/合并 main、固定 main 包另记 PR 回执，不把旧包摘要当新 main 包摘要。
+
 未完成：指标采集/总览/历史/告警、N04/N05/N10、执行依赖/真实业务、真实 Access/Cloudflare、多服务器安装和实际断网演练。实现的心跳断流阈值测试不冒称已在用户服务器拔网线验收。

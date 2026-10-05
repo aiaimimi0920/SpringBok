@@ -1,0 +1,53 @@
+const $ = id => document.getElementById(id);
+const uncertain = '目录未确认：可能身份已过期、记录已变化、达到容量上限或网络中断。请刷新目录核对，不要重复创建。';
+let catalog, csrf, generation = 0, controller, busy = false;
+export function clearCatalog() {
+  generation++; controller?.abort(); controller = null; catalog = null; csrf = null; busy = false;
+  $('catalog').hidden = true; $('servers').replaceChildren(); $('server-name').value = ''; $('server-add').disabled = true;
+}
+async function call(body, signal) {
+  const response = await fetch('/api/admin/servers', { method: body ? 'POST' : 'GET', credentials: 'same-origin', redirect: 'error', signal,
+    headers: body ? { 'content-type': 'application/json', 'x-csrf-token': csrf } : {}, ...(body ? { body: JSON.stringify(body) } : {}) });
+  if (!response.ok) throw new Error(uncertain);
+  return response.json();
+}
+function render() {
+  $('servers').replaceChildren(); $('server-add').disabled = busy || !catalog; $('server-name').disabled = busy || !catalog; $('catalog-refresh').disabled = busy;
+  for (const server of catalog?.servers ?? []) {
+    const item = document.createElement('li'); item.dataset.serverId = server.id;
+    const title = document.createElement('strong'); title.textContent = server.name; item.append(title);
+    const info = document.createElement('p'); info.textContent = `${server.id} · ${server.state === 'draft' ? '尚未接入服务器' : '已归档（没有卸载或删除数据）'}`; item.append(info);
+    if (server.state === 'draft') {
+      const actions = document.createElement('div'); actions.className = 'actions server-actions';
+      const name = document.createElement('input'); name.value = server.name; name.maxLength = 128; name.setAttribute('aria-label', `服务器名称 ${server.id}`); name.disabled = busy;
+      const rename = document.createElement('button'); rename.textContent = '保存名称'; rename.disabled = busy; rename.addEventListener('click', () => mutate({ action: 'rename', serverId: server.id, name: name.value }));
+      const archive = document.createElement('button'); archive.textContent = '归档条目'; archive.disabled = busy; archive.addEventListener('click', () => mutate({ action: 'archive', serverId: server.id }));
+      actions.append(name, rename, archive); item.append(actions);
+    }
+    $('servers').append(item);
+  }
+  if (catalog && !catalog.servers.length) { const empty = document.createElement('li'); empty.textContent = '尚无服务器目录条目'; $('servers').append(empty); }
+}
+export async function refreshCatalog(session) {
+  clearCatalog(); if (!session.catalogEnabled) return;
+  csrf = session.csrf; $('catalog').hidden = false; $('catalog-notice').textContent = '读取服务器目录…'; render();
+  const version = generation; controller = new AbortController();
+  try { const next = await call(null, AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])); if (version !== generation) return; catalog = next; render(); $('catalog-notice').textContent = `目录版本 ${catalog.revision}；这里仅登记元数据，不连接或部署服务器。`; }
+  catch { if (version === generation) { catalog = null; render(); $('catalog-notice').textContent = uncertain; } }
+}
+async function mutate(change) {
+  if (busy || !catalog) return;
+  const input = { id: crypto.randomUUID(), revision: catalog.revision, ...change }, version = generation;
+  busy = true; render(); $('catalog-notice').textContent = '保存目录变更…';
+  try {
+    await call(input, AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]));
+    if (version !== generation) return;
+    const next = await call(null, AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]));
+    if (version !== generation) return;
+    catalog = next; if (change.action === 'create') $('server-name').value = '';
+    $('catalog-notice').textContent = `目录已保存（版本 ${catalog.revision}），没有连接服务器或触发部署。`;
+  } catch { if (version === generation) { catalog = null; $('catalog-notice').textContent = `${uncertain} 请求 ${input.id}`; } }
+  finally { if (version === generation) { busy = false; render(); } }
+}
+$('server-form').addEventListener('submit', event => { event.preventDefault(); void mutate({ action: 'create', name: $('server-name').value }); });
+$('catalog-refresh').addEventListener('click', () => { if (!busy && csrf) void refreshCatalog({ catalogEnabled: true, csrf }); });

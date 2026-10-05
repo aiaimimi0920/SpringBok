@@ -5,13 +5,22 @@ const reply = (value, status = 200) => new Response(JSON.stringify(value), { sta
 export async function adminRequest(request, env, readBody) {
   try {
     const session = await accessSession(request, env), url = new URL(request.url);
-    if (request.method === 'GET' && ['/', '/app.js', '/style.css'].includes(url.pathname)) {
+    if (request.method === 'GET' && ['/', '/app.js', '/catalog.js', '/style.css'].includes(url.pathname)) {
       const response = await env.ASSETS.fetch(request);
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
     }
+    const catalogEnabled = env.ENABLE_CATALOG === 'yes' && !!env.REGISTRY;
+    if (url.pathname === '/api/admin/servers') {
+      if (!catalogEnabled) return reply({ error: 'server catalog disabled' }, 503);
+      if (!['GET', 'POST'].includes(request.method)) return reply({ error: 'unknown catalog route' }, 404);
+      if (request.method === 'POST' && (request.headers.get('origin') !== session.origin || !sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null)))) return reply({ error: 'refresh this authenticated session' }, 403);
+      const catalog = env.REGISTRY.get(env.REGISTRY.idFromName(`catalog/v1/${session.actor}`));
+      try { return reply(request.method === 'GET' ? await catalog.snapshot(session.actor) : await catalog.mutate(session.actor, await readBody(request))); }
+      catch { return reply({ error: 'catalog rejected, stale or persistence uncertain; refresh before retrying' }, 409); }
+    }
     const stub = env.TARGET.get(env.TARGET.idFromName(NODE));
     if (request.method === 'GET' && url.pathname === '/api/admin/state') {
-      return reply({ ...await stub.admin('state', null, session.actor), email: session.email, csrf: await signSession(session, 'csrf', null) });
+      return reply({ ...await stub.admin('state', null, session.actor), email: session.email, csrf: await signSession(session, 'csrf', null), catalogEnabled });
     }
     if (request.method !== 'POST' || !['/api/admin/preview', '/api/admin/submit'].includes(url.pathname)) return reply({ error: 'unknown admin route' }, 404);
     if (request.headers.get('origin') !== session.origin || !sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null))) return reply({ error: 'refresh this authenticated session' }, 403);

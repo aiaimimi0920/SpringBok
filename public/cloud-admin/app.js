@@ -1,3 +1,4 @@
+import { clearCatalog, refreshCatalog } from './catalog.js';
 const $ = id => document.getElementById(id);
 let state, preview, generation = 0, controller, timer, sending = false;
 const labels = { queued: '等待节点领取', claimed: '节点已领取，等待回执', unknown: '结果未知，执行已阻断', expired: '任务过期', observed: '仅协议观察通过', 'fixture-verified': '固定测试四阶段回执齐备' };
@@ -28,8 +29,8 @@ function render() {
 }
 async function refresh() {
   if (sending) return;
-  invalidate(); state = null; $('identity').textContent = '重新验证管理员身份…'; $('jobs').replaceChildren(); $('readiness').textContent = '未取得服务端状态'; $('start').disabled = true; const version = generation; controller = new AbortController(); status('读取记录…');
-  try { const value = await request('/api/admin/state', null, controller.signal); if (version !== generation) return; state = value; render(); status('记录已刷新，没有触发执行'); }
+  invalidate(); clearCatalog(); state = null; $('identity').textContent = '重新验证管理员身份…'; $('jobs').replaceChildren(); $('readiness').textContent = '未取得服务端状态'; $('start').disabled = true; const version = generation; controller = new AbortController(); status('读取记录…');
+  try { const value = await request('/api/admin/state', null, controller.signal); if (version !== generation) return; state = value; render(); status('记录已刷新，没有触发执行'); void refreshCatalog(value); }
   catch (error) { if (version === generation) status(error.message); }
 }
 $('refresh').addEventListener('click', refresh);
@@ -49,9 +50,9 @@ $('submit').addEventListener('click', async () => {
   if (!preview || sending) return; const value = preview; preview = null; sending = true; $('submit').disabled = true; $('cancel').disabled = true; $('start').disabled = true; $('refresh').disabled = true;
   try { await request('/api/admin/submit', value); status(`已提交 ${value.input.id}；请刷新查看节点回执`); }
   catch { status(`提交 ${value.input.id} 的结果未确认；刷新记录前不要重新提交`); }
-  finally { sending = false; $('cancel').disabled = false; $('refresh').disabled = false; invalidate(); state = null; $('identity').textContent = '重新验证管理员身份…'; $('jobs').replaceChildren(); $('readiness').textContent = '未取得服务端状态'; $('start').disabled = true; }
+  finally { sending = false; $('cancel').disabled = false; $('refresh').disabled = false; invalidate(); clearCatalog(); state = null; $('identity').textContent = '重新验证管理员身份…'; $('jobs').replaceChildren(); $('readiness').textContent = '未取得服务端状态'; $('start').disabled = true; }
 });
-addEventListener('pagehide', () => { invalidate(); state = null; $('identity').textContent = '需要重新验证身份'; $('jobs').replaceChildren(); $('start').disabled = true; });
+addEventListener('pagehide', () => { invalidate(); clearCatalog(); state = null; $('identity').textContent = '需要重新验证身份'; $('jobs').replaceChildren(); $('start').disabled = true; });
 addEventListener('pageshow', event => { if (event.persisted) void refresh(); });
 addEventListener('popstate', () => { cancel(); });
 void refresh();

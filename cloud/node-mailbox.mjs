@@ -2,8 +2,9 @@ import { DurableObject } from 'cloudflare:workers';
 import { nodeContext, nodeMailboxName, nodeLedger, probePlan, nodeTransition, verifyNodePlans } from './node-protocol.mjs';
 import { preparedEnrollment, nodeEnrollment, joinInput, joinChallengeDigest, requireEnrollment } from './enrollment-contract.mjs';
 import { nodeRole, credentialDigest, identityResult, requireCredential } from './credential-contract.mjs';
+import { channelInput, channelResult } from './node-channel-contract.mjs';
 
-// N01-S01 仅提供可信服务端内部 RPC。公开节点鉴权/角色/生命周期由 N02/N03 接入。
+// 保留旧内部 probe；新通道只在当前 joined 角色认证的同一事务内领取和回报。
 export class NodeMailbox extends DurableObject {
   #context(value) {
     const context = nodeContext(value);
@@ -67,13 +68,14 @@ export class NodeMailbox extends DurableObject {
       if (ledger === null) return perform(null, null, context);
       await verifyNodePlans(ledger, context);
       return this.ctx.storage.transactionSync(() => {
+        this.#context(context); requireEnrollment(this.env[feature] === 'yes');
         const sql = this.ctx.storage.sql, meta = sql.exec('SELECT schema_version FROM node_meta').one();
         if (meta.schema_version === 1 && initialize) {
           sql.exec('CREATE TABLE node_enrollment (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL)');
           sql.exec('UPDATE node_meta SET schema_version=2 WHERE id=1');
         }
         const record = meta.schema_version === 2 || initialize ? this.#record() : null;
-        return perform(sql, record, context);
+        return perform(sql, record, context, this.#read(context, false));
       });
     });
   }
@@ -108,13 +110,39 @@ export class NodeMailbox extends DurableObject {
       return this.#summary(verified, joined);
     });
   }
-  async credentialIdentity(value, role, token) {
+  async #credentialRun(value, role, token, perform) {
     nodeRole(role); const proof = await credentialDigest(token);
-    return this.#enrollmentRun(value, false, (_sql, record, verified) => {
+    return this.#enrollmentRun(value, false, (sql, record, verified, ledger) => {
       requireCredential(record?.status === 'joined');
       const digest = role === 'execute' ? record.input.executeDigest : record.input.observeDigest;
       requireCredential(crypto.subtle.timingSafeEqual(new TextEncoder().encode(proof), new TextEncoder().encode(digest)));
-      return identityResult(verified, record.enrollmentId, role);
+      return perform(sql, record, verified, ledger);
     }, 'ENABLE_NODE_CREDENTIALS');
+  }
+  credentialIdentity(value, role, token) {
+    return this.#credentialRun(value, role, token, (_sql, record, verified) => identityResult(verified, record.enrollmentId, role));
+  }
+  #probeTransition(sql, ledger, context, operation, input) {
+    const result = nodeTransition(ledger, context, operation, input, Date.now());
+    if (result.changed) sql.exec('UPDATE node_ledger SET state=? WHERE id=1', JSON.stringify(result.state));
+    return result.response;
+  }
+  credentialProbe(value, role, token, enrollmentId, operation, input) {
+    requireCredential(this.env.ENABLE_NODE_CHANNEL === 'yes' && role === 'execute');
+    const request = channelInput(operation, input);
+    return this.#credentialRun(value, role, token, (sql, record, verified, ledger) => {
+      requireCredential(this.env.ENABLE_NODE_CHANNEL === 'yes' && record.enrollmentId === enrollmentId);
+      return channelResult(verified, record.enrollmentId, this.#probeTransition(sql, ledger, verified, operation === 'poll' ? 'pollProbe' : 'reportProbe', request));
+    });
+  }
+  async adminProbe(value, operation, request) {
+    requireCredential(this.env.ENABLE_NODE_CREDENTIALS === 'yes' && ['snapshot', 'submit'].includes(operation));
+    const context = this.#context(value), input = operation === 'submit' ? await probePlan(context, request) : null;
+    return this.#enrollmentRun(context, false, (sql, record, verified, ledger) => {
+      requireCredential(this.env.ENABLE_NODE_CREDENTIALS === 'yes' && record?.status === 'joined');
+      const scope = { mode: 'authenticated-node-probe-only', executionReady: false, protocolVersion: 2, ...verified, enrollmentId: record.enrollmentId };
+      if (operation === 'snapshot') return { ...scope, ...ledger };
+      return { ...scope, result: this.#probeTransition(sql, ledger, verified, 'submitProbe', input) };
+    }, 'ENABLE_NODE_CHANNEL');
   }
 }

@@ -8,6 +8,7 @@ test('private assets always enter the Worker and management defaults reject acce
   assert.equal(config.vars.ENABLE_NODE_MAILBOX, 'no');
   assert.equal(config.vars.ENABLE_NODE_ENROLLMENT, 'no');
   assert.equal(config.vars.ENABLE_NODE_CREDENTIALS, 'no');
+  assert.equal(config.vars.ENABLE_NODE_CHANNEL, 'no');
   assert.deepEqual(config.durable_objects.bindings, [{ name: 'TARGET', class_name: 'TargetMailbox' }, { name: 'REGISTRY', class_name: 'OwnerCatalog' }, { name: 'NODES', class_name: 'NodeMailbox' }]);
   assert.deepEqual(config.migrations, [{ tag: 'v1', new_sqlite_classes: ['TargetMailbox'] }, { tag: 'v2-catalog', new_sqlite_classes: ['OwnerCatalog'] }, { tag: 'v3-node-mailbox', new_sqlite_classes: ['NodeMailbox'] }]);
   for (const file of ['index.html', 'style.css', 'app.js', 'catalog.js', 'enrollment.js']) {
@@ -20,4 +21,5 @@ test('private assets always enter the Worker and management defaults reject acce
   assert.match(JSON.parse(readFileSync(new URL('./cloud/package.json', import.meta.url))).scripts.test, /\bservices\.test\.mjs\b/);
   assert.match(JSON.parse(readFileSync(new URL('./cloud/package.json', import.meta.url))).scripts.test, /\bnode-mailbox\.test\.mjs\b/);
   assert.match(JSON.parse(readFileSync(new URL('./cloud/package.json', import.meta.url))).scripts.test, /\bcredentials\.test\.mjs\b/);
+  assert.match(JSON.parse(readFileSync(new URL('./cloud/package.json', import.meta.url))).scripts.test, /\bnode-channel\.test\.mjs\b/);
 });

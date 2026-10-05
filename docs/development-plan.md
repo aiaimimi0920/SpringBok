@@ -109,9 +109,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | ID | 独立功能/交付 | 状态 | 现有证据 / 责任入口 | 验收条件或下一缺口 | 依赖 |
 | --- | --- | --- | --- | --- | --- |
 | N00 | 固定节点出站任务桥 | 已实现 | E05/E07；`src/node-bridge/bridge.mjs` | 单次 Linux CLI、HTTPS 固定 origin、写前日志与回执重送；非后台 Agent | C03 |
-| N01 | 多节点任务寻址与隔离 | 部分实现 | 内部持久隔离见 N01-S01；真实认证接入见 N01-S02 | 两个节点各有 mailbox/任务所有权；不能跨节点领取、回报或串用固定 fixture；旧协议兼容；完成内部协议不等于已接入节点 | ARC-01/C04-S01 |
+| N01 | 多节点任务寻址与隔离 | 已完成 | 内部持久隔离见 N01-S01；认证控制通道见 N01-S02 | 双节点/双 owner 的已加入身份、独立 mailbox、领取/回报隔离与旧协议回归通过；仅控制 probe，不等于真实多机、业务执行或 V03 验收 | ARC-01/C04-S01 |
 | N01-S01 | 独立节点邮箱与内部只读协议 | 已完成 | [实现与验收](node-mailbox.md)；负责人：主 AI；PR #35 已合并 | 版本化独立 DO、owner/node 不可变绑定、双节点只读 probe、一次交付/幂等/重启/未知阻断已验证；main 检查通过，公开任务通道保持不可用 | ARC-01/C04-S01 |
-| N01-S02 | 认证节点通道与出站桥接入 | 待开发 | 不复用旧 NODE_TOKEN，不接受公开自报上下文 | 将加入后权威凭据上下文接入新路由/桥；事务内认证与领取；双节点端到端身份隔离 | N01-S01/N02/N03 |
+| N01-S02 | 认证节点通道与出站桥接入 | 已完成 | [实现与验收](node-channel.md)；负责人：主 AI；交付进度见第 7.9 节 | 已加入 execute 身份、事务内认证/领取、管理员 API→Linux 桥→SQLite 回执与双节点隔离通过；不复用旧 NODE_TOKEN，PR/main 检查另记回执 | N01-S01/N02/N03 |
 | N02 | 服务器注册与一次性加入流程 | 已完成 | [实现与验收](node-enrollment.md)；负责人：主 AI；交付流程见第 7.7 节 | 保存后授权、一次性加入、过期/冲突拒绝和跨 DO 恢复已通过本地验收并提交推送；PR 合并检查另记回执，不代表真实服务器已接入 | N01-S01/C08 |
 | N03 | 每节点独立凭据 | 已完成 | [实现与验收](node-credentials.md)；负责人：主 AI；交付进度见第 7.8 节 | joined 角色摘要、独立角色材料和本地 workerd 身份核对已验证并提交推送；PR/main 检查另记回执，任务通道仍归 N01-S02 | N02 |
 | N04 | 节点凭据轮换 | 待开发 | 当前无轮换流程 | 有界切换窗口、旧凭据失效、在途任务不重复执行、全链路不回显秘密 | N03 |
@@ -369,7 +369,23 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 18 个本项变更文本 UTF-8 无 BOM、LF 源码快照哈希一致；根规则/README/总计划/新专题共 56 个本地链接、82 个唯一任务及无环依赖检查通过。未修改工作区换行配置、lockfile 或历史 evidence。
 - 功能提交 `7d6f20197bf5a8f3a2aeef20a0a7ce09a3cdebec` 已推送、远程分支 SHA 核对一致；本次交付元数据另作 scoped 文档提交，不 amend 自嵌套 SHA。当前待精确 PR head 审阅/CI/正常合并及 main 复核，尚不宣称已合并。完成本项后下一独立功能为 N01-S02。N04/N05/N06、真实 Cloudflare/Access、多机网络/账号安装与业务部署继续未完成，不把身份成功当在线/执行就绪或整体计划完成。
 
-### 7.9 后续交接记录模板
+### 7.9 N01-S02 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `54d1c41af3822f466b8bc2d13d46183f51c8e586`；分支 `feat/node-channel-20261005`。前项 N03 PR [#37](https://github.com/aiaimimi0920/SpringBok/pull/37) 已正常合并；head `f8bf125c44847b61f260753719b7efd0b35fb5dc` 与 main tree `ab18e2577d97afbc2371ae6c6059655796f748ca` 一致。head 6 workflow/13 checks、main 6 workflow/11 checks 成功，契约 183/183、workerd 34/34、浏览器通过，见 [最终回执](https://github.com/aiaimimi0920/SpringBok/pull/37#issuecomment-5992716298)。当前本地/远程 main 一致，工作区干净，不重复前项身份/加入开发。
+- 范围：`cloud/` 的管理员本人节点控制 probe 入口、默认关闭的 v2 execute 领取/回报通道、NodeMailbox 权威事务 seam；Linux 单角色客户端、独立版本化出站桥/journal 和一次调用 CLI，匹配测试及专题文档。保留旧 bridge/TargetMailbox/固定 fixture 和历史证据，不新增 schema、binding 或依赖。
+- 方案：仅接入既有 protocol-probe 安全计划，不提供通用 dispatch。管理员 owner 由 Access actor 得出，目录约束只作辅助，节点当前 joined 为最终权威；角色认证、当前 ledger transition 和 claimed/result 写入在同一 DO 事务，响应带 owner/node/enrollment/role 绑定。execute 可领取/回报，observe 不可；加入/目录关闭不隐式禁用已加入通道，credentials 和新 channel 开关必须启用。
+- 验收：双节点/双 owner 与 execute/observe 隔离、错 token/回执/摘要/上下文拒绝；并发仅一次 delivery；领取丢响应云 claimed/unknown 不重投；先保存 plan intent/result 后回报，ack 丢失只重送原 receipt；intent-only 重开固定 unknown，本地或云端 unknown 永久阻断并保留证据；默认关闭/损坏库/旧 schema 不初始化、不清记录。
+- 不做：业务部署/fixture 经新通道执行、用户批准、指标/心跳、轮换/撤销、常驻/安装、真实 Cloudflare/服务器/账号配置。epoch/revoked 仍由 N04/N05 实施；只读 probe observed 不等于在线、业务健康或 executionReady。崩溃残留 owner.lock 不自动删除；正常 close 后重开不能冒称异常进程自动恢复。
+- 先完成管理员提交→真实已加入角色→Linux bridge→节点 DO 回执闭环，再立即本项 scoped commit/push、精确 head 审阅/CI/正常合并及 main 复核。整体目标保持 active，不将本项或本地模拟结果当全部产品验收。
+- 本轮接续原分支的 17 个未提交文件，没有重做 N02/N03 或撤销原修改。已 fresh-check 远程 main 仍为本节基线；197 个 tracked 文件与原测试快照逐一核对（文本仅规范化 LF），17 个改动文件与记录的 SHA-256 一致。
+- 实现见 [认证节点通道](node-channel.md)。节点 owner/node/enrollment/execute 角色在持久 joined 权威事务内校验；管理员只提交控制 probe；桥保存 intent/result 后回报，丢 ack 只重送原回执，intent-only 与云端 unknown 保持永久阻断。没有新增 schema、依赖、云 binding 或业务 executor。
+- 本轮 Windows Node.js 22.22.2 聚焦 7/7；Linux Node.js 24.18.1 原源码哈希匹配的全量契约证据 186/186、新通道专项 8/8 予以复用。完整 workerd/SQLite 本轮重新执行 **42/42**，失败/跳过均为 0，见 `snapshot/.tmp/linux-cloud-resume.log`。本项没有修改 UI，浏览器验收使用精确 PR/main 的既有 CI，不声称另做本地浏览器实测。
+- 上次完整 Worker 日志实际上为 41/42：旧凭据导出测试的 5 秒 `spawnSync` 返回 `status=null`，断言 `null !== 0`；日志不足以确认具体终止原因。本轮保持源码/超时/断言不变，该用例独立复跑 1/1、完整套件 42/42。恢复测试挂载时曾漏挂 `cloud/node_modules` 导致 `Could not resolve "jose"`，补齐同 lockfile 只读依赖；PowerShell 包装曾将 npm notice 当作终止错误，修正仅临时包装的 stderr/exit-code 记录，未修改产品门禁。所有已有失败日志保留。
+- 独立只读审查代理返回上游 503，未产出审查结论，不计独立审查通过。主 AI 已阅读实际源码、调用点、完整改动和匹配测试，重点核对身份隔离、事务领取、日志恢复与 unknown 不重放；精确提交审阅另记 PR。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-channel-20261005/`；`verified-source-hashes.json`、`resume-snapshot-verification.txt`、`run-resume.ps1` 和 `snapshot/.tmp/`。原始测试证据不覆盖；actionlint 1.7.12/Gitleaks 8.30.1 按仓库固定归档 SHA-256 核验，最终工具结果和精确 PR/main 检查另记回执。
+- 本项完成范围是源码与本地控制通道验收，交付按 scoped commit/push、正常 PR 合并和 main 复核推进；本提交不自嵌套最终 SHA，不预报尚未结束的远程检查。下一独立任务为 N06（可重复安装/引导），尚未领取；常驻/心跳、轮换/撤销、监控和真实业务链继续未完成，V01/V02/V03 保持待实测或待开发。
+
+### 7.10 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

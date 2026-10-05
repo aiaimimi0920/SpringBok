@@ -33,6 +33,8 @@ jobs:
         run: node scripts/ci/cpu-native.mjs
       - name: Compare normal-user memory gauges with procps free without memory pressure
         run: node scripts/ci/memory-native.mjs
+      - name: Compare normal-user disk namespace gauges with GNU df without disk writes
+        run: node scripts/ci/disk-native.mjs
       - run: node scripts/lab.mjs
       - name: Read the immutable M6 source certificate
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

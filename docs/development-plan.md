@@ -164,7 +164,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | M02 | 内存用量采集与产品接入 | 已完成 | M02-S01/M02-S02；第 7.16/7.17 节；负责人：主 AI | 限定采集→版本化上报→独立 latest→只读小详情源码/验收闭环；精确 Git 交付以本项回执为准，真实宿主/Cloudflare 与 M07 完整总览仍开放 | N07 |
 | M02-S01 | 普通用户只读内存采集器与原生对照 | 已完成 | [采集与验收](memory-collection.md)；第 7.16 节；负责人：主 AI | 限定源码与本地验收闭环；提交/PR/main 最终交付按本项回执，真实宿主和 M02-S02 上报/展示仍开放 | N07 |
 | M02-S02 | 内存指标版本化上报与只读小详情 | 已完成 | [版本化指标](node-telemetry.md)；第 7.17 节；负责人：主 AI | 新 v5 observe 包采集→鉴权上报→独立 latest→只读小详情；旧 v4 CPU 客户端/快照/安装保留，未上报不显示 0；精确 Git 交付按回执，不冒充 M07 完整总览 | M02-S01/M06 |
-| M03 | 磁盘容量采集 | 待开发 | 当前无磁盘采集器 | 明确挂载点、总量/可用/使用率，过滤伪文件系统；不能为测量写满或清理磁盘 | N07 |
+| M03 | 磁盘容量采集与产品接入 | 进行中 | M03-S01/M03-S02；第 7.18 节；负责人：主 AI | 按挂载点只读采集、过滤伪文件系统与版本化上报/详情；两子项验收前不关闭父项，不写满或清理磁盘 | N07 |
+| M03-S01 | 普通用户只读磁盘容量采集器与原生对照 | 已实现 | [采集与验收](disk-collection.md)；第 7.18 节；负责人：主 AI | 本地源码/契约通过，支持根文件系统的原生 df 容量验收及精确 PR/main 仍待本项回执；不更改 v5 包 | N07 |
+| M03-S02 | 磁盘指标版本化上报与只读小详情 | 待开发 | 后续复用 M06/M02-S02；本轮不领取 | 严格版本化、保留式 SQLite 扩展与旧客户端兼容、显式新包、按挂载点独立显示与单 GET；不把未上报当 0 或合计成物理磁盘总量 | M03-S01/M02-S02 |
 | M04 | 网络吞吐采集 | 待开发 | 当前无网络采集器 | 网卡累计计数差分、单位、重启/计数回绕处理；不抓取业务内容 | N07 |
 | M05 | 主机基础信息与运行时间 | 待开发 | N09 预检查可复用 | OS/架构/内核/运行时间/版本与时间戳；仅采集必要元数据，不上传完整环境变量 | N09 |
 | M06 | 指标上报与最新快照存储 | 已完成 | [实现与验收](node-telemetry.md)；负责人：主 AI；第 7.15 节 | 限定 CPU 鉴权/独立 latest/v4 observe 装配/小详情闭环已验收；提交/PR/main 最终交付按本项回执，不代表其他指标、真实宿主或生产部署 | ARC-02/N03/N08/M01 |
@@ -521,7 +523,27 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 两项只读静态审查未发现阻断问题，不计独立执行测试；采用反馈补 89,999ms/90,000ms 相邻 pending 边界、旧 reader 写入口拒绝、单 GET 和迟到 memory 区分力。固定 actionlint1.7.12/Gitleaks8.30.1 按归档 SHA 重新核对通过；不声称额外 ShellCheck/Pyflakes。首轮 ACK 单测 strict context 参数错误只修测试，原失败保留；workerd 重启 Broken pipe 诊断保留，不抹日志。
 - 两子项的限定源码与本地验收均完成；本项立即 scoped 提交推送/精确 head 审阅/正常合并/main 核对，最终精确 SHA、CI、安全扫描和 fresh Git v5 包以 PR 回执为准，不循环 amend。下一独立开发项 M03 磁盘采集，未在本项提前实施；真实部署和整体目标保持开放。
 
-### 7.18 后续交接记录模板
+### 7.18 M03-S01 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `5f8e648df5dbe053342048cbd268302949633e32`；分支 `feat/disk-collection-20261005`。领取前工作区干净。前项 M02-S02 功能提交 `00f39996f6f6483e115465a2dcc2fe081bf69a33`、PR [#46](https://github.com/aiaimimi0920/SpringBok/pull/46) 正常合并，[最终回执](https://github.com/aiaimimi0920/SpringBok/pull/46#issuecomment-6001399278) 已发布读回；head/main 同 tree，main 6 workflow/12 job 成功、契约 237/237、workerd 58/58、Chrome 9 组通过。M02 限定开发闭环，不重复其部署/安装或覆盖历史证据。
+- 范围：`src/node-telemetry/disk*.mjs`、无参数 `scripts/node-disk.mjs`、匹配测试/原生 df 对照、既有 contracts CI 入口和专题/README/本页。先将 M03 拆为独立采集与后续上报展示两项；本项不改变 v5 /26 文件闭包、observe daemon、协议、SQLite、Worker 或 UI。
+- 设计边界：固定只读 `/proc/self/mountinfo`、有界严格 UTF-8/转义/拓扑解析；窄本地文件系统支持集、筛选在 statfs 前完成，不主动探测初始拓扑中网络/FUSE/autofs/伪文件系统；并发重挂载/ABA 不能完全排除。只表示当前进程 mount namespace，overlay 因未知底层单位明确过滤，不认证物理宿主；不汇总为全机磁盘。容量通过 BigInt 校验，`used=blocks-bfree`、`available=bavail`、`reserved=bfree-bavail` 是差额而非已认证保留块配置；百分比按 `used/(used+available)`，失败不 clamp 或伪造 0。
+- 生命周期：整次采样在自有普通用户子进程执行，固定 deadline/输出限量；超时或停止只终止自有 ChildProcess，未 close 不启动替代 worker。Node statfs 无 AbortSignal，不能把 Promise timeout 或 SIGKILL 称为已取消内核 I/O；不可中断内核等待可能延迟 worker 退出，明确保留此边界。串行采集及同步输出后至少等 30 秒，停止丢弃迟到结果。
+- 验收：挂载转义/路径/过滤/重叠与隐藏拓扑、实际读取上限、前后拓扑变更、合法 0/差额与错误计数/溢出/单位、部分失败/时钟、worker 超时与不积累/停止；普通 Linux 用户真实 CLI 两样本至少 30 秒并与独立 df bytes/百分比公式对照。只读，不创建挂载、不写测试数据、不清理或填满磁盘、不使用 root/sudo。
+- 不做：磁盘 I/O、SMART/块设备发现、目录扫描、网络/未知文件系统、完整物理盘覆盖、任意路径/间隔参数、原生 helper/运行依赖、云端/UI/新包/已有安装升级、生产部署或云资源。真实用户宿主/Cloudflare 与 M03-S02 仍开放。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-disk-collection-20261005/`。本项验收后立即 scoped commit/push、精确 head 审阅/正常合并及 main 复核，再领取 M03-S02；整体目标保持 active。
+
+本地实施与验收记录：
+
+- 已实现固定 mountinfo 读取/严格解析、窄本地支持集与拓扑筛选、BigInt bytes/百分比、明确部分失败/未知、自有 5 秒 worker/192 KiB 输出限量及无参数 CLI。支持 ext2/3/4、xfs、btrfs，bind/subvolume 子树和 overlay/网络/FUSE/autofs/未知类型明确过滤；不把未知或同空间重复挂载合计成物理容量。
+- 单位核对改变了实施决策：Node 暴露 f_bsize 不提供 f_frsize；固定 Linux v6.12 官方镜像源码确认 ext2/ext4/xfs/btrfs 的计数单位及 frsize=0 回填 bsize。overlay 转发未知底层、改写 magic，不能仅凭类型证明单位，最终实现 fail-closed。早期允许 overlay 的两次本地 df 试验仅保存为调查证据，不用于最终容量验收。GitHub raw 返回 429，官方镜像六文件原文及 SHA 保留。
+- 固定 Linux Node.js 24.18.1/uid1000/只读 LF 快照：全量契约 255/255，0 失败/跳过，包含新磁盘 18 组、实际挂起 child 的 5 秒 timeout/终止、真实自有 child 在途 abort、两种 CLI 信号等待期停止、危险路径未调用 statfs、限量/变更/部分失败/0/null/差额/溢出/坏出口。未知 D-state 不制造、不宣称内核请求已取消或零残留；无 close 不再 spawn 由可控 seam 严格验证。
+- 两项独立只读静态审查未发现阻断问题，不计独立执行通过。按反馈补产品两位百分比与 df 独立 bytes 的直接容差对照、真实自有 child timeout/在途停止、唯一 mountpoint 出口拒绝，并收窄动态重挂载的绝对表述；保留 ABA/TOCTOU 与内核 I/O 退出边界。
+- 11 个本项改动文本 UTF-8 无 BOM、LF 快照哈希一致，90 个唯一任务/无环依赖及本地链接通过；旧 v5 包 26 个文件与精确已发布 manifest 全部一致。固定 actionlint 1.7.12/Gitleaks 8.30.1 归档 SHA 再核对、全部 workflow 与本项源码扫描通过，无 leak；未额外 ShellCheck/Pyflakes。没有运行依赖/lockfile、协议、SQLite、Worker、UI、默认开关或已有安装变化。
+- 失败证据保留：初次新单测两个 fixture 预期错误（边界构造含额外 newline、合法可见 ancestor 被误期望过滤），修正测试而非放宽 parser；临时 Docker 包装漏创建 browser 只读嵌套挂载点退出 125，只修临时目录；首次新文件写入管道使用 PowerShell 5 默认 ASCII，检测后用 UTF-8 OutputEncoding 恢复中文注释，不把乱码当源文案；临时 verifier 的旧 helper 文本匹配失败只修工具。最终源码/验证日志保留，不覆盖失败证据。
+- 最终 Docker namespace 是 overlay，只能证明明确 unsupported、无猜测数值/停止；不宣称支持根的原生容量对照已本地通过。原生 Ubuntu contracts job 必须取得支持根的两个真实 gauge >=30 秒，并逐挂载点通过 GNU df/stat total/差额/单位/比率门禁；精确 head/main CI 未完成前不预报成功。源码当前已实现，Git 交付按 scoped commit/push、精确审阅/正常 merge/main 回执推进，下一项 M03-S02 不提前领取。
+
+### 7.19 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

@@ -39,6 +39,12 @@ M02-S02 在显式 v5 /26 文件包中装配 CPU+内存上报；管理页以一�
 [内存口径、运行与 procps 对照](docs/memory-collection.md)
 [版本化指标、SQLite 保留式扩展与兼容](docs/node-telemetry.md)
 
+M03-S01 增加独立磁盘入口 `node scripts/node-disk.mjs`：普通 Linux 用户只读当前
+mount namespace，按支持的挂载点输出 total/free/available/used/差额和使用率。
+过滤伪/网络/未知文件系统，不合计成物理盘总量，不写满或清理磁盘；阻塞采样不积累。
+本项不更改 v5 包/上报/UI，M03-S02 接入与真实宿主验收仍待完成。
+[磁盘口径、支持范围、阻塞边界与 GNU df 对照](docs/disk-collection.md)
+
 ## M14：基线与候选发布差异
 
 同一配置检查页可额外选择基线JSON，对比镜像、双环境目标、端口、卷和密钥引用，

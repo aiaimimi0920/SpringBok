@@ -1,6 +1,6 @@
 # SpringBok 产品开发计划与逐功能进度
 
-更新日期：2026-10-04（任务日期）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
+更新日期：2026-10-05（当前任务开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
 ## 1. 产品目标与本轮边界
@@ -94,9 +94,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | C01 | Worker 同源静态资源和 API 骨架 | 已实现 | E05/E06；`cloud/wrangler.jsonc` | 资产先过 Worker；默认关闭；产品页面扩展仍待后续任务 | 无 |
 | C02 | Cloudflare Access 服务端管理员鉴权 | 已实现 | E06 | 验签与固定名单已编码；真实账号/策略验收由 V01 承担，不等于多角色系统 | C01 |
 | C03 | 固定任务的 SQLite DO 事务持久化 | 已实现 | E05；`TargetMailbox` | 当前单节点 100 条上限；保留同 ID 同输入幂等、未知不重投；多节点由 N01 扩展 | C01 |
-| C04 | 持久服务器/服务目录 | 已实现 | 服务器目录见 C04-S01；服务目录见 C04-S02 | 两类持久元数据、owner 隔离和关联约束已实现；本项交付以精确 PR/main 回执为准，不代表节点/业务接入 | ARC-02 |
+| C04 | 持久服务器/服务目录 | 已完成 | 服务器目录见 C04-S01；服务目录见 C04-S02 | 两类持久元数据、owner 隔离和关联约束已验收并合并；不代表节点/业务接入 | ARC-02 |
 | C04-S01 | 持久服务器目录与管理页 | 已完成 | [实现与验收](server-catalog.md)；负责人：主 AI；PR #33 已合并 | owner 隔离、创建/改名/归档、幂等/revision、SQLite 重启、失败关闭、默认关闭与页面验收通过；main 合并后 CI 通过，不等于节点已接入 | ARC-02 |
-| C04-S02 | 持久服务目录与服务器引用 | 已实现 | [实现与验收](service-catalog.md)；负责人：主 AI | 创建/改名/归档、owner/reference、服务器归档关联阻断、共享 revision/幂等、保留式迁移和页面验收通过；待 PR 交付闭环，不生成可执行配置 | C04-S01 |
+| C04-S02 | 持久服务目录与服务器引用 | 已完成 | [实现与验收](service-catalog.md)；负责人：主 AI；PR #34 已合并 | 创建/改名/归档、owner/reference、服务器归档关联阻断、共享 revision/幂等、保留式迁移和页面验收通过；main 检查通过，不生成可执行配置 | C04-S01 |
 | C05 | D1 数据访问与迁移（按需） | 待决策 | 当前无 D1 binding | ARC-02 采用后才实现 schema、隔离测试与迁移恢复；不采用则记录理由，不阻断无关任务 | ARC-02 |
 | C06 | KV 非权威缓存（按需） | 待决策 | 当前无 KV binding | 明确陈旧数据容忍度、失效规则；关闭缓存不影响部署安全 | ARC-02 |
 | C07 | R2 对象归档（按需） | 待决策 | 当前无 R2 binding | 受权上传/下载、对象归属、大小/配额、保留和恢复验证；不公开原始日志或凭据 | ARC-02 |
@@ -109,8 +109,10 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | ID | 独立功能/交付 | 状态 | 现有证据 / 责任入口 | 验收条件或下一缺口 | 依赖 |
 | --- | --- | --- | --- | --- | --- |
 | N00 | 固定节点出站任务桥 | 已实现 | E05/E07；`src/node-bridge/bridge.mjs` | 单次 Linux CLI、HTTPS 固定 origin、写前日志与回执重送；非后台 Agent | C03 |
-| N01 | 多节点任务寻址与隔离 | 待开发 | E05 当前硬编码 `NODE='pc2-test'` | 两个节点各有 mailbox/任务所有权；不能跨节点领取、回报或串用固定 fixture；旧协议兼容 | ARC-01/C04-S01 |
-| N02 | 服务器注册与一次性加入流程 | 待开发 | 无注册 API/UI；拟 `cloud/` + 管理页 | 添加服务器取得短期一次性加入凭据；过期/重复/伪造拒绝；不预先信任自报节点 ID | N01/C08 |
+| N01 | 多节点任务寻址与隔离 | 部分实现 | 内部持久隔离见 N01-S01；真实认证接入见 N01-S02 | 两个节点各有 mailbox/任务所有权；不能跨节点领取、回报或串用固定 fixture；旧协议兼容；完成内部协议不等于已接入节点 | ARC-01/C04-S01 |
+| N01-S01 | 独立节点邮箱与内部只读协议 | 已实现 | [实现与验收](node-mailbox.md)；负责人：主 AI；本轮记录见第 7.6 节 | 版本化独立 DO、owner/node 不可变绑定、双节点只读 probe、一次交付/幂等/重启/未知阻断已验证；待 PR 交付闭环，公开通道保持不可用 | ARC-01/C04-S01 |
+| N01-S02 | 认证节点通道与出站桥接入 | 待开发 | 不复用旧 NODE_TOKEN，不接受公开自报上下文 | 将加入后权威凭据上下文接入新路由/桥；事务内认证与领取；双节点端到端身份隔离 | N01-S01/N02/N03 |
+| N02 | 服务器注册与一次性加入流程 | 待开发 | 无注册 API/UI；拟 `cloud/` + 管理页 | 添加服务器取得短期一次性加入凭据；过期/重复/伪造拒绝；不预先信任自报节点 ID | N01-S01/C08 |
 | N03 | 每节点独立凭据 | 部分实现 | E05 仅一个 `NODE_TOKEN` | 每节点身份与服务端绑定，最小权限；某节点泄漏不能控制其他节点 | N02 |
 | N04 | 节点凭据轮换 | 待开发 | 当前无轮换流程 | 有界切换窗口、旧凭据失效、在途任务不重复执行、全链路不回显秘密 | N03 |
 | N05 | 节点撤销接入 | 待开发 | 当前无撤销流程 | 撤销后不能领取新任务；保留历史/未知证据，不隐式卸载或删除业务数据 | N03/C09 |
@@ -318,7 +320,23 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 本机证据：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-service-catalog-20261004/`；`linux-unit-final.log`、`linux-cloud-complete.log`、`linux-browser-complete.log`、截图与 15 个源码/测试文件 LF SHA-256 匹配清单。19 个变更文本 UTF-8 无 BOM；32 个本地文档链接/80 个任务的唯一性和无环依赖检查通过。actionlint 1.7.12、Gitleaks 8.30.1 按仓库 SHA-256 验证下载；actionlint workflow 语法通过（未额外执行 ShellCheck），提交后的 Gitleaks 和精确 CI 结果见 PR 回执。
 - 下一停点先完成本项提交/推送/PR/main 验证；下一独立功能 N01（多节点任务寻址与隔离）尚未领取。V01/V02 保持待实测，不配置云资源、不复跑有副作用 fixture、不清持久记录。
 
-### 7.6 后续交接记录模板
+### 7.6 N01-S01 领取、边界与验收
+
+- 日期：2026-10-04；负责人：主 AI；基线 `d9cae17715a86fed724faae2284cdada472a0a33`，分支 `feat/node-mailbox-20261004`。本地/远程 main 已 fresh-check 一致，工作区干净。
+- 前项 C04-S02 提交 `d7ba6c994c3a6865a2880c1613d8d59875c51aeb`、PR [#34](https://github.com/aiaimimi0920/SpringBok/pull/34) 已正常合并；main 为上述基线，文件树 `8465cf886ab39ed5509782edfc5c0906c3e58672`。精确 head 6 workflow/13 check、main 6 workflow/11 job 成功，见 [交付回执](https://github.com/aiaimimi0920/SpringBok/pull/34#issuecomment-5989372575)。保留第 7.5 节当时的测试证据，不重复执行 fixture。
+- 本轮仅负责 `cloud/` 新版本内部只读协议/独立 NodeMailbox、对应 Worker 默认关闭边界、测试入口和本任务文档。保留旧 TargetMailbox、pc2-test、固定 fixture、旧 bridge 和历史证据。
+- N01 拆分的原因：认证上下文依赖 N02/N03，不能为先完成 N01 开放共享 token 或自报 owner/node。N02 改为依赖已可独立验收的 N01-S01；N01-S02 在加入/凭据基础后再接入 HTTP 与出站桥，避免前置关系循环。
+- 验收：内部调用的 owner/node 与 DO 名称及持久身份严格一致；两个节点及不同 owner 各自有独立 mailbox；probe 绑定服务端生成的版本/目标/请求/摘要，只允许控制通道连通证明；跨节点领取/回执、fixture/deploy/额外字段拒绝；同输入幂等、竞争只交付一次、SQLite 重启保留、claimed/unknown 不重投、容量不清理、损坏/未知 schema 失败关闭。
+- 不做：公开节点鉴权、加入/凭据生命周期、实际服务 resolver、常驻程序、指标、云资源或真实部署。内部 RPC 上下文是可信调用方的前置要求，不宣称完成真实身份验证；当前 Worker 不从 HTTP 构造或转发该上下文。
+- 本轮先实现和验证 N01-S01，再独立提交/推送/审阅/正常合并及复核 main；完成后停止，不自动实施 N02。
+- 实现见 [独立节点邮箱](node-mailbox.md)。Windows Node.js 22.22.2 聚焦 5/5；Linux Node.js 24.18.1 全量契约 177/177、workerd/SQLite 21/21，失败/跳过均为 0。实际 DO 验证包含 100 条满容量/重启/重放、双维 owner/node 隔离、8 路竞争仅一次交付、迟到成功不解除 unknown，以及开关关闭不删数据。新增测试已进入既有 CI，旧协议源码/bridge/fixture 未修改。
+- 独立只读审查未发现明确身份绕过或重复交付问题；补入审查建议的满容量/实际 SQLite 超时场景和 Windows 临时根保护。不能宣称所有外部存储删除都可检测，或真实 Cloudflare 10ms CPU 限额已验收，详见专题文档。
+- 首次 Linux 安装将宿主 loopback 代理原样传入容器，npm 返回 `ECONNREFUSED`；仅把容器代理改为 `host.docker.internal` 后锁定依赖安装成功，不修改 lockfile、源代码或测试门禁。
+- 证据根目录：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-multi-node-20261004/`；最终精确源码测试日志在 `snapshot/.tmp/linux-unit-exact.log`、`linux-cloud-exact.log`。提交/PR/main 的最终 SHA 和检查结果按第 6.2 节写入 PR 回执及本轮最终回复，不循环 amend 自嵌套 SHA。
+- 11 个变更文本的 UTF-8 无 BOM、32 个本地链接、82 个唯一任务及无环依赖检查通过。actionlint 1.7.12/Gitleaks 8.30.1 本轮按仓库固定归档 SHA-256 重新下载验证；全部 workflow 的 actionlint 语法检查通过，未额外执行 ShellCheck。临时 Git archive 不含 `.git`，首次无参数 actionlint 找不到项目；改用显式 workflow 文件列表后通过，未改 workflow。精确提交 Gitleaks 和远程 CI 另记交付回执。
+- 下一独立任务 N02 尚未领取；N01-S02/N03 和 V01/V02/V03 继续保持未完成，不将本地 workerd 当真实节点鉴权或 Cloudflare 验收。
+
+### 7.7 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { adminRequest } from './admin.mjs';
 import { NODE, ledger, transition } from './protocol.mjs';
 export { OwnerCatalog } from './catalog-store.mjs';
+export { NodeMailbox } from './node-mailbox.mjs';
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 const validToken = token => typeof token === 'string' && /^[a-f0-9]{64}$/.test(token);
 async function equal(a, b) {

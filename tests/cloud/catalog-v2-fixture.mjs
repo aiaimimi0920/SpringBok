@@ -1,17 +1,16 @@
+// Frozen catalog v2 from eabe5ee1716a3547036b6387b0ae3c4b909c40fb; only import path adjusted.
 import { DurableObject } from 'cloudflare:workers';
-import { catalogInput, serviceInput, catalogReceipt, catalogName, requireCatalog, isUuid, MAX_SERVERS, MAX_SERVICES, MAX_CATALOG_REQUESTS } from './catalog-contract.mjs';
-import { enrollmentRows, expandEnrollmentCatalog, mutateEnrollment } from './catalog-enrollment.mjs';
+import { catalogInput, serviceInput, catalogReceipt, catalogName, requireCatalog, isUuid, MAX_SERVERS, MAX_SERVICES, MAX_CATALOG_REQUESTS } from '../../cloud/catalog-contract.mjs';
 
 export class OwnerCatalog extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.enabled = env.ENABLE_ADMIN === 'yes' && env.ENABLE_CATALOG === 'yes';
-    this.enrollmentEnabled = this.enabled && env.ENABLE_NODE_ENROLLMENT === 'yes';
   }
   #metadata(owner) {
     requireCatalog(this.enabled && typeof owner === 'string' && /^[a-f0-9]{64}$/.test(owner));
     const sql = this.ctx.storage.sql;
-    const tables = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('catalog_meta','servers','catalog_requests','services','server_enrollments')").toArray();
+    const tables = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('catalog_meta','servers','catalog_requests','services')").toArray();
     if (!tables.length) {
       // 首次初始化和 owner 绑定一起提交；已有目录缺表时拒绝，不能重建为空库。
       sql.exec('CREATE TABLE catalog_meta (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL, owner TEXT NOT NULL, revision INTEGER NOT NULL)');
@@ -20,8 +19,8 @@ export class OwnerCatalog extends DurableObject {
       sql.exec('INSERT INTO catalog_meta VALUES(1,1,?,0)', owner);
     }
     const metadata = sql.exec('SELECT * FROM catalog_meta').toArray(), row = metadata[0];
-    requireCatalog(metadata.length === 1 && row.id === 1 && [1, 2, 3].includes(row.schema_version) && row.owner === owner && Number.isSafeInteger(row.revision) && row.revision >= 0);
-    const expected = ['catalog_meta', 'servers', 'catalog_requests', ...(row.schema_version >= 2 ? ['services'] : []), ...(row.schema_version === 3 ? ['server_enrollments'] : [])];
+    requireCatalog(metadata.length === 1 && row.id === 1 && [1, 2].includes(row.schema_version) && row.owner === owner && Number.isSafeInteger(row.revision) && row.revision >= 0);
+    const expected = row.schema_version === 1 ? ['catalog_meta', 'servers', 'catalog_requests'] : ['catalog_meta', 'servers', 'catalog_requests', 'services'];
     const present = tables.length ? tables.map(table => table.name) : ['catalog_meta', 'servers', 'catalog_requests'];
     requireCatalog(present.length === expected.length && expected.every(name => present.includes(name)));
     requireCatalog(sql.exec('SELECT count(*) AS n FROM catalog_requests').one().n === row.revision && row.revision <= MAX_CATALOG_REQUESTS);
@@ -33,9 +32,7 @@ export class OwnerCatalog extends DurableObject {
       requireCatalog(revisions.size === row.revision);
       sql.exec("CREATE TABLE services (id TEXT PRIMARY KEY, server_id TEXT NOT NULL REFERENCES servers(id), name TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('draft','archived')), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
       sql.exec('UPDATE catalog_meta SET schema_version=2 WHERE id=1');
-      row.schema_version = 2;
     }
-    if (row.schema_version === 3) requireCatalog(row.revision + enrollmentRows(sql, this.#rows()).filter(record => record.state === 'enrolling').length <= MAX_CATALOG_REQUESTS);
     return row;
   }
   #rows() {
@@ -44,30 +41,26 @@ export class OwnerCatalog extends DurableObject {
     for (const row of rows) requireCatalog(isUuid(row.id) && catalogName(row.name) === row.name && ['draft', 'archived'].includes(row.state) && Number.isSafeInteger(row.createdAt) && Number.isSafeInteger(row.updatedAt) && row.createdAt >= 0 && row.updatedAt >= row.createdAt);
     return rows;
   }
-  #visibleServers(meta) {
-    const servers = this.#rows(), records = meta.schema_version === 3 ? enrollmentRows(this.ctx.storage.sql, servers) : [];
-    return servers.map(server => { const record = records.find(row => row.serverId === server.id); return record ? { ...server, state: record.state, updatedAt: Math.max(server.updatedAt, record.updatedAt) } : server; });
-  }
   #services(servers) {
     const rows = this.ctx.storage.sql.exec('SELECT id,server_id AS serverId,name,state,created_at AS createdAt,updated_at AS updatedAt FROM services ORDER BY created_at,id').toArray();
     requireCatalog(rows.length <= MAX_SERVICES);
     for (const row of rows) {
       const server = servers.find(item => item.id === row.serverId);
-      requireCatalog(isUuid(row.id) && catalogName(row.name) === row.name && ['draft', 'archived'].includes(row.state) && Number.isSafeInteger(row.createdAt) && Number.isSafeInteger(row.updatedAt) && row.createdAt >= 0 && row.updatedAt >= row.createdAt && server && (row.state === 'archived' || ['draft', 'enrolling', 'active'].includes(server.state)));
+      requireCatalog(isUuid(row.id) && catalogName(row.name) === row.name && ['draft', 'archived'].includes(row.state) && Number.isSafeInteger(row.createdAt) && Number.isSafeInteger(row.updatedAt) && row.createdAt >= 0 && row.updatedAt >= row.createdAt && server && (row.state === 'archived' || server.state === 'draft'));
     }
     return rows;
   }
   snapshot(owner) {
     return this.ctx.storage.transactionSync(() => {
       const meta = this.#metadata(owner);
-      const servers = this.#visibleServers(meta); this.#services(servers);
+      const servers = this.#rows(); this.#services(servers);
       return { mode: 'server-catalog-only', executionReady: false, revision: meta.revision, servers };
     });
   }
   serviceSnapshot(owner) {
     return this.ctx.storage.transactionSync(() => {
       const meta = this.#metadata(owner);
-      return { mode: 'service-catalog-only', executionReady: false, revision: meta.revision, services: this.#services(this.#visibleServers(meta)) };
+      return { mode: 'service-catalog-only', executionReady: false, revision: meta.revision, services: this.#services(this.#rows()) };
     });
   }
   mutate(owner, value) { return this.#mutate(owner, catalogInput(value), 'server'); }
@@ -76,16 +69,15 @@ export class OwnerCatalog extends DurableObject {
     // 保持 v1 服务器回执的规范输入不变；服务加内部域标识，防止同一请求 ID 跨资源重放。
     const serialized = JSON.stringify(resource === 'server' ? input : { resource: 'service', ...input });
     return this.ctx.storage.transactionSync(() => {
-      const meta = this.#metadata(owner), sql = this.ctx.storage.sql, servers = this.#visibleServers(meta), services = this.#services(servers);
+      const meta = this.#metadata(owner), sql = this.ctx.storage.sql, servers = this.#rows(), services = this.#services(servers);
       const prior = sql.exec('SELECT request_id,input_json,result_json FROM catalog_requests WHERE request_id=?', input.id).toArray()[0];
       if (prior) { requireCatalog(prior.input_json === serialized); return catalogReceipt(prior, meta.revision); }
-      const reserved = meta.schema_version === 3 ? enrollmentRows(sql, this.#rows()).filter(record => record.state === 'enrolling').length : 0;
-      requireCatalog(input.revision === meta.revision && meta.revision + reserved < MAX_CATALOG_REQUESTS);
+      requireCatalog(input.revision === meta.revision && meta.revision < MAX_CATALOG_REQUESTS);
       const rows = resource === 'server' ? servers : services, table = resource === 'server' ? 'servers' : 'services';
       const now = Date.now(); let record;
       if (input.action === 'create') {
         requireCatalog(rows.length < (resource === 'server' ? MAX_SERVERS : MAX_SERVICES));
-        if (resource === 'service') requireCatalog(['draft', 'enrolling', 'active'].includes(servers.find(server => server.id === input.serverId)?.state));
+        if (resource === 'service') requireCatalog(servers.find(server => server.id === input.serverId)?.state === 'draft');
         record = { id: crypto.randomUUID(), ...(resource === 'service' ? { serverId: input.serverId } : {}), name: input.name, state: 'draft', createdAt: now, updatedAt: now };
         if (resource === 'server') sql.exec('INSERT INTO servers VALUES(?,?,?,?,?)', record.id, record.name, record.state, now, now);
         else sql.exec('INSERT INTO services VALUES(?,?,?,?,?,?)', record.id, record.serverId, record.name, record.state, now, now);
@@ -100,24 +92,6 @@ export class OwnerCatalog extends DurableObject {
       sql.exec('UPDATE catalog_meta SET revision=? WHERE id=1', result.revision);
       sql.exec('INSERT INTO catalog_requests VALUES(?,?,?)', input.id, serialized, JSON.stringify(result));
       return result;
-    });
-  }
-  enrollmentSnapshot(owner, serverId) {
-    return this.ctx.storage.transactionSync(() => {
-      const meta = this.#metadata(owner), servers = this.#rows();
-      requireCatalog(this.enrollmentEnabled && isUuid(serverId) && servers.some(server => server.id === serverId && server.state === 'draft'));
-      const record = meta.schema_version === 3 ? enrollmentRows(this.ctx.storage.sql, servers).find(row => row.serverId === serverId) : null;
-      return { revision: meta.revision, executionReady: false, enrollment: record ?? null };
-    });
-  }
-  prepareEnrollment(owner, value) { return this.#enroll(owner, 'prepare', value); }
-  finalizeEnrollment(owner, value) { return this.#enroll(owner, 'finalize', value); }
-  #enroll(owner, operation, value) {
-    return this.ctx.storage.transactionSync(() => {
-      requireCatalog(this.enrollmentEnabled);
-      const meta = this.#metadata(owner), sql = this.ctx.storage.sql, servers = this.#rows(); this.#services(this.#visibleServers(meta));
-      expandEnrollmentCatalog(sql, meta, servers);
-      return mutateEnrollment(sql, meta, servers, operation, value, Date.now());
     });
   }
 }

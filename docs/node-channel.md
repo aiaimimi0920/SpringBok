@@ -78,4 +78,6 @@ node scripts/node-channel.mjs --credential <private-execute-file> --expected-ori
 
 主 AI 完成源码与调用点审阅；独立审查代理因上游 503 未能运行，不计为独立审查通过。UTF-8/哈希/文档、安全工具与精确提交/PR/main 检查记录在开发计划和交付回执，不预报尚未执行的成功。
 
+后续 N07-S01 已增加 [安装后常驻入口](node-daemon.md)：保持本页 bridge 的持久化语义，传输层仅将明确的暂时网络/选定 HTTP 错误分类为可退避重试；协议、身份和本地 journal 错误仍停止。下列未验证项及上述数字是 N01-S02 交付时记录，当前进度以总计划和 N07-S01 回执为准。
+
 未验证：真实 Cloudflare/Access、资源限额、多服务器网络、原生 CLI 的外部 HTTPS、发行安装/不同账户权限、常驻/心跳、轮换/撤销、指标与业务部署。没有配置真实账号、购买资源、执行远程安装、生产迁移或删除业务数据。CodeQL 对私有文件/本地 receipt 到独立固定控制面的必要协议数据流须按最新 SARIF 实际审阅，不 suppress/dismiss，不把扫描成功称零漏洞。

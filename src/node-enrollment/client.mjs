@@ -6,6 +6,7 @@ import { exact } from '../../cloud/protocol.mjs';
 import { nodeContext } from '../../cloud/node-protocol.mjs';
 import { isUuid } from '../../cloud/catalog-contract.mjs';
 import { isDigest, requireEnrollment } from '../../cloud/enrollment-contract.mjs';
+import { writeRoleCredentials } from '../node-credentials/files.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 export function enrollmentGrant(value, expectedOrigin) {
@@ -57,6 +58,11 @@ export function openEnrollmentClient({ directory, grant: value, expectedOrigin, 
   };
   return {
     snapshot: summary,
+    exportCredentials(outputDirectory) {
+      if (busy) throw new Error('enrollment client is busy');
+      const state = project(journal.read(), grant); requireEnrollment(state.receipt?.status === 'joined' && state.prepared);
+      return writeRoleCredentials(outputDirectory, ['execute', 'observe'].map(role => ({ protocolVersion: 2, origin: expectedOrigin, ownerId: grant.ownerId, nodeId: grant.nodeId, enrollmentId: grant.enrollmentId, role, token: state.prepared[`${role}Token`] })), expectedOrigin);
+    },
     close() { if (busy) throw new Error('enrollment client is busy'); journal.close(); },
     async step() {
       if (busy) throw new Error('enrollment client is busy'); busy = true;

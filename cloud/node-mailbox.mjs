@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { nodeContext, nodeMailboxName, nodeLedger, probePlan, nodeTransition, verifyNodePlans } from './node-protocol.mjs';
 import { preparedEnrollment, nodeEnrollment, joinInput, joinChallengeDigest, requireEnrollment } from './enrollment-contract.mjs';
+import { nodeRole, credentialDigest, identityResult, requireCredential } from './credential-contract.mjs';
 
 // N01-S01 仅提供可信服务端内部 RPC。公开节点鉴权/角色/生命周期由 N02/N03 接入。
 export class NodeMailbox extends DurableObject {
@@ -58,9 +59,9 @@ export class NodeMailbox extends DurableObject {
       ...(record ? { enrollmentId: record.enrollmentId, expiresAt: record.expiresAt } : {}),
       ...(record?.status === 'joined' ? { requestId: record.input.requestId, joinedAt: record.joinedAt } : {}) };
   }
-  async #enrollmentRun(value, initialize, perform) {
+  async #enrollmentRun(value, initialize, perform, feature = 'ENABLE_NODE_ENROLLMENT') {
     const context = this.#context(value);
-    requireEnrollment(this.env.ENABLE_NODE_ENROLLMENT === 'yes');
+    requireEnrollment(this.env[feature] === 'yes');
     return this.ctx.blockConcurrencyWhile(async () => {
       const ledger = this.ctx.storage.transactionSync(() => this.#read(context, initialize));
       if (ledger === null) return perform(null, null, context);
@@ -106,5 +107,14 @@ export class NodeMailbox extends DurableObject {
       sql.exec('UPDATE node_enrollment SET state=? WHERE id=1', JSON.stringify(joined));
       return this.#summary(verified, joined);
     });
+  }
+  async credentialIdentity(value, role, token) {
+    nodeRole(role); const proof = await credentialDigest(token);
+    return this.#enrollmentRun(value, false, (_sql, record, verified) => {
+      requireCredential(record?.status === 'joined');
+      const digest = role === 'execute' ? record.input.executeDigest : record.input.observeDigest;
+      requireCredential(crypto.subtle.timingSafeEqual(new TextEncoder().encode(proof), new TextEncoder().encode(digest)));
+      return identityResult(verified, record.enrollmentId, role);
+    }, 'ENABLE_NODE_CREDENTIALS');
   }
 }

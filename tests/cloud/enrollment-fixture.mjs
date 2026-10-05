@@ -50,9 +50,10 @@ export class NodeMailbox extends Mailbox {
     if (kind === 'table') sql.exec('DROP TABLE node_enrollment');
     else if (kind === 'version') sql.exec('UPDATE node_meta SET schema_version=99');
     else if (kind === 'record') sql.exec("UPDATE node_enrollment SET state='{}'");
-    else if (kind === 'expire') {
+    else if (kind === 'expire' || kind === 'joined-age') {
       const row = JSON.parse(sql.exec('SELECT state FROM node_enrollment').one().state);
       row.createdAt = Date.now() - 600001; row.expiresAt = row.createdAt + 600000;
+      if (kind === 'joined-age') { if (row.status !== 'joined') throw new Error('not joined'); row.joinedAt = row.createdAt + 1; }
       sql.exec('UPDATE node_enrollment SET state=?', JSON.stringify(row));
     } else throw new Error('unknown damage');
     return null;
@@ -62,7 +63,7 @@ export default { async fetch(request, env) {
   if (new URL(request.url).pathname !== '/__enrollment_fixture') return worker.fetch(request, env);
   try {
     const { resource, context, operation, args = [] } = await request.json();
-    if (!['inspect', 'legacySnapshot', 'snapshot', 'submitProbe', 'pollProbe', 'damage', 'fillToRevision'].includes(operation)) throw new Error('unknown test method');
+    if (!['inspect', 'legacySnapshot', 'snapshot', 'submitProbe', 'pollProbe', 'damage', 'fillToRevision', 'credentialIdentity'].includes(operation)) throw new Error('unknown test method');
     const namespace = resource === 'catalog' ? env.REGISTRY : env.NODES;
     const name = resource === 'catalog' ? `catalog/v1/${context.ownerId}` : nodeMailboxName(context);
     return Response.json(await namespace.get(namespace.idFromName(name))[operation](...args));

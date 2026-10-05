@@ -15,6 +15,12 @@ Cloudflare 承载控制面，外部服务器承载实际业务和受控执行端
 [首批自有服务、交付目标与验收边界](docs/owned-service-deployment.md)：Gateway、Platform、AssetLibrary、Rauthy，以及可选的 Crow 只读查询。Hook/Loom 是桌面访问方。该清单是开发目标，不是可执行配置或已部署证明。
 Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
 
+## 控制客户端的本地安装
+
+N06-S01 提供绑定 Git revision/文件摘要的控制客户端包，以及 Linux 非 root 单角色私有安装。
+安装后可核对版本/身份、执行一次只读控制 probe；不包含 Komodo/Core/Mongo，不安装系统服务，
+不表示业务执行环境已就绪。[可信引导、命令与恢复边界](docs/node-installation.md)
+
 ## M14：基线与候选发布差异
 
 同一配置检查页可额外选择基线JSON，对比镜像、双环境目标、端口、卷和密钥引用，

@@ -65,6 +65,7 @@ jobs:
       - name: Validate actual user manager lifecycle in a disposable synthetic account
         run: bash scripts/ci/node-user-service.sh
       - name: Retain synthetic systemd evidence without credentials
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: systemd-evidence-${{ github.run_id }}

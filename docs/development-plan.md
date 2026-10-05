@@ -435,6 +435,7 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 首轮精确 head 的 Worker/浏览器/安全检查成功，但契约 204/206、真实 manager job 失败：setup-node 制品不满足新增 Node owner/写权限规则；合成账户从 runner 私有 checkout 加载入口报 `MODULE_NOT_FOUND`。追加 CI 内修复：保持产品检查，将同一可信 Node 按字节核对复制到私有 owned 目录，并从同一 Git HEAD 导出合成账户源码；不 chmod runner 检出、不放宽服务或身份安全策略。最新 CI 结果仍待核实，不绕过失败合并。
 - 第二轮契约通过，日志确认原 Node `owner=1001 mode=777`；manager 已启动并接受 API，但首次按名 `reset-failed` 拒绝尚未加载的 unit。仅测试 helper 改为此一次性专属账户的 manager reset-failed，再显式 start；生产生成器仍不调用 systemctl，不清任何 ledger/锁。保留两轮原日志，继续验证完整生命周期，不将 manager API 可用当本项验收通过。
 - 第三轮已越过双角色启停/drain/拒绝和 execute unknown 保留断言，但后续 prepare-enable 还有一处按名 reset-failed；此前全局 reset 后空闲 observe unit 被 manager 回收，导致同类拒绝。补齐这一剩余测试调用，不改变生产逻辑或断言；自启动重建/SIGKILL 场景仍须完整 CI 实际通过后才关闭任务。
+- 第四轮实际 `exercise` 完整通过，但系统级 `user@1002.service` 重建报 timeout，现有日志不足以确定原因。仅补失败时精确 synthetic manager 的 status/journal 与原退出码 artifact，保留 fail-closed；不改生产代码、不扩大 cgroup 权限、不放宽 manager 超时或取消重建验收。下一步按新日志诊断此 CI 平台边界。
 
 ### 7.13 后续交接记录模板
 

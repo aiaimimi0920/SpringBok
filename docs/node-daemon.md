@@ -1,6 +1,6 @@
 # N07-S01：控制客户端常驻循环与安全退出
 
-本项接续 [私有安装](node-installation.md) 与 [认证控制通道](node-channel.md)，总进度见 [开发计划](development-plan.md)。交付的是 Linux 非 root 的前台常驻进程，不是 systemd 服务、心跳采集器或业务 executor。N07-S02 的系统服务/开机启动仍未实现；所有输出保留 `executionReady=false`。
+本项接续 [私有安装](node-installation.md) 与 [认证控制通道](node-channel.md)，总进度见 [开发计划](development-plan.md)。本项交付的是 Linux 非 root 的前台常驻进程，不是 systemd 服务、心跳采集器或业务 executor。N07-S02 的后续服务与验收见 [用户服务](node-user-service.md)；所有输出保留 `executionReady=false`。
 
 ## 固定版本与运行入口
 

@@ -399,6 +399,7 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 回归先复现并修复完整安装 ENOENT 被误吞及额外空目录问题；补 FIFO 非阻塞拒绝。安装/包测试 7/7，实际安装 CLI/workerd 链 1/1；本地全量契约 193/193。独立 uid 11001/11002 在一次性 Linux 容器安装并运行，互读角色凭据/日志为 EACCES，产品 root 安装拒绝。没有创建宿主账号或修改既有服务。
 - 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-node-install-20261005/`，失败与最终日志分开保留。独立审查代理返回上游 503 未产出结论，不算独立审查通过；主 AI 负责实际源码和精确 diff 审阅。工具、编码/链接、精确构建包和 PR/main 检查按交付回执记录，不预报尚未完成结果。
 - 当前为源码/本地验收完成，交付待本项 scoped commit/push、精确 head CI/正常合并/main 复核；下一独立功能 N07 尚未领取。N06-S02/真实 Cloudflare/多机/业务部署保持未完成，不将单角色控制安装当整体开发计划完成。
+- 功能提交 `d5a3365ad3aee448f380b5b9941ff5980e435d13` 已推送且远程 SHA 一致，PR [#39](https://github.com/aiaimimi0920/SpringBok/pull/39)；真实 Git revision 包 17 文件/72,682 字节，manifest SHA-256 `56f7abd214aa6ea715fbc36228efadbd39223c249deb5ad97bdc42e6f69088bc`，非 root 安装/重装/版本入口实测通过。初轮 CodeQL finding check 有两条测试快照 TOCTOU，已按同一 descriptor 改正并增强 inode/device 保留断言，追加本任务修复而非 suppress 或重写历史；最终检查另核。
 
 ### 7.11 后续交接记录模板
 

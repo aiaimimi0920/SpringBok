@@ -75,4 +75,6 @@ workerd 测试通过 test-only IPC fetch 转交真实本地 workerd，执行的�
 
 初始回归测试明确复现完整安装缺文件被补回、额外空目录被接受两项问题，修复后通过；原失败日志保留。新 workerd 测试初轮因未固定合成管理员 JWT 导致 CSRF 403，随后发现测试提交体漏 revision/challenge 产生 409；只修正测试夹具以遵守真实接口，没有放宽产品鉴权。独立审查代理返回上游 503，未产生审查结论；主 AI 审阅代码/完整 diff 并实际验证，不计为独立审查通过。
 
+PR #39 首次 CodeQL 报告两条高等级测试代码 TOCTOU：凭据快照先按路径 stat、再按路径读取。已改为同一 `O_NOFOLLOW | O_NONBLOCK` descriptor 上 fstat/read，并比较重装前后 inode、device、mtime 和完整内容；保留且增强“不替换/不改写”断言，不禁用扫描或抑制告警。功能提交 `d5a3365` 的实际 Git 包已构建并逐文件匹配源码、非 root 重装和版本 CLI 通过；最新精确 head 的 CI 另记 PR 回执，不将初轮扫描工作流成功当 finding check 通过。
+
 未完成或未验证：N06-S02 的完整执行依赖、真实账号安装、Cloudflare/Access/外部网络、多服务器接入、Node/第三方依赖发行许可、常驻/开机启动、心跳、升级签名、轮换/撤销和业务部署。N06 父任务保持部分实现；下一独立任务为 N07。没有修改云开关、schema、运行依赖、历史 fixture 身份或证据。

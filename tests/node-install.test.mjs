@@ -14,6 +14,13 @@ function setup(role = 'execute') {
   return { ...f, ...r, options: { packageDirectory: f.packageDirectory, expectedSha256: f.built.sha256, credentialFile: r.credentialFile, expectedOrigin: r.credential.origin, role, directory: join(f.directory, 'installed') } };
 }
 function run(f, action) { return spawnSync(process.execPath, [join(f.options.directory, 'release/scripts/node-run.mjs'), '--installation', f.options.directory, '--action', action], { encoding: 'utf8', timeout: 10000 }); }
+function snapshotFile(file) {
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  try {
+    const stat = fs.fstatSync(fd); assert.ok(stat.isFile());
+    return { ino: stat.ino, dev: stat.dev, mtimeMs: stat.mtimeMs, bytes: fs.readFileSync(fd) };
+  } finally { fs.closeSync(fd); }
+}
 
 test('single-role installation is private, runnable and idempotent without touching its credential or ledger', () => {
   const f = setup();
@@ -21,9 +28,9 @@ test('single-role installation is private, runnable and idempotent without touch
     assert.equal(installNode(f.options).status, 'installed');
     const installed = verifyInstallation(f.options.directory);
     const ledger = join(installed.stateDirectory, 'ledger.json'); fs.writeFileSync(ledger, 'preserve unknown evidence', { mode: 0o600 });
-    const before = fs.statSync(installed.credentialFile), bytes = fs.readFileSync(installed.credentialFile);
+    const before = snapshotFile(installed.credentialFile);
     assert.equal(installNode(f.options).status, 'verified');
-    assert.equal(fs.statSync(installed.credentialFile).mtimeMs, before.mtimeMs); assert.deepEqual(fs.readFileSync(installed.credentialFile), bytes);
+    assert.deepEqual(snapshotFile(installed.credentialFile), before);
     assert.equal(fs.readFileSync(ledger, 'utf8'), 'preserve unknown evidence');
     for (const p of ['credential.json', 'install.json', 'complete.json', 'release/scripts/node-run.mjs']) assert.equal(fs.statSync(join(f.options.directory, p)).mode & 0o077, 0);
     for (const p of ['', 'release', 'release/scripts', 'state']) assert.equal(fs.statSync(join(f.options.directory, p)).mode & 0o077, 0);

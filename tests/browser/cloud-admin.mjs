@@ -64,3 +64,4 @@ await import('./server-catalog.mjs');
 await import('./service-catalog.mjs');
 await import('./node-enrollment.mjs');
 await import('./node-heartbeat.mjs');
+await import('./node-telemetry.mjs');

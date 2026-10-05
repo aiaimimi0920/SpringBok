@@ -55,6 +55,7 @@ if (phase === 'exercise') {
   await systemctl('daemon-reload');
   for (const f of fixtures) {
     await start(f); await until(() => events(f).some(e => e.event === 'response' && e.heartbeat && e.operation === 'sample'));
+    if (f.credential.role === 'observe') await until(() => events(f).some(e => e.event === 'response' && e.telemetry && e.operation === 'sample'));
     assert.equal((await state(f)).ActiveState, 'active');
     await systemctl('stop', f.name); await stopped(f);
     assert.equal(fs.existsSync(join(f.installation, 'state/daemon.lock')), false);
@@ -69,6 +70,7 @@ if (phase === 'exercise') {
     assert.equal(events(f).length, failedCount); assert.equal((await state(f)).NRestarts, '0');
     const { stdout: journal } = await run('journalctl', ['--user', '-u', f.name, '--no-pager', '-o', 'cat'], { timeout: 10000 });
     assert.equal(journal.includes(f.credential.token), false); assert.match(journal, /"event":"stopping"/); assert.match(journal, /"event":"stopped"/);
+    if (f.credential.role === 'observe') assert.match(journal, /"event":"telemetry","status":"recorded"/);
     fs.writeFileSync(join(root, `${f.credential.role}-journal.txt`), journal, { mode: 0o600 });
   }
   const execute = fixtures[0]; configure(execute, 'unknown'); await start(execute); await stopped(execute, true);

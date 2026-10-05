@@ -165,7 +165,7 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | M03 | 磁盘容量采集 | 待开发 | 当前无磁盘采集器 | 明确挂载点、总量/可用/使用率，过滤伪文件系统；不能为测量写满或清理磁盘 | N07 |
 | M04 | 网络吞吐采集 | 待开发 | 当前无网络采集器 | 网卡累计计数差分、单位、重启/计数回绕处理；不抓取业务内容 | N07 |
 | M05 | 主机基础信息与运行时间 | 待开发 | N09 预检查可复用 | OS/架构/内核/运行时间/版本与时间戳；仅采集必要元数据，不上传完整环境变量 | N09 |
-| M06 | 指标上报与最新快照存储 | 待开发 | E05 任务回执不是指标协议 | 节点鉴权、schema/大小/频率校验、乱序去重、采样/接收时间；不堵塞任务通道 | ARC-02/N03/N08/M01 |
+| M06 | 指标上报与最新快照存储 | 已完成 | [实现与验收](node-telemetry.md)；负责人：主 AI；第 7.15 节 | 限定 CPU 鉴权/独立 latest/v4 observe 装配/小详情闭环已验收；提交/PR/main 最终交付按本项回执，不代表其他指标、真实宿主或生产部署 | ARC-02/N03/N08/M01 |
 | M07 | 多服务器状态总览 | 待开发 | 当前管理页只有固定任务列表 | 在线/离线/陈旧、CPU/内存/磁盘/网络与更新时间；至少两节点数据隔离，空值不假绿 | C04/N08/M02/M03/M04/M06 |
 | M08 | 服务器详情与历史趋势 | 待开发 | 当前无指标时序 API/UI | 时间范围、聚合/保留期、缺测间隙和时区明确；容量与查询耗时有界 | M06/M07 |
 | M09 | 服务/容器持续健康状态 | 部分实现 | E09 只在执行时单次读取 | 周期采集已授权服务状态/健康/OOM/重启次数，带新鲜度；不把 Core 缓存视为实时 | D10/N07/M06 |
@@ -472,7 +472,20 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 最终只读增量复核确认最小间隔口径、负载/空闲门槛、完整行/close 等待均已进入当前文件，无新的确定问题；它没有独立重跑上述测试。共享 runner 若不满足明确空闲/增长门槛，原生检查会失败，不伪造通过或放宽断言。
 - 本项限定源码/本地验收已完成，独立提交推送/精确 head/正常合并/main 最新结果写最终 PR 回执，不预报未运行 CI。下一独立子任务为 M06 的鉴权上报/独立最新快照；已安装监控装配与真实宿主、其他指标、业务/生产部署均未完成。
 
-### 7.15 后续交接记录模板
+### 7.15 M06 领取与边界
+
+- 日期：2026-10-05；负责人：主 AI；基线 `31bf919ae905d3eda2b460e2f2a14c432c36ebde`，分支 `feat/node-telemetry-20261005`；本地/远程 main 一致，领取前工作区干净。M01 PR [#43](https://github.com/aiaimimi0920/SpringBok/pull/43) 已合并，最终 [回执](https://github.com/aiaimimi0920/SpringBok/pull/43#issuecomment-5999185813) 已读回，不重做 CPU 公式/原生对照。旧 N08 v3 包保留，不冒称包含 M01。
+- 范围：CPU 严格上报契约、observe 的最终事务鉴权、独立 SQLite `NodeTelemetry` latest/会话、仅本路由 8 KiB reader、受权管理员 GET；已安装 observe daemon 采样/有界内存重送、显式 v4 固定包；目录行独立只读 CPU 小详情与匹配 node/workerd/browser 验收。execute 不采 CPU，不改变任务日志、心跳或原包/安装。
+- 设计调整：NodeMailbox 只产生内部限定 owner/node/enrollment 的授权上下文；其事务/block 完全结束后才转交指标。接收代次/序号/限频/回执全部由 NodeTelemetry 同事务保存，`receivedAt` 是首次成功持久接收而非鉴权时间。内部上下文不是密码学 capability，可信 Worker/DO 是边界；公网无直写捷径。授权后在途请求可能晚到，不承诺跨 DO 原子撤销。详见专题及 ARC-02 修订。
+- 验收：joined observe/owner/node/enrollment 隔离、8 KiB 实际流且旧入口仍 2 KiB、严格 CPU schema/status/null、start CAS/代次/序号/30 秒跨重启限频、原回执重送/旧样本拒绝、独立持久化/坏库拒绝/任务通道不受 RPC 故障或等待影响；普通用户真实 v4 安装进程→workerd→admin GET/UI，失败、过期、身份迟到及窄屏；旧 v3 保留和退回拒绝。
+- 不做：其他指标、M07 完整总览/M08 历史/告警、凭据 epoch/轮换/撤销、真实 Cloudflare/Access/用户服务器部署、现有安装升级/自动清锁、生产发布或资源采购。最多内存一份 pending，单调年龄达到 90 秒丢弃，不把旧样本换序号重新上传；非暂时 telemetry 错误只停指标能力，身份检查/心跳仍按既有策略运行。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-telemetry-20261005/`。完成单项后立即 scoped commit/push、精确 head 审阅与正常合并/main 复核；总目标保持未完成。
+- 源码/本地验收闭环已完成：v4 / 25 文件、独立 latest 和最终 observe 鉴权、完整重送/CAS/跨 boot 限频、局部错误与只读 CPU 小详情。Linux Node.js 24.18.1/uid 1000 全量契约 225/225、workerd 56/56，无失败/跳过；真实安装采样上报间隔 30,947ms/CPU 窗口 31,016ms，admin receivedAt 相符、execute 无指标请求。基线真实 Git v3 双角色安装/重装/version 保留，v4 拒绝旧包与覆盖且原数据/锁及 inode/device/mode/uid/mtime 不变。
+- Chrome 专项通过 0/null/未知/不可用/陈旧、enrolling joined、局部失败、错身份、请求耗时和临近阈值过期、迟到 render/owner、pagehide/BFCache/独立 visibility、390px/GET-only；已查看窄屏中文截图，无横向溢出。三项独立只读审查未发现确定生产问题；补强不同值迟到 render、warming-up/null 和 visibility 的测试区分力，不把审查当执行通过。IPC hold ACK 仅证明测试进程收尾，真实 fetch 可被停止信号中止；pending 年龄是发送前边界，在途网络仍最多有 5 秒窗口，不承诺云端绝不接收超过 90 秒的采样。
+- 本地管理页完整浏览器入口六组 PASS；完整 CI 的另三个页面及实际 user-manager 不在本地复跑，远程结果待本项精确 head/main 核实。34 个本轮文本 UTF-8 无 BOM/LF 快照一致，90 个相对链接和 86 项无环任务依赖通过。固定 actionlint 1.7.12/Gitleaks 8.30.1 归档重核仓库 SHA-256 后复用，workflow 语法及源码扫描通过，无 secret 检出；本地未额外运行 ShellCheck/Pyflakes。默认开关仍 no，旧三类迁移/任务数据/包保留，没有真实云迁移或安装。
+- 本项限定源码和本地验收已完成；当前 Git 交付按下述步骤推进，最终精确 SHA、CI、固定版本包与合并结果写 PR 回执，不预报未执行检查，不为了自嵌套 SHA 反复 amend。交付后下一独立项为 M02 内存用量采集；不重复 M01/N08 或启动未经授权的真实部署，整体目标保持 active。
+
+### 7.16 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

@@ -11,8 +11,8 @@ export function pollDelay(failures, random = Math.random) {
   const base = MIN_POLL_MS * 2 ** Math.min(Math.max(failures - 1, 0), 4);
   return Math.min(MAX_BACKOFF_MS, Math.floor(base * (1 + sample * 0.2)));
 }
-export async function runNodeLoop({ step, heartbeat, signal, onEvent = () => {}, random = Math.random, wait = (ms, abort) => delay(ms, undefined, { signal: abort }) }) {
-  let failures = 0, previous, previousHeartbeat;
+export async function runNodeLoop({ step, heartbeat, telemetry, signal, onEvent = () => {}, random = Math.random, wait = (ms, abort) => delay(ms, undefined, { signal: abort }) }) {
+  let failures = 0, previous, previousHeartbeat, previousTelemetry, telemetryDisabled = false;
   function emit(status) {
     if (status !== previous) { onEvent({ event: 'status', status, executionReady: false }); previous = status; }
   }
@@ -33,6 +33,13 @@ export async function runNodeLoop({ step, heartbeat, signal, onEvent = () => {},
       try { status = await heartbeat(); if (!['recorded', 'deferred', undefined].includes(status)) throw new Error('invalid heartbeat status'); }
       catch (error) { if (!(error instanceof RetryableNodeError)) throw error; status = 'unavailable'; }
       if (status && status !== previousHeartbeat) { onEvent({ event: 'heartbeat', status, executionReady: false }); previousHeartbeat = status; }
+    }
+    // 仅 observe 装配此能力。指标协议拒绝只停指标，不改身份/心跳/执行结果或退避。
+    if (!signal.aborted && telemetry && !telemetryDisabled) {
+      let status;
+      try { status = await telemetry(); if (!['recorded', 'deferred', 'dropped', undefined].includes(status)) throw new Error('invalid telemetry status'); }
+      catch (error) { if (signal.aborted) break; if (error instanceof RetryableNodeError) status = 'unavailable'; else { telemetryDisabled = true; status = 'unconfirmed'; } }
+      if (status && status !== previousTelemetry) { onEvent({ event: 'telemetry', status, executionReady: false }); previousTelemetry = status; }
     }
     if (signal.aborted) break;
     const milliseconds = pollDelay(failures, random);

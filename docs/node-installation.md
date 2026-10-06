@@ -3,7 +3,7 @@
 本项接续 [执行架构](execution-architecture.md)、[角色凭据](node-credentials.md) 和 [认证控制通道](node-channel.md)。总进度见 [开发计划](development-plan.md)。这是仅依赖预装 Node.js 22+ 的 Linux 非 root 控制客户端，不是完整业务执行环境或自动远程安装器。
 
 > N07-S01 更新：下文 17 文件、单次运行和验收数字保留为 N06-S01 的历史事实。
-> N07 的 v2 包为 20 个固定源文件；N08 的 v3 包为 22 个源文件，增加独立角色心跳，见 [协议与兼容](node-heartbeat.md)。M06 的 v4 /25 文件增加 observe CPU 上报；M02-S02 当前新包显式为 `springbok-control-node/v5` /26 文件，增加版本化内存上报，见 [指标与兼容](node-telemetry.md)。
+> N07 的 v2 包为 20 个固定源文件；N08 的 v3 包为 22 个源文件，增加独立角色心跳，见 [协议与兼容](node-heartbeat.md)。M06 的 v4 /25 文件增加 observe CPU 上报；M02-S02 的 v5 /26 文件增加版本化内存上报；M03-S02 当前新包显式为 `springbok-control-node/v6` /30 文件，增加版本化磁盘上报，见 [指标与兼容](node-telemetry.md)。
 > 旧 v1 安装继续使用自身旧代码；新安装器拒绝旧包和覆盖旧安装，不迁移或清空 state。
 > 当前入口、兼容及验收边界见 [常驻客户端](node-daemon.md)，后续系统服务见 [用户服务](node-user-service.md)。
 
@@ -15,7 +15,7 @@
 node scripts/build-node-package.mjs --output <new-package-directory>
 ```
 
-构建器从 `git rev-parse HEAD` 和 `git show <revision>:<allowed-path>` 读取已提交内容，而不是把 dirty 工作区当版本。包内仅 17 个固定允许的源文件及 `manifest.json`，不包含凭据、测试、浏览器资产、node_modules、Node 本体或 Komodo/Core/Mongo。所有文件按 UTF-8/LF 规范化；manifest 保存完整 40 位 revision、平台、最低 Node 主版本、每文件字节数和 SHA-256，总源文件不超过 1 MiB。相同提交生成相同 manifest 字节和摘要。缺失文件、新增文件/空目录、symlink、非法清单/路径或摘要不符均拒绝。
+构建器从 `git rev-parse HEAD` 和 `git show <revision>:<allowed-path>` 读取已提交内容，而不是把 dirty 工作区当版本。N06-S01 包内仅 17 个固定允许的源文件及 `manifest.json`；当前 v6 为 30 个源文件，包含三端共用的纯数据 `public/cloud-admin/disk-contract.mjs`，不包含管理页面或 UI 脚本。均不包含凭据、测试、node_modules、Node 本体或 Komodo/Core/Mongo。所有文件按 UTF-8/LF 规范化；manifest 保存完整 40 位 revision、平台、最低 Node 主版本、每文件字节数和 SHA-256，总源文件不超过 1 MiB。相同提交生成相同 manifest 字节和摘要。缺失文件、新增文件/空目录、symlink、非法清单/路径或摘要不符均拒绝。
 
 构建 stdout 返回 revision 和 **manifest 的 SHA-256**。从独立可信的审阅/交付渠道取得该摘要，不能把待安装包自带的摘要当信任依据。该摘要不是数字签名，不提供公钥发行链或自动升级。
 

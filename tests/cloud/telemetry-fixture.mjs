@@ -2,6 +2,7 @@ import enrollmentWorker from './enrollment-fixture.mjs';
 import worker from '../../cloud/worker.mjs';
 import { NodeTelemetry as Telemetry } from '../../cloud/telemetry-store.mjs';
 import { NodeTelemetry as LegacyTelemetry } from '../fixtures/telemetry-v1/store.mjs';
+import { NodeTelemetry as MemoryTelemetry } from '../fixtures/telemetry-v2/store.mjs';
 import { telemetryName } from '../../cloud/telemetry-contract.mjs';
 export { TargetMailbox, OwnerCatalog, NodeMailbox } from './enrollment-fixture.mjs';
 // 仅测试 Worker 导入；故障/挂起入口不进入生产 bundle。
@@ -13,9 +14,9 @@ export class NodeTelemetry extends Telemetry {
   }
   async apply(...args) {
     if (this.env.TELEMETRY_FAULT === 'hold' && args[1] === 'sample') await new Promise(resolve => { this.releaseWait = resolve; });
-    if (args[1] === 'sample') this.fail('before'); const result = this.env.TELEMETRY_READER === 'legacy' ? new LegacyTelemetry(this.ctx, this.env).apply(...args) : super.apply(...args); if (args[1] === 'sample') this.fail('after'); return result;
+    if (args[1] === 'sample') this.fail('before'); const result = this.env.TELEMETRY_READER === 'legacy' ? new LegacyTelemetry(this.ctx, this.env).apply(...args) : this.env.TELEMETRY_READER === 'memory' ? new MemoryTelemetry(this.ctx, this.env).apply(...args) : super.apply(...args); if (args[1] === 'sample') this.fail('after'); return result;
   }
-  snapshot(...args) { return this.env.TELEMETRY_READER === 'legacy' ? new LegacyTelemetry(this.ctx, this.env).snapshot(...args) : super.snapshot(...args); }
+  snapshot(...args) { return this.env.TELEMETRY_READER === 'legacy' ? new LegacyTelemetry(this.ctx, this.env).snapshot(...args) : this.env.TELEMETRY_READER === 'memory' ? new MemoryTelemetry(this.ctx, this.env).snapshot(...args) : super.snapshot(...args); }
   waiting() { return !!this.releaseWait; }
   release() { this.releaseWait?.(); this.releaseWait = undefined; return null; }
   inspect() {
@@ -28,6 +29,7 @@ export class NodeTelemetry extends Telemetry {
     if (kind === 'table') sql.exec('DROP TABLE telemetry_state');
     else if (kind === 'meta') sql.exec('DELETE FROM telemetry_meta');
     else if (kind === 'version') sql.exec('UPDATE telemetry_meta SET schema_version=99');
+    else if (kind === 'schema-two') sql.exec('UPDATE telemetry_meta SET schema_version=2');
     else if (kind === 'schema-one') sql.exec('UPDATE telemetry_meta SET schema_version=1');
     else if (kind === 'upgrade-write') sql.exec("CREATE TRIGGER upgrade_fault BEFORE UPDATE ON telemetry_state BEGIN SELECT RAISE(ABORT, 'injected state write failure'); END");
     else if (kind === 'remove-upgrade-write') sql.exec('DROP TRIGGER upgrade_fault');

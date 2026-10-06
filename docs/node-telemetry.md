@@ -1,4 +1,4 @@
-# M06 / M02-S02：鉴权 CPU/内存上报与独立最新快照
+# M06 / M02-S02 / M03-S02：鉴权 CPU/内存/磁盘上报与独立最新快照
 
 任务日期：2026-10-05；负责人：主 AI；基线 `31bf919ae905d3eda2b460e2f2a14c432c36ebde`。
 总入口：[开发计划](development-plan.md)；前置：[CPU 采集](cpu-collection.md)、[心跳](node-heartbeat.md)、[存储设计](storage-architecture.md)。
@@ -19,7 +19,7 @@ M06 最初实现 CPU 最小上报/查询链；M02-S02 后续增加版本化内�
 - `receivedAt` 由 Telemetry 同事务首次成功持久接收生成。写前失败无接收；写后丢 ack 精确重送全规范化 payload，返回原时间。相同 key 改 payload 拒绝；latest 已被覆盖的旧样本拒绝，不拿新回执冒充旧成功，不倒写。
 - 保留客户端 `sampledAt` 与实际 CPU `intervalMs`，云端新鲜度仅看 `receivedAt`；90 秒陈旧。采集未知/不可用与新鲜度分开，数值 0 有效，null 不假绿；云时钟回退为未知/拒绝写入。
 - observe daemon 使用原普通用户安装/锁与独立凭据，执行角色不采集。至多一份内存 pending，单调年龄达到 90 秒或时钟异常后丢弃，不改旧样本 sequence 伪装新采样。暂时错误保留原 pending，非暂时错误停指标能力并报告 unconfirmed，不改变执行结果/网络退避或触发任务重放。identity/heartbeat 保留原策略。
-- M06 v4 包是当时显式新安装格式，不覆盖 v3 安装；M02-S02 当前格式见下节。旧包和 state 保留。SIGINT/SIGTERM 不发迟到样本，等待当前读取/请求结束后正常释放自有锁。
+- M06 v4 包是当时显式新安装格式，不覆盖 v3 安装；后续 M02-S02/M03-S02 格式见下节。旧包和 state 保留。SIGINT/SIGTERM 不发迟到样本，等待当前读取/请求结束后正常释放自有锁。
 
 真实 fetch 会收到停止信号并在有界请求内中止，服务端可能已提交而 ACK 未收到；指标没有任务副作用，不保证 ACK drain。已安装进程测试的 IPC 传输会人工 hold ACK 来验证进程收尾/不发第三次样本，不冒称验证真实 TLS 网络的信号传播。节点身份/执行 step 的原在途 drain 策略不变。
 
@@ -50,7 +50,7 @@ Linux Node.js 24.18.1、uid 1000、固定只读 LF 快照：全量契约 **225/2
 
 SQLite `telemetry_meta.schema_version` 1 只允许旧 latest，2 允许旧/新 union。首次成功 recorded 新形状才在相同事务升级 meta1→2 并写 state；读取、启动、deferred 和失败不升级，之后旧 CPU-only 覆盖 latest 也保持 meta2。schema1+新版 latest/未知 schema/损坏仍失败关闭且不修复。实际旧 reader 会拒绝 meta2，原数据保留，切回新版可读；不承诺旧 Worker 对新库仍可用，也不提供降级/清空。测试旧 reader 来自上述固定 Git 基线，只改相对 import 定位，并反向还原验证原 SHA-256，不是随实现升级的模拟旧逻辑。
 
-当前固定包为 `springbok-control-node/v5` /26 文件，新增 `src/node-telemetry/memory.mjs`，无新运行依赖。observe 同时保存两指标 pending，重送不再采样；CPU/内存不是原子同一时点，各有 sampledAt。原 30 秒接收限频、90 秒单调 pending 丢弃、5 秒 fetch deadline、停止/暂时错误/任务退避/在途授权边界均保留。execute 不采集、不发指标请求。安装器只接受 v5，不自动升级、覆盖或收编旧 v4 安装。
+M02-S02 当时的固定包为 `springbok-control-node/v5` /26 文件，新增 `src/node-telemetry/memory.mjs`，无新运行依赖。observe 同时保存两指标 pending，重送不再采样；CPU/内存不是原子同一时点，各有 sampledAt。原 30 秒接收限频、90 秒单调 pending 丢弃、5 秒 fetch deadline、停止/暂时错误/任务退避/在途授权边界均保留。execute 不采集、不发指标请求。安装器只接受 v5，不自动升级、覆盖或收编旧 v4 安装。
 
 目录行仍只有一次 GET，没有新增轮询、storage 或写入；CPU/内存分别验证和显示。旧 CPU-only 显示“内存未上报”，新版坏内存显示“内存未确认”，采集失败不是 0。坏 CPU 不遮蔽合法内存，反之亦然。GiB 按 bytes÷1024³，附精确 bytes 保留小非零值。新鲜度仍来自共同持久 receivedAt，扣请求耗时；到期、visibility、迟到 render/owner、pagehide/BFCache 不展示旧值为当前值。不是 M07 完整总览。
 
@@ -65,3 +65,39 @@ SQLite `telemetry_meta.schema_version` 1 只允许旧 latest，2 允许旧/新 u
 固定真实旧 v4 包（Git `aca3397b7a2554b2127dba0cfadce7fc1f08f1d1`，manifest SHA-256 `007441943c35a63eaaa785b1240414c119d76a4f9583d116be407935bcce6e08`）用自身旧代码完成双角色安装/daemon→新版 workerd/重装/version；CPU-only latest 仍为五字段、meta1。v5 拒绝旧包和覆盖，两角色 release/credential/markers/state/锁的 bytes/inode/device/mode/uid/mtime 不变。该证据不提供自动升级或公开签名发行。
 
 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-memory-telemetry-20261005/`。本地首轮新增 ACK 单测误把带 role 的 credential 当 strict context，触发 `invalid protocol`；仅修测试调用，原失败日志保留，最终全量通过。workerd 全量有既有重启断连接 `Broken pipe` 诊断但全部测试通过，保留原日志。精确 head/PR/main、安全检查、fresh Git 固定包和交付以最终回执为准，不预报未运行 CI。不做生产部署/开关、用户宿主认证、历史/告警、新指标或 M07。
+
+## M03-S02：严格版本化磁盘、完整预算与按挂载点详情
+
+任务开始于 2026-10-05（America/Los_Angeles，UTC 已为 2026-10-06）；负责人：主 AI；基线 `6b1c6cb279e115d9ebfc5367e47bb908daa43a70`。采集语义与支持范围继承 [磁盘采集](disk-collection.md)，不重复修改采集算法或宣称物理宿主认证。
+
+旧 CPU-only 五字段输入保持原形，显式 v2 仍是 CPU+memory；新 `sampleVersion: 3` 必须同时有严格 CPU、memory、disk，node protocolVersion 仍为 2。未知版本、缺字段或额外字段拒绝，完整重送和 recorded ACK 比较包含版本与三个指标，不能只改磁盘路径/数值/filtered 计数仍获得旧回执。
+
+### 共享契约与有界报告
+
+`public/cloud-admin/disk-contract.mjs` 是浏览器、Worker 和节点共用的纯数据校验器，不导入 Node API 或执行路径探测；新资产 `/disk-contract.mjs` 仍先经 Access 鉴权，没有通配路由。固定 `springbok-disk/v1` / `linux-mount-namespace` / bytes、唯一 mount ID/path、规范绝对路径、支持类型、精确状态/null、安全整数/容量关系/BigInt 比率与 filtered 计数均严格校验。
+
+规范化完整磁盘 JSON 最多 **6144 UTF-8 bytes**。`diskSample()` 拒绝超预算；节点 `diskReport()` 在原采集结果严格有效但超预算时整体替换为 unavailable / `report-too-large`，`sampledAt:null, mounts:[], filtered:null`。不保留“截断后剩余”来冒称全量挂载点，不合计物理总盘。原本地采集的最多 32 mounts、4 KiB 路径、192 KiB worker 输出不是上报大小保证。
+
+telemetry 请求的 declared/实际上限仍为 **8192 bytes**，5 秒 deadline；协议外壳和 CPU/memory 留有预算。只有 telemetry ACK 调用显式允许 8192 bytes，identity/heartbeat 等原 reader 仍为 4096；没有全局放宽响应。6144/6145 与 4096/4097、8192/8193 相邻边界均测试。
+
+### 保留式存储与客户端生命周期
+
+meta1 只允许旧 latest，meta2 允许 CPU-only/v2，meta3 接受三种形状。首次成功 recorded v3 时，meta1/2→3 与 state 同一 SQLite 同步事务；read/start/deferred/失败不升级，混合旧样本覆盖 latest 不降 meta3。meta2 配 v3 latest 是损坏，拒绝且不修复。固定旧 v5 reader 来自上述 Git 基线，两文件仅相对 import 搬址，反向还原校验原 SHA；升级后旧 read/start/sample/snapshot 失败关闭且原库保留，切回新 reader 恢复。旧代码回退不保证可用性，也不提供降级或清库。
+
+当前包为 **`springbok-control-node/v6` /30 文件**，原 26 文件闭包追加共享 disk contract 与三个 disk worker/collector 源文件；无新运行依赖。安装器只接受 v6，不自动升级或覆盖旧 v5。observe 依次采 CPU、memory、disk，将三指标放同一 pending；各 sampledAt 不是原子同一时刻。丢 ACK 精确重送不重采；90 秒单调年龄、sequence、限频、错误策略与任务/心跳隔离保留，execute 不采指标。
+
+默认 disk worker 在首轮采样时绑定 daemon 复用的同一 stop signal；调用者若未来改成逐轮不同 signal，须重新明确 sampler 生命周期。保留自有 worker 5 秒 deadline/192 KiB/未 close 不启动替代 worker，以及 D-state/ABA/动态挂载竞争边界。停止丢弃迟到样本；S02 的 client 停止用受控 sampler 验证，S01 的真实 worker 在途停止是分层证据，不冒称默认 client+worker 组合在途停止已直接独立实测。
+
+### 页面与本地验收
+
+每节点仍一次 GET，CPU/内存/磁盘分别校验；旧 CPU-only/v2 的磁盘显示“未上报”，坏新版显示“未确认”，采集失败/null 不显示 0。按挂载点显示已用/普通用户可用/total、GiB+精确 bytes、两位比率、readOnly、free−available 差额及 filtered 计数；失败挂载与合法挂载并列。所有路径通过 `textContent`，无容量总和、browser storage、轮询或写入。共同 receivedAt 新鲜度、请求耗时扣减、到期、迟到 render/owner、visibility/pagehide/BFCache 保留；不是 M07 完整总览。
+
+固定 Linux Node.js 24.18.1 / uid1000 /只读 LF 快照：全量契约 **262/262**、workerd/SQLite **60/60**，0 失败/取消/跳过。真实 v6 双角色安装→真实 CPU/memory/disk worker→鉴权上报→SQLite/admin：两样本相隔 **30,974ms**，CPU 窗口 **31,048ms**；三指标和 ACK/admin 一致，execute 指标请求 0，SIGTERM 正常收尾。Docker namespace 无支持挂载点，磁盘明确 `no-supported-mounts`（pseudo20/unsupported5/subtree3），不把该运行冒称支持根容量验收；S01 的原生 df/stat 证据保持独立。
+
+真实 Chrome/workerd 通过磁盘 0/1byte、partial/失败/null、超预算、重复/坏字段/缺失/旧版本、恶意路径纯文本、长中文路径/极大安全 bytes 的390px，以及三指标局部独立、单 GET、共同到期和迟到身份/render。受控时钟/响应注入不冒称线上真实故障。
+
+已发布真实旧 Git `5f8e648df5dbe053342048cbd268302949633e32` v5 /26 文件包（manifest SHA-256 `5a25b61ce6fa65b946917e0d5b94c3d57f0eb7ab2abc4377e3a4dade652388c1`）以自身代码双角色安装/daemon→新 Worker/重装/version 通过；旧 latest 仍7字段/v2、meta2、无 disk。v6 拒绝旧格式和覆盖；release/credential/markers/state/遗留锁的 bytes/inode/device/mode/uid/mtime 不变。不是随新源码变化的“旧”夹具，不提供自动升级或签名发行。
+
+证据根 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-disk-telemetry-20261005/`。临时 Docker 快照两次缺嵌套挂载点退出125，只修临时目录，未改变产品门禁。两项独立只读静态审查未发现确定阻断缺陷，不计独立执行通过；补迟到 render 的磁盘独立断言。固定 actionlint1.7.12/Gitleaks8.30.1 归档 SHA 复核和源码/workflow 扫描通过，未额外 ShellCheck/Pyflakes。精确 head/PR/main CI、安全制品、Git绑定 v6 包另记最终回执，不预报未运行项。
+
+M03 两子项仅限定源码与验收范围，真实 Cloudflare/Access/用户主机、多服务器总览、网络、历史/告警/业务部署和整体开发仍开放。没有生产开关、云资源、用户主机安装、自动升级、清锁、schema 降级或数据删除。

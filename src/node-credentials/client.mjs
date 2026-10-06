@@ -9,7 +9,8 @@ function transportError(error) {
   if (error instanceof RetryableNodeError || ['TimeoutError', 'AbortError'].includes(error?.name) || NETWORK_ERRORS.has(error?.code) || NETWORK_ERRORS.has(error?.cause?.code)) return new RetryableNodeError();
   return error; // 未识别错误（含 TLS/redirect/程序错误）失败关闭，不按网络故障无限重试。
 }
-export async function readCredentialResponse(response) {
+export async function readCredentialResponse(response, maximum = 4096) {
+  if (![4096, 8192].includes(maximum)) throw new Error('invalid node response limit');
   if (response.status !== 200) {
     await response.body?.cancel().catch(() => {});
     if ([429, 500, 502, 503, 504].includes(response.status)) throw new RetryableNodeError();
@@ -20,14 +21,14 @@ export async function readCredentialResponse(response) {
     for (;;) {
       let chunk; try { chunk = await reader.read(); } catch (error) { throw transportError(error); }
       const { done, value } = chunk; if (done) break;
-      size += value.length; if (size > 4096) throw new Error('large node response'); chunks.push(value);
+      size += value.length; if (size > maximum) throw new Error('large node response'); chunks.push(value);
     }
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
   } finally { await reader.cancel().catch(() => {}); }
 }
-export async function fetchCredentialJson(fetcher, url, init) {
+export async function fetchCredentialJson(fetcher, url, init, maximum = 4096) {
   let response; try { response = await fetcher(url, init); } catch (error) { throw transportError(error); }
-  return readCredentialResponse(response);
+  return readCredentialResponse(response, maximum);
 }
 export function openCredentialClient({ file, expectedOrigin, fetcher = fetch }) {
   const credential = nodeCredential(readPrivateNodeJson(file), expectedOrigin);

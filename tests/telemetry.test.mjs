@@ -7,7 +7,7 @@ import { openTelemetryClient } from '../src/node-telemetry/client.mjs';
 import { RetryableNodeError } from '../src/node-credentials/client.mjs';
 import { runNodeLoop } from '../src/node-daemon/loop.mjs';
 import { packageFixture, roleFixture } from './node-package-fixture.mjs';
-import { cpu, memory } from './telemetry-data.mjs';
+import { cpu, memory, disk } from './telemetry-data.mjs';
 
 const context = { ownerId: 'a'.repeat(64), nodeId: randomUUID() }, bootId = randomUUID();
 const start = (boot = bootId, previousGeneration = 0) => ({ protocolVersion: 2, bootId: boot, previousGeneration });
@@ -83,28 +83,28 @@ test('observe telemetry client reuses lost CAS/receipt, ages pending by monotoni
       if (operation === 'sample' && lostSample) { lostSample = false; throw Object.assign(new Error('lost'), { code: 'ECONNRESET' }); }
       return Response.json(telemetryResult({ ...context, ownerId: r.credential.ownerId, nodeId: r.credential.nodeId, enrollmentId: r.credential.enrollmentId }, result.result));
     };
-    const client = openTelemetryClient({ file: r.credentialFile, expectedOrigin: r.credential.origin, fetcher, monotonic: () => time, sampler: { sample: async () => cpu(++samples) }, memorySampler: { sample: async () => memory(++memorySamples) } }), signal = new AbortController().signal;
+    const client = openTelemetryClient({ diskSampler: { sample: async () => disk() }, file: r.credentialFile, expectedOrigin: r.credential.origin, fetcher, monotonic: () => time, sampler: { sample: async () => cpu(++samples) }, memorySampler: { sample: async () => memory(++memorySamples) } }), signal = new AbortController().signal;
     await assert.rejects(client.upload(signal), RetryableNodeError); await assert.rejects(client.upload(signal), RetryableNodeError);
-    assert.equal(await client.upload(signal), 'recorded'); assert.equal(samples, 1); assert.equal(memorySamples, 1); assert.equal(state.latest.sampleVersion, 2); assert.equal(state.latest.memory.usedBytes, 1);
+    assert.equal(await client.upload(signal), 'recorded'); assert.equal(samples, 1); assert.equal(memorySamples, 1); assert.equal(state.latest.sampleVersion, 3); assert.equal(state.latest.memory.usedBytes, 1);
     for (const operation of ['start', 'sample']) { const inputs = requests.filter(r => r.operation === operation).map(r => r.input); assert.deepEqual(inputs[0], inputs[1]); }
     assert.equal(state.latest.receivedAt, 1000);
     time = 30000; lostSample = true; await assert.rejects(client.upload(signal), RetryableNodeError);
     const old = requests.at(-1).input; time = 120000; assert.equal(await client.upload(signal), 'recorded');
     const next = requests.at(-1).input; assert.equal(next.cpu.usagePercent, 3); assert.equal(next.memory.usedBytes, 3); assert.equal(next.sequence, old.sequence + 1); assert.notDeepEqual(next.cpu, old.cpu); assert.notDeepEqual(next.memory, old.memory);
     const stop = new AbortController(); stop.abort(); const count = requests.length; await client.upload(stop.signal); assert.equal(requests.length, count);
-    assert.throws(() => openTelemetryClient({ file: roleFixture(f.directory, 'execute').credentialFile, expectedOrigin: r.credential.origin }));
+    assert.throws(() => openTelemetryClient({ diskSampler: { sample: async () => disk() }, file: roleFixture(f.directory, 'execute').credentialFile, expectedOrigin: r.credential.origin }));
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 test('telemetry age and stop boundaries discard a late collection before upload and wrong-scope replies fail closed', async () => {
   const f = packageFixture(), r = roleFixture(f.directory, 'observe');
   try {
     let time = 0, calls = 0;
-    const client = openTelemetryClient({ file: r.credentialFile, expectedOrigin: r.credential.origin, monotonic: () => time, sampler: { sample: async () => { time = 90000; return cpu(); } }, fetcher: (url) => {
+    const client = openTelemetryClient({ diskSampler: { sample: async () => disk() }, file: r.credentialFile, expectedOrigin: r.credential.origin, monotonic: () => time, sampler: { sample: async () => { time = 90000; return cpu(); } }, fetcher: (url) => {
       calls++; return Response.json(telemetryResult({ ownerId: r.credential.ownerId, nodeId: r.credential.nodeId, enrollmentId: r.credential.enrollmentId }, url.endsWith('/read') ? { generation: 0 } : { generation: 1, bootId }));
     }, bootId });
     assert.equal(await client.upload(new AbortController().signal), 'dropped'); assert.equal(calls, 2);
-    const stop = new AbortController(), stopped = openTelemetryClient({ file: r.credentialFile, expectedOrigin: r.credential.origin, sampler: { sample: async () => { stop.abort(); return cpu(); } }, fetcher: () => { throw new Error('must not call'); } }); await stopped.upload(stop.signal);
-    const wrong = openTelemetryClient({ file: r.credentialFile, expectedOrigin: r.credential.origin, sampler: { sample: async () => cpu() }, fetcher: () => Response.json(telemetryResult({ ...context, enrollmentId: r.credential.enrollmentId }, { generation: 0 })) }); await assert.rejects(wrong.upload(new AbortController().signal));
+    const stop = new AbortController(), stopped = openTelemetryClient({ diskSampler: { sample: async () => disk() }, file: r.credentialFile, expectedOrigin: r.credential.origin, sampler: { sample: async () => { stop.abort(); return cpu(); } }, fetcher: () => { throw new Error('must not call'); } }); await stopped.upload(stop.signal);
+    const wrong = openTelemetryClient({ diskSampler: { sample: async () => disk() }, file: r.credentialFile, expectedOrigin: r.credential.origin, sampler: { sample: async () => cpu() }, fetcher: () => Response.json(telemetryResult({ ...context, enrollmentId: r.credential.enrollmentId }, { generation: 0 })) }); await assert.rejects(wrong.upload(new AbortController().signal));
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 test('non-transient telemetry rejection disables only telemetry; transient upload failure never changes task poll backoff', async () => {
@@ -120,7 +120,7 @@ test('memory collection stop and 90-second age boundaries do not publish a late 
   try {
     for (const boundary of ['stop', 'age', 'before-age']) {
       let time = 0, calls = 0, state = null; const stop = new AbortController();
-      const client = openTelemetryClient({ file: r.credentialFile, expectedOrigin: r.credential.origin, bootId, monotonic: () => time, sampler: { sample: async () => cpu() }, memorySampler: { sample: async () => { if (boundary === 'stop') stop.abort(); else time = boundary === 'age' ? 90000 : 89999; return memory(); } }, fetcher: (url, init) => { calls++; const result = transition(state, url.split('/').at(-1), JSON.parse(init.body), time); state = result.state; return Response.json(telemetryResult({ ownerId: r.credential.ownerId, nodeId: r.credential.nodeId, enrollmentId: r.credential.enrollmentId }, result.result)); } });
+      const client = openTelemetryClient({ diskSampler: { sample: async () => disk() }, file: r.credentialFile, expectedOrigin: r.credential.origin, bootId, monotonic: () => time, sampler: { sample: async () => cpu() }, memorySampler: { sample: async () => { if (boundary === 'stop') stop.abort(); else time = boundary === 'age' ? 90000 : 89999; return memory(); } }, fetcher: (url, init) => { calls++; const result = transition(state, url.split('/').at(-1), JSON.parse(init.body), time); state = result.state; return Response.json(telemetryResult({ ownerId: r.credential.ownerId, nodeId: r.credential.nodeId, enrollmentId: r.credential.enrollmentId }, result.result)); } });
       assert.equal(await client.upload(stop.signal), boundary === 'age' ? 'dropped' : boundary === 'before-age' ? 'recorded' : undefined); assert.equal(calls, boundary === 'age' ? 2 : boundary === 'before-age' ? 3 : 0);
     }
   } finally { rmSync(f.directory, { recursive: true, force: true }); }

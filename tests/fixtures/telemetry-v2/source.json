@@ -1,0 +1,15 @@
+{
+  "revision": "6b1c6cb279e115d9ebfc5367e47bb908daa43a70",
+  "files": [
+    {
+      "original": "cloud/telemetry-contract.mjs",
+      "fixture": "contract.mjs",
+      "sha256": "774e17e556ec9d8bd1d4da1fb2b07d92ae80e16805cfcefd703335967fd541cb"
+    },
+    {
+      "original": "cloud/telemetry-store.mjs",
+      "fixture": "store.mjs",
+      "sha256": "dfe8fc5a4be7d87bf9fde9c74bf0e34c1e8c282b82307cf175608e9cc4df8458"
+    }
+  ]
+}

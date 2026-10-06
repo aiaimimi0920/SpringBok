@@ -37,7 +37,7 @@ test('package rejects untrusted digest, bytes, manifest schema and extra paths i
     fs.mkdirSync(join(f.packageDirectory, 'unexpected')); assert.throws(() => verifyPackage(f.packageDirectory, f.built.sha256)); fs.rmdirSync(join(f.packageDirectory, 'unexpected'));
     fs.writeFileSync(join(f.packageDirectory, 'unexpected.txt'), 'extra'); assert.throws(() => verifyPackage(f.packageDirectory, f.built.sha256)); fs.unlinkSync(join(f.packageDirectory, 'unexpected.txt'));
     const manifestFile = join(f.packageDirectory, 'manifest.json'), bytes = fs.readFileSync(manifestFile), metadata = JSON.parse(bytes);
-    for (const change of [{ ...metadata, format: 'springbok-control-node/v1' }, { ...metadata, format: 'springbok-control-node/v2' }, { ...metadata, format: 'springbok-control-node/v3' }, { ...metadata, revision: 'dirty' }, { ...metadata, minimumNodeMajor: 0 }, { ...metadata, extra: true }, { ...metadata, files: metadata.files.map((v, i) => i ? v : { ...v, path: '../outside' }) }]) {
+    for (const change of [{ ...metadata, format: 'springbok-control-node/v1' }, { ...metadata, format: 'springbok-control-node/v2' }, { ...metadata, format: 'springbok-control-node/v3' }, { ...metadata, format: 'springbok-control-node/v4' }, { ...metadata, format: 'springbok-control-node/v5' }, { ...metadata, revision: 'dirty' }, { ...metadata, minimumNodeMajor: 0 }, { ...metadata, extra: true }, { ...metadata, files: metadata.files.map((v, i) => i ? v : { ...v, path: '../outside' }) }]) {
       const changed = jsonBytes(change); fs.writeFileSync(manifestFile, changed); assert.throws(() => verifyPackage(f.packageDirectory, sha256(changed)));
     }
     fs.writeFileSync(manifestFile, bytes); verifyPackage(f.packageDirectory, f.built.sha256);

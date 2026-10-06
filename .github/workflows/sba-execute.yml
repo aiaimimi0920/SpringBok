@@ -1,0 +1,50 @@
+name: SBA controlled execution
+run-name: 'sba:${{ fromJSON(inputs.request_json).taskId }}:${{ inputs.request_sha256 }}'
+on:
+  workflow_dispatch:
+    inputs:
+      request_json:
+        description: Canonical public SBA request
+        required: true
+        type: string
+      request_sha256:
+        description: Approved request digest
+        required: true
+        type: string
+      executor_sha:
+        description: Approved executor SHA
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  execute:
+    runs-on: windows-2025
+    timeout-minutes: 80
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Consume one-time permission and run the exact approved application
+        env:
+          SBA_REQUEST_JSON: ${{ inputs.request_json }}
+          SBA_REQUEST_SHA256: ${{ inputs.request_sha256 }}
+          SBA_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+          SBA_RUNNER_ORIGIN: ${{ vars.SBA_RUNNER_ORIGIN }}
+        run: node scripts/sba-workflow.mjs
+      - name: Upload only the validated receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sba-result-${{ fromJSON(inputs.request_json).taskId }}-${{ inputs.request_sha256 }}
+          path: ${{ runner.temp }}/sba-receipt/receipt.json
+          if-no-files-found: error
+          retention-days: 7

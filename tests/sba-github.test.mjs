@@ -65,7 +65,7 @@ test('fixed SHA manifest traverses Git tree modes, never contents symlink or dow
     `https://api.github.com/repos/example/sample/git/trees/${'2'.repeat(40)}`,
     `https://api.github.com/repos/example/sample/git/blobs/${'3'.repeat(40)}`,
   ]);
-  assert.equal(calls[0].options.redirect, 'error');
+  assert.equal(calls[0].options.redirect, 'manual');
   assert.equal(calls[0].options.headers['x-github-api-version'], '2026-03-10');
   assert.ok(calls[0].options.signal instanceof AbortSignal);
 });

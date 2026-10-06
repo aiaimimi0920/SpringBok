@@ -1,0 +1,41 @@
+{
+  "name": "springbok-test",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-07-30",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "springbok-test.aiaimimi.com", "custom_domain": true }],
+  "limits": { "cpu_ms": 10 },
+  "vars": {
+    "ENABLE_PROTOCOL_TEST": "no",
+    "ENABLE_FIXTURE_CYCLE": "no",
+    "ENABLE_ADMIN": "yes",
+    "ENABLE_CATALOG": "yes",
+    "ENABLE_NODE_MAILBOX": "no",
+    "ENABLE_NODE_ENROLLMENT": "no",
+    "ENABLE_NODE_CREDENTIALS": "no",
+    "ENABLE_NODE_CHANNEL": "no",
+    "ENABLE_NODE_HEARTBEAT": "no",
+    "ENABLE_NODE_TELEMETRY": "no",
+    "ADMIN_EMAILS": "[\"vmjcv666@gmail.com\"]",
+    "ADMIN_ORIGIN": "https://springbok-test.aiaimimi.com",
+    "ACCESS_ISSUER": "https://aiaimimi.cloudflareaccess.com",
+    "ACCESS_AUD": "254148951a5371e46f6369fb469ec7ae1c1f1869d38727a83c3c406c409fc4d3"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "TARGET", "class_name": "TargetMailbox" },
+      { "name": "REGISTRY", "class_name": "OwnerCatalog" },
+      { "name": "NODES", "class_name": "NodeMailbox" },
+      { "name": "TELEMETRY", "class_name": "NodeTelemetry" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TargetMailbox"] },
+    { "tag": "v2-catalog", "new_sqlite_classes": ["OwnerCatalog"] },
+    { "tag": "v3-node-mailbox", "new_sqlite_classes": ["NodeMailbox"] },
+    { "tag": "v4-node-telemetry", "new_sqlite_classes": ["NodeTelemetry"] }
+  ],
+  "assets": { "directory": "../public/cloud-admin", "binding": "ASSETS", "run_worker_first": true },
+  "observability": { "enabled": false }
+}

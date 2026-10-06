@@ -31,7 +31,9 @@ Actions run 关联和回执回收。仅配置一个 origin URL 并不证明 GitH
   拒绝 dirty/untracked/ignored 内容、隐藏索引修改标记，不支持 worktree 指针。
 - `.sba` 必须在 checkout 内；manifest 上限 64 KiB、入口上限 1 MiB。实际目录/文件、
   realpath、符号链接、硬链接及入口 blob 均校验，严格 UTF-8、有界读取并核对文件
-  读取前后的身份/大小/时间。Git 使用干净的配置环境；不把本地配置当远端证明。
+  读取前后的身份/大小/时间。先只读打开，以同一描述符的 fstat 为基准，再核路径
+  lstat 和读后状态；拒绝目录、链接和 FIFO，不依赖打开前的路径检查保证身份。
+  Git 使用干净的配置环境；不把本地配置当远端证明。
 - `tempRoot` 由执行器控制，不能位于 checkout 内。每次新建 `springbok-sba-*` 目录，
   请求用独占创建写入；不接受调用方指定现成结果文件，不复用前次结果。
 - 仅继承必要系统环境和 manifest 所列秘密；不继承 GitHub 控制 token、Actions

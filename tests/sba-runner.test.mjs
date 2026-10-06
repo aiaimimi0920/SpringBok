@@ -116,6 +116,7 @@ test('timeout, missing/malformed/oversized/mismatched results and false success 
   const path = join(f.base, 'result.json');
   const ok = { exitCode: 0, timedOut: false };
   assert.equal((await readExecutionResult(path, f.input, ok)).status, 'unknown');
+  assert.equal((await readExecutionResult(f.root, f.input, ok)).status, 'unknown');
   for (const value of ['invalid', ' '.repeat(32769), JSON.stringify({ ...receipt(f.input), sourceSha: 'b'.repeat(40) })]) {
     await writeFile(path, value);
     assert.equal((await readExecutionResult(path, f.input, ok)).status, 'unknown');
@@ -143,13 +144,20 @@ test('linked .sba directories and hardlinked result files are rejected', async t
   assert.equal((await readExecutionResult(result, f.input, { exitCode: 0 })).status, 'unknown');
 });
 
-test('symlink entrypoint is rejected before execution', { skip: process.platform === 'win32' }, async t => {
+test('symlink entrypoints and symlink or FIFO results are rejected', { skip: process.platform === 'win32' }, async t => {
   const f = await fixture(t);
   const entrypoint = join(f.root, '.sba', 'springbok.ps1');
   await rm(entrypoint);
   await symlink(join(f.base, 'outside.ps1'), entrypoint);
   await writeFile(join(f.base, 'outside.ps1'), '# outside');
   await assert.rejects(inspectCheckout(f.root, f.input));
+  const original = join(f.base, 'original.json'), result = join(f.base, 'result.json');
+  await writeFile(original, JSON.stringify(receipt(f.input)));
+  await symlink(original, result);
+  assert.equal((await readExecutionResult(result, f.input, { exitCode: 0 })).status, 'unknown');
+  const fifo = join(f.base, 'result.fifo');
+  execFileSync('mkfifo', [fifo]);
+  assert.equal((await readExecutionResult(fifo, f.input, { exitCode: 0 })).status, 'unknown');
 });
 
 test('timeout waits for close rather than a termination request and bounds a missing close', { skip: process.platform !== 'win32', timeout: 15000 }, async () => {

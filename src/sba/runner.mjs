@@ -12,13 +12,14 @@ const inside = (root, path) => {
 };
 
 async function regularFile(path, maxBytes) {
-  const info = await lstat(path);
-  if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > maxBytes) reject();
   const file = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW || 0) | (constants.O_NONBLOCK || 0));
   try {
+    // 以实际打开的描述符为基准，不把打开前的路径检查当作文件身份保证。
+    const info = await file.stat();
+    if (!info.isFile() || info.nlink !== 1 || info.size > maxBytes) reject();
     const same = next => next.isFile() && next.dev === info.dev && next.ino === info.ino && next.nlink === 1 &&
       next.size === info.size && next.mtimeMs === info.mtimeMs && next.ctimeMs === info.ctimeMs;
-    if (!same(await file.stat())) reject();
+    if (!same(await lstat(path))) reject();
     // 使用同一文件描述符且最多读上限加一字节，增长文件也不能绕过大小限制。
     const buffer = Buffer.alloc(maxBytes + 1);
     let length = 0;

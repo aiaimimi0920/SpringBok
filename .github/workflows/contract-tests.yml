@@ -35,6 +35,8 @@ jobs:
         run: node scripts/ci/memory-native.mjs
       - name: Compare normal-user disk namespace gauges with GNU df without disk writes
         run: node scripts/ci/disk-native.mjs
+      - name: Compare normal-user network rates with independent loopback counters
+        run: node scripts/ci/network-native.mjs
       - run: node scripts/lab.mjs
       - name: Read the immutable M6 source certificate
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

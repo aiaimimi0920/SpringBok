@@ -212,8 +212,8 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
 
 | 子任务 | 负责人 | 边界与验收 | 状态 |
 | --- | --- | --- | --- |
-| SBA-01-S01 | 主 AI | 独立发布配置、保留式迁移约束测试、固定 Wrangler dry-run、精确 PR/main 检查 | 配置与本地验证完成，Git 交付按回执 |
-| SBA-01-S02 | 主 AI | 发布已审阅 GitHub 版本、绑定已有 Access 保护的 hostname、真实登录与持久化验收 | 待 S01 合并，不以 dry-run 关闭 |
+| SBA-01-S01 | 主 AI | 独立发布配置、保留式迁移约束测试、固定 Wrangler dry-run、精确 PR/main 检查 | PR #52 已合并，main 六项 CI 通过 |
+| SBA-01-S02 | 主 AI | 发布已审阅 GitHub 版本、绑定已有 Access 保护的 hostname、真实登录与持久化验收 | 真实发布与未登录拒绝已通过；允许身份登录/持久化验收待完成，不关闭 SBA-01 |
 
 - 负责人：主 AI；用户已要求执行完整联合计划。本项边界为 SpringBok 上线配置、
   最小必要发布工具、相关验证与部署证据，不提前实现 NAccount 业务迁移。
@@ -248,3 +248,26 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
   `generic-api-key`。已从 CI artifact 核对唯一 finding 的文件/行/提交；
   `.gitleaksignore` 只列该精确历史指纹，不排除文件、规则或真实 token。
   该 AUD 已由 Access 应用 API 核实，用于验签绑定，不具有授权能力。
+
+### SBA-01-S02 真实发布回执（2026-10-06）
+
+- PR #52 精确 head `8b4723a754fc42d4a143896c658d01fb484549ed` 的六项检查全部
+  通过并审阅后正常合并。发布 main 为 `297dc7efb6ec6a07519e71c95ec32c12ba7f6cdd`，
+  其六项 main CI 同样全部通过。未绕过保护或重写历史。
+- 固定 Wrangler `4.147.0` 发布到现有 Worker `springbok-test`，真实 URL：
+  <https://springbok-test.aiaimimi.com>。首次 `--yes` 在 CLI 参数解析阶段被拒绝，
+  未进入上传；按实际 help 去掉该参数后成功发布，不属于未知写入后盲目重试。
+- Cloudflare version：`019b75a8-f912-4873-8a7a-19f5e7412c6c`；deployment：
+  `7ec84882-aa24-4d2e-9aa6-b8579aabe066`，2026-10-06 09:43:52 UTC，100% 指向此版本。
+  已通过账户 API 独立复核 deployment、custom domain 与 DO bindings，而非只信 CLI 输出。
+- 原 `TARGET` namespace 仍为 `afa8ca0cf0a945928c89aa8ee63d1606`，未重建；
+  新增 `REGISTRY`、`NODES`、`TELEMETRY` 类按既有迁移历史创建，节点入口仍关闭。
+  上一 Worker 版本仍在部署历史中，未删除数据或旧版本。
+- 对 `/`、`/app.js`、`/api/admin/state` 的无凭据 HTTPS 请求均返回 302，
+  目标为 `aiaimimi.cloudflareaccess.com/cdn-cgi/access/login/springbok-test.aiaimimi.com`。
+  证明外围 Access 生效，不证明允许管理员已登录、管理 API 成功或线上 DO 写入持久化。
+- 当前工具没有可用浏览器，创建 IAB 返回 `Browser is not available: iab`；
+  已请求用户用现有获准邮箱登录或提供可连接浏览器，不要求提供密码、验证码或 token。
+  不引入 Access Bypass、假 JWT 或机器身份来冒充管理员验收。
+- `SBA-01` 保持部分验收。等待身份交互时可领取不依赖它的 `SBA-02` 契约/执行端工作，
+  但正式 NAccount 发布仍须有真实授权调用与回执；不能因登录待验收而退回无限离线优化。

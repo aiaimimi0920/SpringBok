@@ -244,3 +244,7 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
   `cloud/package-lock.json` 安装。dry-run 成功构建 Worker 和 8 个静态资源，
   上传包 147.50 KiB / gzip 31.17 KiB。独立配置明确只绑定已有 Access 应用的
   `springbok-test.aiaimimi.com`；不开放 workers.dev，也不改其他域名或 Access 策略。
+- PR #52 的初次安全扫描将配置中的公开 Access audience 标识误报为
+  `generic-api-key`。已从 CI artifact 核对唯一 finding 的文件/行/提交；
+  `.gitleaksignore` 只列该精确历史指纹，不排除文件、规则或真实 token。
+  该 AUD 已由 Access 应用 API 核实，用于验签绑定，不具有授权能力。

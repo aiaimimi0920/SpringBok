@@ -59,6 +59,13 @@ test("contract lab makes no unsupported product stack or release claims", () => 
   }
 });
 
+test("SBA native execution checks run on Windows without deployment credentials", () => {
+  const workflow = read(".github/workflows/contract-tests.yml");
+  assert.match(workflow, /sba-windows:\s+runs-on: windows-2025\s+timeout-minutes: 5/);
+  assert.match(workflow, /node --test tests\/sba-contract\.test\.mjs tests\/sba-runner\.test\.mjs/);
+  assert.doesNotMatch(workflow, /secrets\.|CLOUDFLARE_API_TOKEN|SBA_EXECUTE:/);
+});
+
 test("CodeQL initialization and analysis share an exact release pin", () => {
   const workflow = read(".github/workflows/codeql.yml");
   const pins = [...workflow.matchAll(/uses:\s+github\/codeql-action\/(init|analyze)@([a-f0-9]{40})(?=\s|$)/g)];

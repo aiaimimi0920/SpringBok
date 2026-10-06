@@ -1,6 +1,6 @@
 # SpringBok 产品开发计划与逐功能进度
 
-更新日期：2026-10-05（当前任务开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
+更新日期：2026-10-06（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
 > **2026-10-06 当前优先路线：** 用户要求先把 SpringBok 部署到 Cloudflare，再由云端
@@ -8,7 +8,7 @@
 > 按 [Cloudflare / NAccount 联合交付计划](cloudflare-naccount-delivery-plan.md) 的
 > `SBA-DOC-01` → `SBA-01` 至 `SBA-08` 推进，不先做完下方全部历史路线。
 > SpringBok 是确定性的 `.sba` 契约执行器；业务迁移实现归应用仓库。
-> 本轮只编写文档；后续目标部署与必要修复已有用户方向授权，新增付费、破坏性操作
+> 规划轮只编写文档；后续目标部署与必要修复已有用户方向授权，新增付费、破坏性操作
 > 和无关资源变更仍另行确认。下方历史“禁止真实部署”及“业务只在外部服务器运行”
 > 的范围描述不用于否定这条新增的 Cloudflare 目标路线，历史证据和任务 ID 保留。
 
@@ -617,7 +617,42 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 本项在本地验收后立即 scoped commit/push，不在提交内循环记录自身 SHA；PR/main 最终交付以回执为准。下一独立项建议 M07（多服务器状态总览），尚未领取；N04/N05、M05/N09、真实 Cloudflare/Access/用户宿主、多服务器业务验收/历史/告警和整体开发保持开放。
 - 首提交 `bd4c818b3143eb4cb3b05690715e990f89014505` 已推送并创建 PR [#50](https://github.com/aiaimimi0920/SpringBok/pull/50)。初次远程 workflow 虽成功，但下载日志核出 cloud 显式入口漏新文件，仅运行60项；没有合并或称覆盖通过。本项追加修复 `tests/cloud/package.json` 并在契约中固定网络持久测试入口，按新 head 重新审阅和核对62项；初次日志/固定版本包保留。不是放宽验证脚本至60项。
 
-### 7.22 后续交接记录模板
+### 7.22 SBA-04-S01 受控执行端接续与验收
+
+- 日期：2026-10-06；负责人：主 AI；分支 `feat/sba-04-runner`；基线
+  `05fdf20e3378ce03f6c9b77b876553ee6043d24f`。接续 Session
+  `01a1100c-d638-7bb3-8c5b-f99d6a0b9e4f` 的未提交执行端，保留原稿和历史证据。
+- 当前优先路线是 [联合交付计划](cloudflare-naccount-delivery-plan.md)，不回到历史
+  M07 路线。SBA-02 的 PR #54 已合并；NAccount 的既有 GitHub 构建仅是 SBA-03
+  前置，不是正式发布。SBA-01 的允许管理员登录/持久化线上验收仍开放。
+- 范围：`src/sba/runner.mjs`、契约环境变量边界、匹配测试、既有 contract workflow
+  的无凭据 Windows job 与文档；调用和信任边界见 [执行端说明](sba-runner.md)。
+  没有部署 workflow、云端任务 API、生产凭据配置或应用发布。
+- 匹配源码的 Windows Node.js 22.22.2 聚焦检查 24 通过/1 平台跳过，Linux Node.js
+  24.18.1 为 23 通过/2 平台跳过，均无失败；包括原生 PowerShell 参数、真实超时、
+  synthetic checkout 到绑定结果的完整调用及文件/凭据/结果边界，不是真实业务验收。
+- 固定且 SHA-256 校验的 actionlint 1.7.12 通过全部 workflow；未额外运行
+  ShellCheck/Pyflakes。Gitleaks、精确 PR head 和 main 的最终结果写入交付回执。
+  只读子代理遇上游 503 未执行，不计独立审查；主 AI 亲读并审阅完整 scoped diff。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-04-20261006-continuation`。
+  源码指纹匹配已有验证；本项验收后立即 scoped commit/push、精确 head 检查及正常
+  合并，最终 SHA/PR 另记回执，不为写自身 SHA 循环 amend。
+- 下一独立项 `SBA-04-S02`：先读取现有 Worker/admin/SQLite DO 接缝及当前 GitHub API，
+  接入获准仓库固定 SHA 的持久任务、受控 workflow 与可信结果回收。S01 不提供
+  云端授权或任务级去重，不得直接重复调用入口来恢复未知发布。
+- 接续 Session `01a110e1-926d-7c10-b1c6-44c2922ac350`：首提交
+  `346fc6f83f37faa2532f9c73db58214e9dd3a12d` 已推送并创建 PR #55。首轮 Windows
+  job 在超时后的 fixture 清理报 `EBUSY`，其余 job 通过；未合并或以重跑掩盖失败。
+  补充退出时序回归先验证旧实现失败，再修复为等待 close、最多额外宽限 5 秒。
+  Windows 聚焦 25 通过/1 平台跳过，Linux 23 通过/3 平台跳过，均无失败；使用
+  与工作树逐文件匹配的 LF 快照，保留既有 Q01 工作树 CRLF 失败记录。未改清理策略、
+  未跳过失败用例、未放宽权限或延长应用执行超时；精确新 head/PR/main 按最终回执。
+- `f7b06bb` 的 6 个 PR workflows/13 个 jobs 已通过，但 CodeQL 汇总另报新增
+  `js/file-system-race`，因此没有将工作流成功称为全部检查成功。追加同任务文件读取
+  修复为先 open、同一描述符 fstat/读取，并保留读前后路径/身份一致性核对；补测
+  目录、符号链接和 FIFO 结果拒绝。不关闭查询、不撤销告警，最终精确检查另核回执。
+
+### 7.23 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

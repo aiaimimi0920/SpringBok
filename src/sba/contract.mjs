@@ -9,6 +9,7 @@ const exact = (value, required, optional = []) => {
 const identifier = value => typeof value === 'string' && /^[a-z][a-z0-9-]{1,62}$/.test(value);
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export const SBA_ACTIONS = Object.freeze(['deploy', 'update', 'verify']);
+const reservedEnvironment = /^(?:GITHUB_|ACTIONS_|RUNNER_|SBA_|GIT_|NODE_|NPM_|PYTHON|DOTNET_)|^(?:PATH|PATHEXT|COMSPEC|SYSTEMROOT|SYSTEMDRIVE|WINDIR|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|COMMONPROGRAMFILES|TEMP|TMP|TMPDIR|CI|LANG|LC_ALL|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|PSMODULEPATH|ENV|BASH_ENV)$/;
 
 function versionParts(value) {
   if (typeof value !== 'string' || !/^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/.test(value)) fail('stable x.y.z version required');
@@ -38,7 +39,7 @@ export function validateManifest(value) {
     if (!Number.isInteger(timeout) || timeout < 1 || timeout > 3600) fail('invalid action timeout');
   }
   if (!Array.isArray(value.secrets) || value.secrets.length > 20 || new Set(value.secrets).size !== value.secrets.length ||
-      value.secrets.some(name => typeof name !== 'string' || !/^[A-Z][A-Z0-9_]{1,63}$/.test(name) || /^(?:GITHUB_|ACTIONS_|RUNNER_|SBA_)/.test(name))) fail('invalid secret references');
+      value.secrets.some(name => typeof name !== 'string' || !/^[A-Z][A-Z0-9_]{1,63}$/.test(name) || reservedEnvironment.test(name))) fail('invalid secret references');
   return structuredClone(value);
 }
 

@@ -58,7 +58,8 @@ deploy 的 previous 为 null；update/verify 的 previous 包含前一已知部�
 configuration 是应用解释的公开配置，最大 32 KiB；平台不推断业务字段。
 
 秘密仅按 manifest 的符号名称由受控执行端注入环境；不得放入输入 JSON、Actions
-inputs、日志或制品。禁止引用 GITHUB_/ACTIONS_/RUNNER_/SBA_ 保留变量。构建与发布
+inputs、日志或制品。禁止引用 GITHUB_/ACTIONS_/RUNNER_/SBA_ 控制变量，以及系统
+路径、临时目录和 Git/Node/npm/Python 等工具配置变量；具体保留名由校验器约束。构建与发布
 秘密隔离由 runner 和应用实现共同约束，不能仅靠 manifest 声明获得保证。
 
 应用内部可以调用既有脚本，但必须由统一入口封装并返回结果。NAccount 现有 v1
@@ -85,9 +86,11 @@ inputs、日志或制品。禁止引用 GITHUB_/ACTIONS_/RUNNER_/SBA_ 保留变�
 
 ## 当前交付边界
 
-本项实现纯契约校验与测试。GitHub workflow、执行端文件边界/超时/退出码校验、任务
-持久化、可信回执下载、UI 和 NAccount v2 适配由后续任务实现；不得以校验测试成功
-宣称已经能部署。相关当前 API/runner 支持由实施时联网核实并记录，不依赖旧记忆。
+SBA-02 已实现纯契约校验与测试；SBA-04-S01 补齐
+[本地受控执行端](sba-runner.md) 的 checkout/文件/环境/超时/退出码/结果边界。
+NAccount v2 适配的 GitHub 构建证据见 [联合交付计划](cloudflare-naccount-delivery-plan.md)。
+部署 workflow、云端任务持久化、可信回执下载和 UI 仍待接通，不得以这些局部验证
+宣称已经能从云端部署。相关 API/runner 支持由实施时联网核实，不依赖旧记忆。
 
 2026-10-06 联网核实：GitHub 官方 [workflow dispatch REST 文档](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
 及 [Windows Server 2025 runner 镜像说明](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md)

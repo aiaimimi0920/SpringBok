@@ -4,7 +4,8 @@
 
 本页记录用户已确认的联合项目目标，是当前优先执行路线。总入口为
 [开发计划](development-plan.md)，历史服务器与监控路线保留，但不是本路线的全部前置条件。
-本轮只交付文档，不开发功能、不读取实际密钥、不创建云资源或执行部署。
+规划轮只交付文档，不开发功能、不读取实际密钥、不创建云资源或执行部署；后续实施
+及实际完成边界见第 9 节，不以规划轮限制覆盖后续明确授权。
 
 ## 1. 目标、授权与停止条件
 
@@ -129,7 +130,7 @@ SpringBok ← 可信回执、版本、阶段、结果与脱敏日志
 ## 6. 按顺序实施的独立子任务
 
 下表是当前优先队列。每次只领取一行；若仍过大，先拆后缀子项，不扩展原任务边界。
-所有实施项当前均为待开始，不以本规划的存在标记实现完成。
+以下是规划时拆分的任务，实施状态与证据见第 9 节，不以本规划的存在标记实现完成。
 
 | ID | 范围 / 主要仓库 | 可独立验收的交付与停止条件 | 依赖 |
 | --- | --- | --- | --- |
@@ -287,3 +288,52 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
   `node --test tests/sba-contract.test.mjs` 5/5 通过，覆盖旧版拒绝、路径/运行环境限制、
   数值版本比较、版本/SHA/任务绑定、假成功与非法结果拒绝；`git diff --check` 通过。
   不是实际执行端或业务验收。精确提交/PR/main 状态按本项回执。
+
+### SBA-03 交付与 SBA-04-S01 领取（2026-10-06）
+
+- NAccount PR #1、#2 已正常合并，当前 main 为
+  `661eb3505f573bb55cae63c57e2a10952b454bac`。统一入口及 Cloudflare 原生邮件
+  binding 已入库；29 项部署测试、锁定补丁验证通过。没有远端 Actions workflow，
+  不声称 NAccount 远端 CI 已通过。
+- 已从该 GitHub SHA 干净克隆、重建上游加补丁，得到
+  `67c0882f81bb25cd2cfb8ff18dca25a83506b36f`。server 构建及 Wrangler dry-run 通过，
+  回执 `linshi/naccount-release-_t5g3c4f/release.json` 为 built/cloudWrites=false。
+  正式发布必须由云端 SpringBok 发起，不能复用此本地构建冒充部署。
+- 用户已确认 auth/accounts-admin 域名并授权使用现有 Cloudflare 能力；NAccount
+  独立 D1/KV 已创建，资源 ID 和配置在其 `.sba/environments/cloudflare.production.json`。
+  邮件送达、核心业务及有数据升级尚未验收。
+- 当前领取 `SBA-04-S01`，负责人主 AI：实现执行端固定 SHA、干净 checkout、文件边界、
+  凭据筛选、参数数组启动、超时和结构化结果校验。复用 SBA v2 校验器，不解释应用业务。
+  本子项不直接发布应用；后续接入受控 workflow、云端持久任务/API/UI 和可信结果回收。
+
+### SBA-04-S01 执行端验收记录（2026-10-06）
+
+- 实现及调用边界见 [受控执行端](sba-runner.md)。读取固定 SHA 的干净 checkout，
+  拒绝入口/目录链接、硬链接结果、ignored 污染与隐藏索引修改；Git 检查不继承
+  `GIT_*` 注入，禁用 global/system config 和 fsmonitor。origin URL 匹配只是校验，
+  不能证明代码已从 GitHub 获取；真实获取和版本授权仍由后续控制链负责。
+- 应用只获得必要系统环境及 manifest 明确声明的秘密，不能覆盖系统路径或注入
+  Node/Git/Python 配置。使用固定 Windows PowerShell 5.1 和参数数组；每次创建
+  checkout 外的独立请求/结果目录，不转发应用原始 stdout/stderr。
+- 结果必须绑定任务/action/SHA/version，成功须同时满足退出码和结果协议。超时、
+  缺失、畸形、超限及假成功均为 unknown。超时会尝试终止本次进程树并有界结束等待，
+  但没有独立证明复杂后代进程均退出，也不推断外部写入已撤销。
+- 匹配源码的聚焦命令：`node --test tests/sba-contract.test.mjs tests/sba-runner.test.mjs tests/cloud-admin-boundary.test.mjs scripts/ci/security-baseline.test.mjs`。
+  Windows Node.js 22.22.2：24 通过/1 平台跳过；Linux Node.js 24.18.1：23 通过/2
+  平台跳过，均无失败。Windows 原生 PowerShell 与 synthetic 入口完整调用通过；
+  Linux 单独验证 symlink 拒绝。没有使用真实部署秘密或执行 NAccount 发布。
+- 已有 contract workflow 增加固定 Actions、`windows-2025`/Node 22 的无凭据 job；
+  安全 contract 保留只读默认权限并禁止测试 job 获得部署秘密。固定下载并校验的
+  actionlint 1.7.12 已通过；不额外宣称 ShellCheck/Pyflakes、生产或业务验收通过。
+- 本地验证日志、源码指纹及接管原稿在
+  `linshi/springbok-sba-04-20261006-continuation/`；本项 Git 交付先独立完成，
+  精确提交的 Gitleaks、PR/main 检查及最终 SHA 以该项回执为准。代理 503 不计审阅。
+- 下一独立项为 `SBA-04-S02`，先读 Worker/admin/DO 的真实接缝并联网核实 GitHub
+  dispatch/run/artifact 接口，再接云端任务与受控 workflow。SBA-04 整体保持未完成；
+  不以 S01 本地执行器代替用户通过云端 SpringBok 发起部署。
+- PR #55 首轮 Windows 原生 CI 暴露超时返回早于进程 close 的目录占用问题。
+  追加同任务修复：终止后等待 close，最多额外 5 秒；仍为 unknown，不自动重放。
+  回归先红后绿；匹配 LF 快照复验 Windows 25 通过/1 跳过、Linux 23 通过/3 跳过。
+  既有 Q01 工作树 CRLF 安全正则失败未混入本项修复；最终 PR/main 检查另记回执。
+- 随后核出 CodeQL 汇总的文件竞态告警（工作流执行本身已成功），追加 descriptor-first
+  读取与非普通结果文件回归，保持已有拒绝语义；不以扫描成功冒充零告警，不改扫描规则。

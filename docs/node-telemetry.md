@@ -1,4 +1,4 @@
-# M06 / M02-S02 / M03-S02：鉴权 CPU/内存/磁盘上报与独立最新快照
+# M06 / M02-S02 / M03-S02 / M04-S02：鉴权四指标上报与独立最新快照
 
 任务日期：2026-10-05；负责人：主 AI；基线 `31bf919ae905d3eda2b460e2f2a14c432c36ebde`。
 总入口：[开发计划](development-plan.md)；前置：[CPU 采集](cpu-collection.md)、[心跳](node-heartbeat.md)、[存储设计](storage-architecture.md)。
@@ -84,7 +84,7 @@ telemetry 请求的 declared/实际上限仍为 **8192 bytes**，5 秒 deadline�
 
 meta1 只允许旧 latest，meta2 允许 CPU-only/v2，meta3 接受三种形状。首次成功 recorded v3 时，meta1/2→3 与 state 同一 SQLite 同步事务；read/start/deferred/失败不升级，混合旧样本覆盖 latest 不降 meta3。meta2 配 v3 latest 是损坏，拒绝且不修复。固定旧 v5 reader 来自上述 Git 基线，两文件仅相对 import 搬址，反向还原校验原 SHA；升级后旧 read/start/sample/snapshot 失败关闭且原库保留，切回新 reader 恢复。旧代码回退不保证可用性，也不提供降级或清库。
 
-当前包为 **`springbok-control-node/v6` /30 文件**，原 26 文件闭包追加共享 disk contract 与三个 disk worker/collector 源文件；无新运行依赖。安装器只接受 v6，不自动升级或覆盖旧 v5。observe 依次采 CPU、memory、disk，将三指标放同一 pending；各 sampledAt 不是原子同一时刻。丢 ACK 精确重送不重采；90 秒单调年龄、sequence、限频、错误策略与任务/心跳隔离保留，execute 不采指标。
+M03-S02 当时的包为 **`springbok-control-node/v6` /30 文件**，原 26 文件闭包追加共享 disk contract 与三个 disk worker/collector 源文件；无新运行依赖。该安装器只接受 v6，不自动升级或覆盖旧 v5。observe 依次采 CPU、memory、disk，将三指标放同一 pending；各 sampledAt 不是原子同一时刻。丢 ACK 精确重送不重采；90 秒单调年龄、sequence、限频、错误策略与任务/心跳隔离保留，execute 不采指标。
 
 默认 disk worker 在首轮采样时绑定 daemon 复用的同一 stop signal；调用者若未来改成逐轮不同 signal，须重新明确 sampler 生命周期。保留自有 worker 5 秒 deadline/192 KiB/未 close 不启动替代 worker，以及 D-state/ABA/动态挂载竞争边界。停止丢弃迟到样本；S02 的 client 停止用受控 sampler 验证，S01 的真实 worker 在途停止是分层证据，不冒称默认 client+worker 组合在途停止已直接独立实测。
 
@@ -101,3 +101,54 @@ meta1 只允许旧 latest，meta2 允许 CPU-only/v2，meta3 接受三种形状�
 证据根 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-disk-telemetry-20261005/`。临时 Docker 快照两次缺嵌套挂载点退出125，只修临时目录，未改变产品门禁。两项独立只读静态审查未发现确定阻断缺陷，不计独立执行通过；补迟到 render 的磁盘独立断言。固定 actionlint1.7.12/Gitleaks8.30.1 归档 SHA 复核和源码/workflow 扫描通过，未额外 ShellCheck/Pyflakes。精确 head/PR/main CI、安全制品、Git绑定 v6 包另记最终回执，不预报未运行项。
 
 M03 两子项仅限定源码与验收范围，真实 Cloudflare/Access/用户主机、多服务器总览、网络、历史/告警/业务部署和整体开发仍开放。没有生产开关、云资源、用户主机安装、自动升级、清锁、schema 降级或数据删除。
+
+## M04-S02：网络版本化上报与按接口只读详情
+
+任务开始于 2026-10-05；负责人：主 AI；基线 `c54402075af1f6f770cece47414287abc0930203`。
+采集器沿用 [M04-S01 的口径和接口生命周期限制](network-collection.md)，不重复开发或修改它。
+
+新 `sampleVersion: 4` 必须同时包含 CPU、memory、disk、network；旧 CPU-only、v2、v3 仍保持精确原形，
+不补 network 字段。网络共享契约位于 `public/cloud-admin/network-contract.mjs`，无 Node API，资产仍先过 Access。
+严格校验固定 namespace/unit、唯一接口名、状态与原因、null、实际窗口、整数字节差分和两位 bytes/s。
+传输窗口为 IEEE-754 ms，速率检查允许两位四舍五入和浮点转换误差，不凭 ms 猜原始纳秒。
+未知不是 0，少量非零流量可能舍入为 0.00 bytes/s，页面仍保留精确窗口 bytes。不采集 IP/MAC 或业务内容。
+
+### 完整预算与兼容迁移
+
+请求和 telemetry ACK 仍最多 8192 bytes；只在 v4 中给完整 disk/network 各 **3072 UTF-8 bytes**，
+旧 v3 disk 的 6144 bytes 预算不变。有效采集结果过大时，仅将该指标整体变为 unavailable / `report-too-large`，
+不截断接口/挂载点，也不把重复计数合计成物理带宽或容量。3072/3073 及四指标请求/ACK 总量有相邻边界测试。
+
+首次成功 recorded v4 时才在同一 SQLite 同步事务将 meta1/2/3→4 并写 latest；read/start/deferred/失败不升级。
+旧样本之后覆盖 latest 不降级 meta4。schema3 配 v4 latest 是损坏，不修复；新 reader 接受四种样本。
+真实旧 v6 reader 在 meta4 失败关闭，库内容保持不变，切回新 reader 可恢复。没有降级或清库操作，
+不承诺旧 Worker 回退后继续可用。固定旧 reader 来自基线 Git 三文件，重定位 import 后反向还原校验原 SHA-256。
+
+### 当前包与页面
+
+当前 **`springbok-control-node/v7` /33 文件**，增加共享 network contract、原 network sampler 及其 loop 依赖，
+无新运行依赖。安装器只接受 v7，拒绝旧格式和覆盖旧安装；旧 v6 仍用自身代码运行三指标和 6 KiB disk。
+observe 依次采四指标、放同一 pending，各有独立采样时点；丢 ACK 不重采、不改 payload，90 秒单调年龄丢弃、
+30 秒最小接收间隔、停止/超时/授权/任务心跳隔离保持。execute 不采集、不发指标请求。
+
+每节点仍单次 GET；四指标独立校验，坏网络不遮蔽合法 CPU/内存/磁盘，其他坏指标也不遮蔽合法网络。
+页面区分旧未上报、预热/局部未知、失败、超预算、真实 0 与陈旧，逐接口显示接收/发送 bytes/s、窗口 bytes 和实际窗口。
+公共 receivedAt 新鲜度、请求耗时扣减、到期/visibility、迟到 render/owner、pagehide/BFCache 规则保留。
+所有内容用 textContent；无轮询、浏览器持久化、写接口或 M07 总览。
+
+### 验收证据与边界
+
+本地 Linux Node.js 24.18.1、普通 uid1000、只读 LF 快照：全量契约 **278/278**；workerd/SQLite **62/62**，无失败/取消/跳过。
+本轮最终快照实际 v7 双角色安装、四指标采集到 SQLite/admin，第二样本间隔 **32,102ms**，
+网络窗口 **32,146.293803ms**、回环 RX/TX 各 **2,819,632 bytes**；execute 指标请求 0，SIGTERM 收尾保留凭据/释放自有锁。
+Docker namespace 的磁盘为 `no-supported-mounts`，不冒称宿主磁盘或真实云端验收；IPC held ACK 仍不等同真实 TLS ACK drain。
+
+固定真实旧 Git `92a0b4a6d59e1cfd954f914dcf415686a873117f` v6 /30 文件包（manifest SHA-256
+`9853a5eddd5a6802af3ddf78b42dcc65d0372fbbaf9e5d02f570eaac117e76ff`）以自身代码双角色安装/运行到新 Worker/重装/version 通过；
+旧 latest 仍8字段/v3、meta3、无 network；v7 拒绝旧格式及覆盖，旧 release/credentials/markers/state/锁的 bytes/inode/device/mode/uid/mtime 均不变。
+
+证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-network-telemetry-20261005/`。
+真实 Chrome/workerd 既有三指标和新网络专项通过，覆盖零/非零 bytes、未知/partial/失败/超限、旧版/损坏、四指标独立、单 GET、
+共同过期/迟到 render/owner/visibility/pagehide/BFCache、390px/纯文本，无 browser storage/持久写入；受控数据/时钟不冒称线上故障。
+精确提交、Git 包、PR/main CI 与页面最终结果按第 7.21 节和交付回执记录，不预报未结束的检查。
+M04 只限定四指标链，真实 Cloudflare/Access/用户宿主、M07、历史/告警/业务部署及整体开发仍未完成。

@@ -41,12 +41,10 @@ function normalize(value) {
   return { ...copy(value, TOP), mounts, filtered: copy(value.filtered, FILTER) };
 }
 // 不截断挂载点、路径或字段；完整规范化 JSON 超预算时仅报告整体未上报。
-export function diskReport(value, maximum = MAX_DISK_REPORT_BYTES) {
-  requireDisk([3072, MAX_DISK_REPORT_BYTES].includes(maximum));
+export function diskReport(value) {
   const normalized = normalize(value);
-  return bytes(normalized) <= maximum ? normalized : { schema: 'springbok-disk/v1', metric: 'disk-capacity', scope: 'linux-mount-namespace', unit: 'bytes', status: 'unavailable', reason: 'report-too-large', sampledAt: null, mounts: [], filtered: null };
+  return bytes(normalized) <= MAX_DISK_REPORT_BYTES ? normalized : { schema: 'springbok-disk/v1', metric: 'disk-capacity', scope: 'linux-mount-namespace', unit: 'bytes', status: 'unavailable', reason: 'report-too-large', sampledAt: null, mounts: [], filtered: null };
 }
-export function diskSample(value, maximum = MAX_DISK_REPORT_BYTES) {
-  requireDisk([3072, MAX_DISK_REPORT_BYTES].includes(maximum));
-  const normalized = normalize(value); requireDisk(bytes(normalized) <= maximum); return normalized;
+export function diskSample(value) {
+  const normalized = normalize(value); requireDisk(bytes(normalized) <= MAX_DISK_REPORT_BYTES); return normalized;
 }

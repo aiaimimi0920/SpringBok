@@ -81,7 +81,7 @@ test('observe client retains the same bounded disk payload across lost ACK witho
       return Response.json(telemetryResult({ ownerId: r.credential.ownerId, nodeId: r.credential.nodeId, enrollmentId: r.credential.enrollmentId }, result.result));
     } });
     const signal = new AbortController().signal; await assert.rejects(client.upload(signal), RetryableNodeError); assert.equal(await client.upload(signal), 'recorded'); assert.equal(disks, 1);
-    const sent = requests.filter(r => r.operation === 'sample'); assert.deepEqual(sent[0].payload, sent[1].payload); assert.equal(state.latest.sampleVersion, 3); assert.equal(size(state.latest.disk), 6144);
+    const sent = requests.filter(r => r.operation === 'sample'); assert.deepEqual(sent[0].payload, sent[1].payload); assert.equal(state.latest.sampleVersion, 4); assert.equal(state.latest.disk.reason, 'report-too-large'); assert.deepEqual(state.latest.disk.mounts, []);
     time = 30000; assert.equal(await client.upload(signal), 'recorded'); assert.equal(disks, 2);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });

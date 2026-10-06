@@ -8,9 +8,11 @@ import { createCpuSampler } from './cpu.mjs';
 import { createMemorySampler } from './memory.mjs';
 import { createDiskSampler } from './disk-process.mjs';
 import { diskReport } from '../../public/cloud-admin/disk-contract.mjs';
+import { createNetworkSampler } from './network.mjs';
+import { networkReport, V4_DISK_REPORT_BYTES } from '../../public/cloud-admin/network-contract.mjs';
 
 export const MAX_PENDING_MS = 90000;
-export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, bootId = randomUUID(), sampler = createCpuSampler(), memorySampler = createMemorySampler(), diskSampler, monotonic = () => performance.now() }) {
+export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, bootId = randomUUID(), sampler = createCpuSampler(), memorySampler = createMemorySampler(), diskSampler, networkSampler = createNetworkSampler(), monotonic = () => performance.now() }) {
   const credential = nodeCredential(readPrivateNodeJson(file), expectedOrigin); requireTelemetry(credential.role === 'observe');
   telemetryInput('start', { protocolVersion: 2, bootId, previousGeneration: 0 });
   let previousGeneration, generation, sequence = 0, pending, inFlight = false;
@@ -32,9 +34,11 @@ export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, boo
         const memory = memorySample(await memorySampler.sample());
         if (signal.aborted) return;
         diskSampler ??= createDiskSampler({ signal });
-        const disk = diskReport(await diskSampler.sample());
+        const disk = diskReport(await diskSampler.sample(), V4_DISK_REPORT_BYTES);
         if (signal.aborted) return;
-        pending = { cpu, memory, disk, createdAt };
+        const network = networkReport(await networkSampler.sample());
+        if (signal.aborted) return;
+        pending = { cpu, memory, disk, network, createdAt };
       }
       if (previousGeneration === undefined) previousGeneration = (await call('read', { protocolVersion: 2 }, signal)).generation;
       if (signal.aborted) return;
@@ -42,7 +46,7 @@ export function openTelemetryClient({ file, expectedOrigin, fetcher = fetch, boo
       if (signal.aborted) return;
       const age = clock() - pending.createdAt;
       if (age < 0 || age >= MAX_PENDING_MS) { pending = undefined; return 'dropped'; }
-      pending.input ??= telemetryInput('sample', { protocolVersion: 2, bootId, generation, sequence: ++sequence, cpu: pending.cpu, sampleVersion: 3, memory: pending.memory, disk: pending.disk });
+      pending.input ??= telemetryInput('sample', { protocolVersion: 2, bootId, generation, sequence: ++sequence, cpu: pending.cpu, sampleVersion: 4, memory: pending.memory, disk: pending.disk, network: pending.network });
       const result = await call('sample', pending.input, signal);
       if (result.status === 'recorded') pending = undefined;
       return result.status;

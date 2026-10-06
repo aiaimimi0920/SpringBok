@@ -85,7 +85,7 @@ test('observe telemetry client reuses lost CAS/receipt, ages pending by monotoni
     };
     const client = openTelemetryClient({ diskSampler: { sample: async () => disk() }, file: r.credentialFile, expectedOrigin: r.credential.origin, fetcher, monotonic: () => time, sampler: { sample: async () => cpu(++samples) }, memorySampler: { sample: async () => memory(++memorySamples) } }), signal = new AbortController().signal;
     await assert.rejects(client.upload(signal), RetryableNodeError); await assert.rejects(client.upload(signal), RetryableNodeError);
-    assert.equal(await client.upload(signal), 'recorded'); assert.equal(samples, 1); assert.equal(memorySamples, 1); assert.equal(state.latest.sampleVersion, 3); assert.equal(state.latest.memory.usedBytes, 1);
+    assert.equal(await client.upload(signal), 'recorded'); assert.equal(samples, 1); assert.equal(memorySamples, 1); assert.equal(state.latest.sampleVersion, 4); assert.equal(state.latest.memory.usedBytes, 1);
     for (const operation of ['start', 'sample']) { const inputs = requests.filter(r => r.operation === operation).map(r => r.input); assert.deepEqual(inputs[0], inputs[1]); }
     assert.equal(state.latest.receivedAt, 1000);
     time = 30000; lostSample = true; await assert.rejects(client.upload(signal), RetryableNodeError);

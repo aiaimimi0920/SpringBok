@@ -167,9 +167,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | M03 | 磁盘容量采集与产品接入 | 已完成 | M03-S01/M03-S02；第 7.18 节；负责人：主 AI | 两子项限定采集/版本化上报/按挂载点详情已验收；精确 Git 交付按回执，不代表真实宿主/Cloudflare/M07；不写满或清理磁盘 | N07 |
 | M03-S01 | 普通用户只读磁盘容量采集器与原生对照 | 已完成 | [采集与验收](disk-collection.md)；第 7.18 节；负责人：主 AI | 原生 df 容量对照和精确 head/main 已通过，PR #47 已合并；第 7.19 节记录最终回执，不更改 v5 包 | N07 |
 | M03-S02 | 磁盘指标版本化上报与只读小详情 | 已完成 | 第 7.19 节；负责人：主 AI | [版本化指标](node-telemetry.md)；严格 v3/保留式 SQLite 扩展、旧 v5 兼容与显式 v6/30 文件、单 GET 按挂载点详情已验收；精确 PR/main 另核回执，未上报不为0且不合计物理总盘 | M03-S01/M02-S02 |
-| M04 | 网络吞吐采集与产品接入 | 部分实现 | M04-S01/M04-S02；负责人：主 AI | 独立采集已验收，上报展示仍开放；不抓取业务内容或合计为物理出口带宽 | N07 |
+| M04 | 网络吞吐采集与产品接入 | 已完成 | M04-S01/M04-S02；第 7.20/7.21 节；负责人：主 AI | 限定采集/版本化上报/按接口详情已验收，精确交付按回执；不代表真实宿主/Cloudflare/M07，不合计为物理出口带宽 | N07 |
 | M04-S01 | 普通用户只读网络吞吐采集器与原生对照 | 已完成 | [网络采集](network-collection.md)；第 7.20 节；负责人：主 AI | 限定源码/本地原生对照已验收，精确 Git/PR/main 交付按回执；不改 v6 安装或关闭 M04-S02/真实宿主验收 | N07 |
-| M04-S02 | 网络指标版本化上报与只读小详情 | 待开发 | M04-S01；现有版本化指标通道 | 旧 v6/三指标保持兼容，新版网络上报/独立 latest/按接口详情；容量有界、旧数据保留、不合计为物理吞吐 | M04-S01/M03-S02 |
+| M04-S02 | 网络指标版本化上报与只读小详情 | 已完成 | [版本化指标](node-telemetry.md)；第 7.21 节；负责人：主 AI | 严格 v4/保留式 SQLite 扩展、旧 v6 与显式 v7/33 文件、单 GET 按接口详情已验收；精确 Git/PR/main 按回执，未上报不为 0 | M04-S01/M03-S02 |
 | M05 | 主机基础信息与运行时间 | 待开发 | N09 预检查可复用 | OS/架构/内核/运行时间/版本与时间戳；仅采集必要元数据，不上传完整环境变量 | N09 |
 | M06 | 指标上报与最新快照存储 | 已完成 | [实现与验收](node-telemetry.md)；负责人：主 AI；第 7.15 节 | 限定 CPU 鉴权/独立 latest/v4 observe 装配/小详情闭环已验收；提交/PR/main 最终交付按本项回执，不代表其他指标、真实宿主或生产部署 | ARC-02/N03/N08/M01 |
 | M07 | 多服务器状态总览 | 待开发 | 当前管理页只有固定任务列表 | 在线/离线/陈旧、CPU/内存/磁盘/网络与更新时间；至少两节点数据隔离，空值不假绿 | C04/N08/M02/M03/M04/M06 |
@@ -588,7 +588,26 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 主 AI 已审阅实际源码、调用点、测试与边界；只读子代理启动被工具返回模型 reasoning 配置错误，未产生独立结论，不算交叉审查通过。本次不为此修改环境配置。保留同名接口重建/标识复用 ABA 限制，逐次只读不能认证永久接口身份。
 - 本项立即按 scoped commit/push、精确 head 审阅/正常合并/main 验核交付；不在提交内循环记录自身 SHA，不预报未结束的 CI。下一独立项 M04-S02 尚未领取；M07/真实 Cloudflare/Access/用户主机/业务验收和整个开发计划仍未完成。
 
-### 7.21 后续交接记录模板
+### 7.21 M04-S02 领取与边界
+
+- 日期：2026-10-05（America/Los_Angeles）；负责人：主 AI；基线 `c54402075af1f6f770cece47414287abc0930203`；分支 `feat/network-telemetry-20261005`。领取前本地/远程 main 一致、工作区干净；前项 PR [#49](https://github.com/aiaimimi0920/SpringBok/pull/49) 已正常合并，[最终回执](https://github.com/aiaimimi0920/SpringBok/pull/49#issuecomment-6008302618) 记录精确 head/main 通过。不重复网络采集算法或原生回环验收。
+- 范围：纯数据网络上报契约、严格 sampleVersion4/CPU+memory+disk+network union、meta1/2/3→4 保留式事务扩展及真实旧 reader/包兼容；observe 客户端采集与同一 pending、显式 v7 包、每节点单 GET 按接口详情和匹配 node/workerd/browser 验收、文档。
+- 预算：不扩大 8 KiB 请求/ACK；仅新 v4 给磁盘和网络各 3 KiB 完整报告预算，超限只将该指标整体标记 report-too-large，不截断行或压缩成物理总量。旧 v3 磁盘 6 KiB 预算保持，旧五字段/v2/v3 形状不补 network。
+- 验收：网络状态/null/0/单位/差分与速率/唯一接口、完整 replay/ACK、局部故障隔离；迁移仅成功 recorded 原子向前推进，deferred/失败/read/start 不升级、旧样本不降级，固定旧 reader 遇 meta4 拒绝且原库保留/新版恢复；实际 v7 双角色安装→真实采集→observe 鉴权→latest/admin GET，execute 零指标请求；旧 v6 运行/安装保留；页面未上报/未知/partial/超限/局部坏值、过期/迟到身份、390px/文本安全。
+- 不做：物理宿主认证/接口生命周期订阅、M07 总览/历史/告警、依赖/新 binding、默认开关/生产部署、用户主机安装/自动升级/清锁/schema 降级或删除。保留 ABA、动态挂载、在途授权、90 秒 pending/30 秒限频与任务/心跳隔离边界。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-network-telemetry-20261005/`。本项完成后立即 scoped commit/push、精确 head 审阅/正常合并/main 验证；未核检查不预报成功，整体开发保持未完成。
+
+实施与验收记录：
+
+- 原 Session `01a10ef3-25c7-7061-ab9a-acf51ad0c383` 在本项未提交实现与初轮测试后因预算 402 中断；本轮确认其已不运行后接续同一分支，保留原日志/修改，没有重做 S01、创建云资源或更改默认开关。
+- 新 sampleVersion4 严格四指标，完整 payload/replay/ACK；网络状态、唯一接口、null/0/安全字节/速率、3072/3073 整体预算及 v3 原 6144 字节兼容通过。meta1/2/3→4 仅成功 recorded 时与 state 原子升级；失败/deferred/重启/旧 reader 拒绝与原库保留、旧样本不降级验证通过。没有 schema 清理或降级。
+- 固定 Linux Node.js 24.18.1 / uid1000 /只读 LF 快照：全量契约 **278/278**、workerd/SQLite **62/62**，失败/取消/跳过均 0。实际 v7 安装→四指标→SQLite/admin，样本间隔 **32,102ms**、网络窗口 **32,146.293803ms**、回环 RX/TX 各 **2,819,632 bytes**；execute 指标请求 0、安全退出保留凭据/释放自有锁。Docker 中磁盘 `no-supported-mounts` 不冒充宿主容量；保持 IPC held ACK/TLS drain 区别。
+- 真实 Chrome/workerd 既有三指标和新网络两组专项通过：零/非零精确 bytes、未知/partial/失败/超预算、旧版/坏字段、四指标局部独立、单 GET、共同过期、迟到 render/owner、visibility/pagehide/BFCache、390px/文本安全，无 browser storage 或持久写入。首两轮失败来自新测试16字符接口名超界、测试替换时钟未恢复 descriptor，仅修测试；原日志保留，最终通过。已目检窄屏截图，无横向溢出。
+- 固定旧 Git `92a0b4a` v6 /30 文件包以自身代码双角色安装/daemon→新版 Worker/重装/version 通过；v7 拒绝旧包及覆盖，旧 bytes/inode/device/mode/uid/mtime 不变；旧 latest 8字段/v3/meta3，不补 network。当前包增3文件而非2文件：共享网络契约、sampler 及 sampler 的 loop import 闭包，无新依赖。
+- actionlint1.7.12/Gitleaks8.30.1 归档 SHA-256 本轮复核，源码扫描和 workflow 语法通过；未额外 ShellCheck/Pyflakes。workerd 故障/重启场景保留 `Broken pipe` 诊断但62项均通过。独立子代理因固定模型 reasoning 配置错误未启动，不计独立审查；主 AI 直接审阅契约/存储/客户端/包/UI及匹配测试。精确 head/main CI、安全制品与 Git绑定包另记回执。
+- 本项在本地验收后立即 scoped commit/push，不在提交内循环记录自身 SHA；PR/main 最终交付以回执为准。下一独立项建议 M07（多服务器状态总览），尚未领取；N04/N05、M05/N09、真实 Cloudflare/Access/用户宿主、多服务器业务验收/历史/告警和整体开发保持开放。
+
+### 7.22 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

@@ -1,5 +1,10 @@
 # 首批落地场景：可靠部署自有服务
 
+> 2026-10-06 当前优先验收场景改为：云端 SpringBok 从 GitHub 部署 NAccount 到
+> Cloudflare，并执行保留数据的版本更新。见 [联合交付计划](cloudflare-naccount-delivery-plan.md)。
+> SpringBok 只执行统一 `.sba` 契约，NAccount 自行实现迁移和业务验证；下文保留原有
+> Gateway/Platform/AssetLibrary/Rauthy 场景与历史边界，不作为本次链路的全部前置条件。
+
 > 2026-10-04 产品范围更新：SpringBok 的总体目标是 Cloudflare 上的服务部署平台与
 > 服务器监控管理平台，统一进度见 [开发计划](development-plan.md)。本页保留
 > 2026-10-02 的自有服务需求、源码 pin 和安全边界，作为首批真实业务接入要求，

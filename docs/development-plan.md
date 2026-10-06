@@ -606,6 +606,7 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 固定旧 Git `92a0b4a` v6 /30 文件包以自身代码双角色安装/daemon→新版 Worker/重装/version 通过；v7 拒绝旧包及覆盖，旧 bytes/inode/device/mode/uid/mtime 不变；旧 latest 8字段/v3/meta3，不补 network。当前包增3文件而非2文件：共享网络契约、sampler 及 sampler 的 loop import 闭包，无新依赖。
 - actionlint1.7.12/Gitleaks8.30.1 归档 SHA-256 本轮复核，源码扫描和 workflow 语法通过；未额外 ShellCheck/Pyflakes。workerd 故障/重启场景保留 `Broken pipe` 诊断但62项均通过。独立子代理因固定模型 reasoning 配置错误未启动，不计独立审查；主 AI 直接审阅契约/存储/客户端/包/UI及匹配测试。精确 head/main CI、安全制品与 Git绑定包另记回执。
 - 本项在本地验收后立即 scoped commit/push，不在提交内循环记录自身 SHA；PR/main 最终交付以回执为准。下一独立项建议 M07（多服务器状态总览），尚未领取；N04/N05、M05/N09、真实 Cloudflare/Access/用户宿主、多服务器业务验收/历史/告警和整体开发保持开放。
+- 首提交 `bd4c818b3143eb4cb3b05690715e990f89014505` 已推送并创建 PR [#50](https://github.com/aiaimimi0920/SpringBok/pull/50)。初次远程 workflow 虽成功，但下载日志核出 cloud 显式入口漏新文件，仅运行60项；没有合并或称覆盖通过。本项追加修复 `tests/cloud/package.json` 并在契约中固定网络持久测试入口，按新 head 重新审阅和核对62项；初次日志/固定版本包保留。不是放宽验证脚本至60项。
 
 ### 7.22 后续交接记录模板
 

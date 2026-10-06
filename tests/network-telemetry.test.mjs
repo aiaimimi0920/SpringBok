@@ -23,7 +23,9 @@ function budgetNetwork(bytes) {
 }
 function budgetDisk(bytes) { const d = disk(); d.mounts[0].mountPoint += 'x'.repeat(bytes - size(d)); assert.equal(size(d), bytes); return d; }
 
-test('v6 SQLite reader retains exact committed schema-three contract/store/disk source', () => {
+test('v6 SQLite reader retains exact committed schema-three sources and network persistence suite remains in the CI entry', () => {
+  const scripts = JSON.parse(readFileSync(new URL('./cloud/package.json', import.meta.url))).scripts;
+  assert.ok(scripts.test.split(' ').includes('network-telemetry.test.mjs'));
   const root = new URL('./fixtures/telemetry-v3/', import.meta.url), source = JSON.parse(readFileSync(new URL('source.json', root)));
   assert.equal(source.revision, 'c54402075af1f6f770cece47414287abc0930203');
   assert.deepEqual(source.files.map(f => f.sha256), ['93ea2a925be18c9b49f1cf9fc069f701cc8af063841fd11f9ee4c61ee846ff18', '83257c1e4e99523b80f3d5d91bdc41c91ddfb8d67d2bc5d96c2c04371c404fd4', '3588ba440568bb153080654b73a6f0f3a3c7be08728bde5ad41cb7c7bb83df5c']);

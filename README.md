@@ -45,6 +45,12 @@ mount namespace，按支持的挂载点输出 total/free/available/used/差额�
 M03-S01 不更改旧 v5 包；M03-S02 在显式 v6 /30 文件新包中接入版本化磁盘上报和按挂载点小详情。完整磁盘报告超过 6 KiB 时整体报告未上报，不截断或合计；旧客户端仍兼容，新安装不覆盖旧安装。真实宿主/Cloudflare、网络指标和 M07 完整总览仍待完成。
 [磁盘口径、支持范围、阻塞边界与 GNU df 对照](docs/disk-collection.md)
 
+M04-S01 增加独立网络入口 `node scripts/node-network.mjs`：普通 Linux 用户每隔至少
+30 秒读取当前 network namespace 的接口累计计数，输出逐接口 RX/TX bytes/s 和实际窗口。
+启动、计数回退/回绕、接口集或上下文变化显示未知，不把失败当 0；不抓包、不收集 IP/MAC、
+不跨接口合计成物理带宽。本项不改 v6 包/daemon/云端/页面，上报展示留给 M04-S02。
+[网络口径、接口生命周期边界与独立计数对照](docs/network-collection.md)
+
 ## M14：基线与候选发布差异
 
 同一配置检查页可额外选择基线JSON，对比镜像、双环境目标、端口、卷和密钥引用，

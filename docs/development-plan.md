@@ -167,7 +167,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | M03 | 磁盘容量采集与产品接入 | 已完成 | M03-S01/M03-S02；第 7.18 节；负责人：主 AI | 两子项限定采集/版本化上报/按挂载点详情已验收；精确 Git 交付按回执，不代表真实宿主/Cloudflare/M07；不写满或清理磁盘 | N07 |
 | M03-S01 | 普通用户只读磁盘容量采集器与原生对照 | 已完成 | [采集与验收](disk-collection.md)；第 7.18 节；负责人：主 AI | 原生 df 容量对照和精确 head/main 已通过，PR #47 已合并；第 7.19 节记录最终回执，不更改 v5 包 | N07 |
 | M03-S02 | 磁盘指标版本化上报与只读小详情 | 已完成 | 第 7.19 节；负责人：主 AI | [版本化指标](node-telemetry.md)；严格 v3/保留式 SQLite 扩展、旧 v5 兼容与显式 v6/30 文件、单 GET 按挂载点详情已验收；精确 PR/main 另核回执，未上报不为0且不合计物理总盘 | M03-S01/M02-S02 |
-| M04 | 网络吞吐采集 | 待开发 | 当前无网络采集器 | 网卡累计计数差分、单位、重启/计数回绕处理；不抓取业务内容 | N07 |
+| M04 | 网络吞吐采集与产品接入 | 部分实现 | M04-S01/M04-S02；负责人：主 AI | 独立采集已验收，上报展示仍开放；不抓取业务内容或合计为物理出口带宽 | N07 |
+| M04-S01 | 普通用户只读网络吞吐采集器与原生对照 | 已完成 | [网络采集](network-collection.md)；第 7.20 节；负责人：主 AI | 限定源码/本地原生对照已验收，精确 Git/PR/main 交付按回执；不改 v6 安装或关闭 M04-S02/真实宿主验收 | N07 |
+| M04-S02 | 网络指标版本化上报与只读小详情 | 待开发 | M04-S01；现有版本化指标通道 | 旧 v6/三指标保持兼容，新版网络上报/独立 latest/按接口详情；容量有界、旧数据保留、不合计为物理吞吐 | M04-S01/M03-S02 |
 | M05 | 主机基础信息与运行时间 | 待开发 | N09 预检查可复用 | OS/架构/内核/运行时间/版本与时间戳；仅采集必要元数据，不上传完整环境变量 | N09 |
 | M06 | 指标上报与最新快照存储 | 已完成 | [实现与验收](node-telemetry.md)；负责人：主 AI；第 7.15 节 | 限定 CPU 鉴权/独立 latest/v4 observe 装配/小详情闭环已验收；提交/PR/main 最终交付按本项回执，不代表其他指标、真实宿主或生产部署 | ARC-02/N03/N08/M01 |
 | M07 | 多服务器状态总览 | 待开发 | 当前管理页只有固定任务列表 | 在线/离线/陈旧、CPU/内存/磁盘/网络与更新时间；至少两节点数据隔离，空值不假绿 | C04/N08/M02/M03/M04/M06 |
@@ -568,7 +570,25 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 临时Docker两次缺嵌套mountpoint退出125，只补临时目录，原失败日志保留，未放宽只读/权限/产品门禁。固定actionlint1.7.12/Gitleaks8.30.1归档SHA复核与源码/workflow扫描通过，无leak，未额外ShellCheck/Pyflakes；没有依赖/lockfile/binding/默认开关变化。
 - 两子项限定源码/本地验收完成，立即按本项scoped commit/push、精确head审阅/正常merge/main验核推进；交付未核时不预报CI/生产成功，最终SHA/包/远程回执为准，不循环amend。下一独立项M04网络吞吐采集尚未领取；M07/真实Cloudflare/Access/用户主机/业务验收和整体开发仍开放。
 
-### 7.20 后续交接记录模板
+### 7.20 M04-S01 领取与边界
+
+- 日期：2026-10-05（America/Los_Angeles）；负责人：主 AI；基线 `92a0b4a6d59e1cfd954f914dcf415686a873117f`；分支 `feat/network-collection-20261005`。领取前本地/远程 main 一致、工作区干净。
+- 前项 M03-S02 PR [#48](https://github.com/aiaimimi0920/SpringBok/pull/48) 已 fresh-query 确认合并；[最终回执](https://github.com/aiaimimi0920/SpringBok/pull/48#issuecomment-6007756941) 记录 head/main 同 tree、main 6 workflow/12 job 成功、契约 262/262、workerd 60/60 和 Chrome 9 组通过。沿用其精确证据，不重复旧部署或磁盘实现。
+- 范围：固定 Linux 网络计数读取/严格 parser/按接口差分 sampler、无参数普通用户 CLI、unit/process/原生回环对照、既有 contracts job 入口及专题/README/本页。复用原串行 30 秒采集循环，M04 分为采集 S01 和后续上报展示 S02。
+- 验收：固定 `/proc/self/net/dev` 的有界读取，64 位 BigInt 计数、实际单调时间窗口、逐接口 RX/TX bytes/s；启动/读取失败/boot 或 namespace 变化/接口集变化/计数回退（含回绕）均不能伪造 0；无重叠，信号停止不输出迟到样本；真实普通用户 CLI 与独立 sysfs 回环计数、有界本地流量对照。只代表当前 network namespace，不识别物理网卡、不跨接口求和。
+- 不做：抓包/业务内容/IP/MAC/路由/环境变量采集、外部网络请求、任意路径或间隔配置、root/sudo/网络配置、依赖增加、现有 v6 包/daemon/云端/UI 变更、安装升级/清锁/生产部署。轮询无法证明同名接口在两次采样间未删除重建且计数已超过旧值，保留此 ABA 限制，不宣称完整生命周期识别。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-network-collection-20261005/`。本项限定验收后立即 scoped commit/push、精确 head 审阅和正常 merge/main 复核；M04 父项、S02 和整体开发仍开放。
+
+本地实施与验收记录：
+
+- 新增固定有界网络读取、严格 16 列/uint64/256 接口 parser、单调纳秒差分与逐接口速率；仅差分/百分之一速率在安全范围内才转换 Number。支持合法 0、预热/上下文/接口集重建基线、counter-regressed/overflow 局部未知、读取失败清除旧基线；不累计回绕或合计为物理吞吐。复用未修改的串行采集循环。
+- 普通 uid1000、只读 LF 快照、固定 Node.js 24.18.1 初轮全量契约 271/271；补入独立速率溢出/分数纳秒用例后，最终全量 272/272，Node.js 22.23.3 和 24.18.1 最终聚焦均 23/23，无失败/取消/跳过。Windows 初轮 9 项中 7 通过、2 项 Linux 专项明确跳过；不是 Windows 网络采集通过声明。精确 PR/main 结果另核回执。
+- Node24 实际 CLI 窗口 30038.638242ms，RX/TX 差分均 4200664 bytes；Node22 窗口 30007.578194ms，RX/TX 均 4249933 bytes。两轮都实际接收 4194304 bytes 合成回环载荷，独立 sysfs 上下界与采集差分精确相等、两位速率公式吻合，SIGTERM 退出 0/无第三样本。额外字节是计数口径，不把应用 payload 等同接口 bytes。无外网请求、抓包、root/网络配置或用户主机安装。
+- 9 个本项文本 UTF-8 无 BOM、LF 快照匹配，78 个相对链接和 92 项无环任务依赖检查通过。固定 actionlint 1.7.12/Gitleaks 8.30.1 归档按仓库 SHA-256 复核后运行，workflow 语法和源码扫描通过；未额外 ShellCheck/Pyflakes。没有依赖/lockfile/云 binding/包内文件或既有证据变更。
+- 主 AI 已审阅实际源码、调用点、测试与边界；只读子代理启动被工具返回模型 reasoning 配置错误，未产生独立结论，不算交叉审查通过。本次不为此修改环境配置。保留同名接口重建/标识复用 ABA 限制，逐次只读不能认证永久接口身份。
+- 本项立即按 scoped commit/push、精确 head 审阅/正常合并/main 验核交付；不在提交内循环记录自身 SHA，不预报未结束的 CI。下一独立项 M04-S02 尚未领取；M07/真实 Cloudflare/Access/用户主机/业务验收和整个开发计划仍未完成。
+
+### 7.21 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

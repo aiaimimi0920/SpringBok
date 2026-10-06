@@ -346,3 +346,35 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
 - A 验收以严格身份/响应边界、无自动重试、敏感信息不回显及精确 PR/main 检查为准；不关闭 SBA-04，也不冒充 Actions 真实发布。
 
 - A 实现与验收见 [GitHub 传输适配](sba-github.md)；已通过 21 项本地聚焦检查（含真实 10 秒挂起流超时），没有真实 dispatch。交叉审阅指出 ref 漂移及 manifest/SHA 来源仍需调用方保证；已补边界回归和 B 的不可移动执行 ref / 持久授权前置，不把事后核对说成执行前保护。最终 Git/CI 按回执。
+
+### SBA-04-S02-B 领取（2026-10-06）
+
+- 负责人：主 AI；起始 main ec101c60711c19c86510981c58387a636f3ed941，工作树干净。
+- 本项打通单个服务端批准的应用 SHA/环境的首次 deploy：管理员预览确认 → SQLite DO
+  写前 claim → 单次 dispatch → GitHub OIDC 核验 → 一次性执行许可 → 制品核对 → 页面结果。
+  不扩展 update/rollback/任意配置编辑，不改旧 fixture，不在本项部署真实 NAccount。
+- 部署秘密不存入 GitHub Actions secrets；由 Worker 在 OIDC workflow_sha/ref/repository/
+  run/attempt 与已批准任务匹配且持久消费许可后一次性返回。ref 漂移不能取得秘密；
+  GitHub runner 使用独立机器 origin，仅开放 OIDC permit 路由，不放宽现有 Access 应用。
+- 单独追加 SBA SQLite DO，默认关闭；保留未知不重放，身份/配置漂移失败关闭。
+  测试覆盖 workerd 重启、并发/丢响应、合成 OIDC 与恶意 ZIP；UI 使用现有样式与身份链。
+- 真实机器 hostname、Worker secrets 与启用配置尚未创建；源码/模拟验收完成后独立
+  commit/push/PR/main。SBA-01 真实用户登录及 SBA-05 业务验收仍保持开放。
+
+### SBA-04-S02-B 本地中间检查点（2026-10-06，未交付）
+
+- 已补持久 claim/permit 初稿的管理员 actor 非空约束、状态一致性及完整 envelope 字段检查。
+- 新增 `cloud/sba-oidc.mjs`：固定 GitHub issuer/JWKS、签名和时效、仓库数字 ID、workflow SHA/tag/ref、首次 attempt 与 hosted runner 核验；支持默认和不可变 subject，拒绝不匹配的 owner/repository identity。
+- 新增 `src/sba/receipt.mjs` 与 `src/sba/artifact.mjs`：精确 run/制品关联后受限下载，GitHub bearer 不转发至签名存储；64 KiB ZIP / 32 KiB 解压边界、单个 receipt.json、SHA-256/CRC/envelope/result 校验。当前严格 ZIP 子集尚未用真实 upload-artifact 产物验收。
+- 本地聚焦回归 51/51：既有 GitHub 14、OIDC 25、SQLite/workerd 3、回执及下载 9。真实 workerd 已验证并发唯一 claim/permit、重启后不可重领及 deflate-raw 回执消费；OIDC/HTTP 为合成身份和模拟响应，不是真实 Actions 发布。
+- 日志：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-04-s02-b-20261006/boundary-tests.log`。只读交叉审阅未发现所审范围的具体高危缺陷，仍指出 deadline/损坏存储与部分网络失败分支尚缺回归。
+- **S02-B 仍在实施，尚未提交、推送、PR 或部署。** 新模块未接生产 Worker；下一步必须接管理员预览确认、精确 run 授权的 permit API、additive DO binding/migration、受控 Windows workflow 与 UI，并做整链模拟验收。不能把上述局部测试当成整项完成，也不能用测试 RPC 桥作为生产路由。
+### SBA-04-S02-B 整链接续验收（2026-10-06）
+
+- 上述中间检查点已推进：Worker 管理 API、独立机器 permit 路由、additive SQLite DO binding/migration、受控 Windows workflow 与确认 UI 已接通，默认 `ENABLE_SBA=no`。
+- 管理员会话签名不是独立服务端秘密；submit 重新读取固定 SHA 的可信 manifest，拒绝持 JWT 管理员重签伪造计划。OIDC 后仍核查精确 run/task/digest，再消费唯一许可并发放声明的秘密。
+- 真实 workerd + Chrome 覆盖取消、Escape/back、双击单提交、reload、一次许可、ZIP 回执与移动布局；GitHub/OIDC/应用均为 synthetic，没有真实 dispatch 或 NAccount 发布。截图已生成，未做人工视觉审图。
+- Linux 非 root 根测试 324 通过/3 跳过，cloud 93/93；Windows 聚焦 56 通过/1 跳过。Windows 全套曾出现 Linux-only 与历史 CRLF 条件失败，不宣称 Windows 全套通过；安全基线读取统一 CRLF/LF 后保持原严格断言。
+- workerd 不支持 fetch redirect:error，传输层改用 manual 并严格核查状态码；已用 pinned upload-artifact 依赖的 archiver 7.0.1 本地 producer 验证 ZIP parser，仍不是实际 GitHub 上传下载验收。
+- 配置、安全前提与停止条件见 [云端首次部署控制链](sba-cloud-control.md)。证据目录为 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-04-s02-b-20261006/`。
+- 本项进入 scoped commit/PR/main 交付流程；精确提交、Gitleaks、远程 CI 与合并结果另记最终回执。真实 hostname、部署秘密、受保护 executor tag 及启用仍未执行；SBA-01 登录、SBA-04 真实 Actions、SBA-05 业务验收未关闭。

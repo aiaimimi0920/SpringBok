@@ -682,3 +682,7 @@ git ls-remote origin refs/heads/<本子任务分支>
 ```
 
 只写这一轮实际完成的事实，不把计划改成回顾、不覆盖历史证据、不把“用户说继续”解释为可以绕过生产和数据保护授权。
+
+### SBA-04-S02-B 接续检查点（2026-10-06）
+
+当前已实现默认关闭的 Worker/API/SQLite DO、Windows workflow 与管理员 UI 整链，完成真实 workerd/Chrome 的合成 GitHub/OIDC/制品验收；没有执行真实部署。Linux 根测试 324 通过/3 跳过、cloud 93/93，Windows 聚焦 56 通过/1 跳过，均无失败。实现边界及配置见 [云端首次部署控制链](sba-cloud-control.md)。Git 交付正在走 scoped commit/PR/main；精确 SHA 和检查以交付回执为准，SBA-04 真实 Actions 与业务验收保持开放。

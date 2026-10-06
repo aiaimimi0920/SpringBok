@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const read = (path) => readFileSync(resolve(root, path), "utf8");
+const read = (path) => readFileSync(resolve(root, path), "utf8").replaceAll("\r\n", "\n");
 const workflowNames = readdirSync(resolve(root, ".github/workflows"));
 
 test("security workflows keep least privilege and untrusted PR boundaries", () => {
@@ -14,7 +14,8 @@ test("security workflows keep least privilege and untrusted PR boundaries", () =
     assert.match(workflow, /contents: read/);
     assert.match(workflow, /persist-credentials: false/);
     assert.match(workflow, /timeout-minutes:/);
-    assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|packages: write|id-token:/);
+    assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|packages: write/);
+    if (name !== "sba-execute.yml") assert.doesNotMatch(workflow, /id-token:/);
     for (const [, ref] of workflow.matchAll(/uses:\s+([^\s]+) /g)) {
       assert.match(ref, /@[a-f0-9]{40}$/);
     }
@@ -84,4 +85,14 @@ test("systemd acceptance remains isolated to a disposable hosted account and pre
   const source = read("src/node-service/user-unit.mjs");
   assert.match(source, /Restart=no/); assert.match(source, /TimeoutStopSec=30s/);
   assert.doesNotMatch(source, /execSync|spawn|unlinkSync\([^)]*lock|Restart=always/);
+});
+
+test("SBA execution grants OIDC only to the manual hosted execution job", () => {
+  const workflow = read(".github/workflows/sba-execute.yml");
+  assert.match(workflow, /on:\s+workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /pull_request|push:|schedule:|workflow_call|environment:|secrets\./);
+  assert.match(workflow, /permissions:\n  contents: read\njobs:\n  execute:\n    runs-on: windows-2025\n    timeout-minutes: 80\n    permissions:\n      contents: read\n      id-token: write/);
+  assert.equal([...workflow.matchAll(/id-token:/g)].length, 1);
+  assert.match(workflow, /run: node scripts\/sba-workflow\.mjs/);
+  assert.match(workflow, /sba-receipt\/receipt\.json/);
 });

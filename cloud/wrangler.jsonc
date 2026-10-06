@@ -4,9 +4,9 @@
   "compatibility_date": "2026-07-30",
   "workers_dev": false,
   "limits": { "cpu_ms": 10 },
-  "vars": { "ENABLE_PROTOCOL_TEST": "no", "ENABLE_FIXTURE_CYCLE": "no", "ENABLE_ADMIN": "no", "ENABLE_CATALOG": "no", "ENABLE_NODE_MAILBOX": "no", "ENABLE_NODE_ENROLLMENT": "no", "ENABLE_NODE_CREDENTIALS": "no", "ENABLE_NODE_CHANNEL": "no", "ENABLE_NODE_HEARTBEAT": "no", "ENABLE_NODE_TELEMETRY": "no", "ADMIN_EMAILS": "[]" },
-  "durable_objects": { "bindings": [{ "name": "TARGET", "class_name": "TargetMailbox" }, { "name": "REGISTRY", "class_name": "OwnerCatalog" }, { "name": "NODES", "class_name": "NodeMailbox" }, { "name": "TELEMETRY", "class_name": "NodeTelemetry" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TargetMailbox"] }, { "tag": "v2-catalog", "new_sqlite_classes": ["OwnerCatalog"] }, { "tag": "v3-node-mailbox", "new_sqlite_classes": ["NodeMailbox"] }, { "tag": "v4-node-telemetry", "new_sqlite_classes": ["NodeTelemetry"] }],
+  "vars": { "ENABLE_PROTOCOL_TEST": "no", "ENABLE_FIXTURE_CYCLE": "no", "ENABLE_ADMIN": "no", "ENABLE_CATALOG": "no", "ENABLE_NODE_MAILBOX": "no", "ENABLE_NODE_ENROLLMENT": "no", "ENABLE_NODE_CREDENTIALS": "no", "ENABLE_NODE_CHANNEL": "no", "ENABLE_NODE_HEARTBEAT": "no", "ENABLE_NODE_TELEMETRY": "no", "ENABLE_SBA": "no", "ADMIN_EMAILS": "[]" },
+  "durable_objects": { "bindings": [{ "name": "TARGET", "class_name": "TargetMailbox" }, { "name": "REGISTRY", "class_name": "OwnerCatalog" }, { "name": "NODES", "class_name": "NodeMailbox" }, { "name": "TELEMETRY", "class_name": "NodeTelemetry" }, { "name": "SBA_TASKS", "class_name": "SbaDeployment" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TargetMailbox"] }, { "tag": "v2-catalog", "new_sqlite_classes": ["OwnerCatalog"] }, { "tag": "v3-node-mailbox", "new_sqlite_classes": ["NodeMailbox"] }, { "tag": "v4-node-telemetry", "new_sqlite_classes": ["NodeTelemetry"] }, { "tag": "v5-sba-deployment", "new_sqlite_classes": ["SbaDeployment"] }],
   "assets": { "directory": "../public/cloud-admin", "binding": "ASSETS", "run_worker_first": true },
   "observability": { "enabled": false }
 }

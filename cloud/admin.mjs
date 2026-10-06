@@ -1,4 +1,6 @@
 import { accessSession, signSession, sameProof } from './access.mjs';
+import { adminSbaRequest } from './sba-api.mjs';
+import { sbaEnabled } from './sba-control.mjs';
 import { exact, NODE, submission } from './protocol.mjs';
 import { adminEnrollmentRequest, enrollmentEnabled } from './enrollment-api.mjs';
 import { adminNodeProbeRequest } from './node-channel-api.mjs';
@@ -9,10 +11,11 @@ const reply = (value, status = 200) => new Response(JSON.stringify(value), { sta
 export async function adminRequest(request, env, readBody) {
   try {
     const session = await accessSession(request, env), url = new URL(request.url);
-    if (request.method === 'GET' && ['/', '/app.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/network-contract.mjs', '/style.css'].includes(url.pathname)) {
+    if (request.method === 'GET' && ['/', '/app.js', '/sba.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/network-contract.mjs', '/style.css'].includes(url.pathname)) {
       const response = await env.ASSETS.fetch(request);
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
     }
+    if (url.pathname.startsWith('/api/admin/sba/')) return adminSbaRequest(request, env, session, readBody);
     const catalogEnabled = env.ENABLE_CATALOG === 'yes' && !!env.REGISTRY;
     if (url.pathname.startsWith('/api/admin/enrollments')) return adminEnrollmentRequest(request, env, session, readBody);
     if (/^\/api\/admin\/nodes\/[^/]+\/heartbeat$/.test(url.pathname)) return adminHeartbeatRequest(request, env, session);
@@ -29,7 +32,7 @@ export async function adminRequest(request, env, readBody) {
     }
     const stub = env.TARGET.get(env.TARGET.idFromName(NODE));
     if (request.method === 'GET' && url.pathname === '/api/admin/state') {
-      return reply({ ...await stub.admin('state', null, session.actor), email: session.email, csrf: await signSession(session, 'csrf', null), catalogEnabled, enrollmentEnabled: enrollmentEnabled(env), heartbeatEnabled: heartbeatEnabled(env), telemetryEnabled: telemetryEnabled(env), ownerId: session.actor });
+      return reply({ ...await stub.admin('state', null, session.actor), email: session.email, csrf: await signSession(session, 'csrf', null), catalogEnabled, enrollmentEnabled: enrollmentEnabled(env), heartbeatEnabled: heartbeatEnabled(env), telemetryEnabled: telemetryEnabled(env), sbaEnabled: sbaEnabled(env), ownerId: session.actor });
     }
     if (request.method !== 'POST' || !['/api/admin/preview', '/api/admin/submit'].includes(url.pathname)) return reply({ error: 'unknown admin route' }, 404);
     if (request.headers.get('origin') !== session.origin || !sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null))) return reply({ error: 'refresh this authenticated session' }, 403);

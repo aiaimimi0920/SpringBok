@@ -25,7 +25,7 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     const timer = setTimeout(() => controller.abort(), 10000);
     let response;
     try {
-      response = await fetchImpl(url, { method, redirect: 'error', signal: controller.signal,
+      response = await fetchImpl(url, { method, redirect: 'manual', signal: controller.signal,
         headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`,
           'x-github-api-version': '2026-03-10', 'user-agent': 'SpringBok-SBA', ...(body ? { 'content-type': 'application/json' } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}) });

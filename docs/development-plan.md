@@ -543,6 +543,11 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 失败证据保留：初次新单测两个 fixture 预期错误（边界构造含额外 newline、合法可见 ancestor 被误期望过滤），修正测试而非放宽 parser；临时 Docker 包装漏创建 browser 只读嵌套挂载点退出 125，只修临时目录；首次新文件写入管道使用 PowerShell 5 默认 ASCII，检测后用 UTF-8 OutputEncoding 恢复中文注释，不把乱码当源文案；临时 verifier 的旧 helper 文本匹配失败只修工具。最终源码/验证日志保留，不覆盖失败证据。
 - 最终 Docker namespace 是 overlay，只能证明明确 unsupported、无猜测数值/停止；不宣称支持根的原生容量对照已本地通过。原生 Ubuntu contracts job 必须取得支持根的两个真实 gauge >=30 秒，并逐挂载点通过 GNU df/stat total/差额/单位/比率门禁；精确 head/main CI 未完成前不预报成功。源码当前已实现，Git 交付按 scoped commit/push、精确审阅/正常 merge/main 回执推进，下一项 M03-S02 不提前领取。
 
+- 本轮恢复继续领取同一 `M03-S01`，负责人主 AI；仅在 `tests/disk-process.test.mjs` 修复原生进程测试的有界 close 等待并同步本页，不提前开始 M03-S02。原 head `8076240f9e43f8f6e4aec549baa945b2c0028ec6` / PR #47 的首轮六 workflow 因 hosted runner 分配故障终止，原日志/annotation 保留；2026-10-05 22:49 UTC 官方宣布恢复后，只重试 contracts 一次，未重复已通过的 fixture。
+- 本地普通 uid1000 的 Ubuntu WSL 原生容量对照已补齐：从原固定镜像临时提取并独立校验 Node.js 24.18.1，未安装软件或改 PATH；六个验收源码 blob 与原 head 一致。ext4 namespace 根 `/` 的两次 gauge 相隔 30,111ms，df total/差额精确一致，used/available 差异 270,336 bytes / 0 bytes 在既定容差内，两次 ratio 差异为 0，stat 单位均 4096，SIGTERM 正常停止。只代表 WSL namespace，不认证物理宿主或替代 CI，证据 `wsl-native-proof.json` 保留。
+- contracts 重试 attempt2/job `112037221700` 已实际分配 runner，Node.js 22.23.3 全量契约 251 通过、4 取消（不是通过）：首个真实 timeout 测试报 `Promise resolution is still pending but the event loop has already resolved`，后续三个被父测试取消，原生对照步骤因此未运行。固定本地 Node22 镜像 `sha256:88f8ba583a884279252779bbe221bf1ff2c61cf236cc973f8ca97676ae6d07f0` 在未修改的 LF 快照聚焦复现同错；原 Node24 镜像单项通过，不能以其结果替代支持的 Node22 运行证据。
+- 原因是产品超时后按设计销毁自有管道并 `unref()`，测试等待 close 的 Promise 不保持 event loop 存活，Node22 的 test timeout 本身也不足以作该引用。只为两个真实自有 child 测试增加引用着的 8 秒/4 秒 close deadline，仍要求真实 close/SIGKILL、一个 worker、零迟到输出；不改产品 5 秒 deadline/192KiB/串行门禁或 D-state 退出边界，不跳过测试、不放宽断言。修复后相同 uid1000/只读 LF 快照的 Node22.23.3、Node24.18.1 磁盘聚焦均 18/18，Node24 全量契约 255/255，0 失败/取消/跳过。临时 verifier 首次只认 TAP 的 `# tests`，未识别 Node24 的 spec reporter 汇总，导致验证脚本断言失败；按保存原日志的真实汇总核对通过，不重跑或修改产品测试。精确追加提交与 Node22 完整 PR/main 结果另记回执，不预报通过。
+
 ### 7.19 后续交接记录模板
 
 ```text

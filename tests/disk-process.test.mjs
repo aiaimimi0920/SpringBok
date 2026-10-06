@@ -20,6 +20,14 @@ function fixture(signal) {
 }
 const output = unavailableDisk('read-failed');
 
+// 采样器刻意 unref 超时/停止的子进程；测试用自己的有界 timer 等待实际 close。
+function boundedClose(child, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Owned child did not close before test deadline')), timeoutMs);
+    once(child, 'close').then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
+  });
+}
+
 test('disk worker accepts only one bounded strict JSON result after successful close, and never overlaps', async () => {
   const f = fixture(), pending = f.sampler.sample(), child = f.children[0];
   assert.equal((await f.sampler.sample()).reason, 'worker-busy'); assert.equal(f.children.length, 1);
@@ -65,7 +73,7 @@ test('disk stop aborts own worker and loop, no late output or replacement worker
 test('disk deadline terminates one real hung child and unlocks only after actual close', { timeout: 10000 }, async () => {
   let child, starts = 0;
   const sampler = createDiskSampler({ spawnWorker: () => { starts++; child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: ['ignore', 'pipe', 'pipe'] }); return child; } });
-  const pending = sampler.sample(), closed = once(child, 'close');
+  const pending = sampler.sample(), closed = boundedClose(child, 8000);
   assert.equal((await sampler.sample()).reason, 'worker-busy'); assert.equal(starts, 1);
   try {
     const result = await pending; assert.equal(result.reason, 'worker-timeout');
@@ -78,7 +86,7 @@ test('disk stop interrupts one real owned child with no late loop output and no 
   const sampler = createDiskSampler({ signal: stop.signal, spawnWorker: () => {
     starts++; child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: ['ignore', 'pipe', 'pipe'] }); return child;
   } });
-  const running = runSamplingLoop({ sampler, signal: stop.signal, onSample: value => samples.push(value) }), closed = once(child, 'close');
+  const running = runSamplingLoop({ sampler, signal: stop.signal, onSample: value => samples.push(value) }), closed = boundedClose(child, 4000);
   try {
     await once(child, 'spawn'); stop.abort(); await running; await closed;
     assert.deepEqual(samples, []); assert.equal(starts, 1); assert.equal((await sampler.sample()).reason, 'stopped'); assert.equal(starts, 1);

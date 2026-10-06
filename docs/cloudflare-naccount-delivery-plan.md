@@ -205,3 +205,42 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
 快照在 `linshi/springbok-sba-doc-01-20261006`，仅作既有代码检查，不冒充部署验证。
 下一任务为 `SBA-01`：先核实 SpringBok 实际 Worker 配置、上线阻塞及 Cloudflare
 账户/现有资源，再完成第一条真实上线，不先开发完全部 `.sba` 能力。
+
+### SBA-01 领取与上线核查（2026-10-06）
+
+本项拆为两个独立交付，避免把配置验证冒充真实上线：
+
+| 子任务 | 负责人 | 边界与验收 | 状态 |
+| --- | --- | --- | --- |
+| SBA-01-S01 | 主 AI | 独立发布配置、保留式迁移约束测试、固定 Wrangler dry-run、精确 PR/main 检查 | 配置与本地验证完成，Git 交付按回执 |
+| SBA-01-S02 | 主 AI | 发布已审阅 GitHub 版本、绑定已有 Access 保护的 hostname、真实登录与持久化验收 | 待 S01 合并，不以 dry-run 关闭 |
+
+- 负责人：主 AI；用户已要求执行完整联合计划。本项边界为 SpringBok 上线配置、
+  最小必要发布工具、相关验证与部署证据，不提前实现 NAccount 业务迁移。
+- `SBA-DOC-01` 的 PR #51 已按精确 head 审阅且六项 CI 通过后正常合并；
+  main 为 `3e24935e2c2c09e58423a6cf099c2a8913bfc12d`，该 SHA 的六项 main CI 亦通过。
+- Cloudflare 只读核查发现已有 `springbok-test` Worker，以及
+  `springbok-test.aiaimimi.com` 的 `SpringBok Private Admin` Access 应用；
+  优先核对并保留这些资源，不直接创建重名服务、覆盖数据或撤销访问策略。
+- 提供的 Cloudflare 凭据在 account token verify 端点为 active，accounts/zones/
+  workers/access 只读查询成功；user token verify 返回 401 属于端点类型差异，
+  不能据此报告整个凭据失效。真实密钥未写入仓库或日志。
+- 当前等待现有 Worker 配置、Access 策略和运行版本核对；管理员身份和最终域名
+  不按账单账户推定。尚未发布新版本，尚未证明允许身份登录或持久任务线上可用。
+- 随后只读核实：既有 Access 策略为 `SpringBok sole administrator`，明确只允许
+  `vmjcv666@gmail.com`，1 小时会话。现有 Worker 版本为
+  `0c760cd9-2642-47ff-9c09-d5fe3ac45fcf`，迁移 tag `v1`、仅 `TARGET` binding、
+  `ENABLE_PROTOCOL_TEST=no`。账户自定义域名和 aiaimimi.com zone 的 routes/DNS 查询
+  未发现该 hostname 已关联 Worker，不能把 Access 应用存在当作站点上线。
+- 已新增独立 `cloud/wrangler.launch.json`，复用既有 Worker 身份、管理员策略参数和
+  10ms CPU 限制；启用 admin/catalog，关闭 fixture 和 node 执行、workers.dev/preview。
+  原默认关闭配置不变；四段 SQLite 新建类迁移沿用原历史，不删除或重命名类。
+  `tests/cloud-launch-config.test.mjs` 两项通过，`git diff --check` 通过；尚未发布。
+- 发布工具 npm registry 在线核实 Wrangler `4.147.0`、Node >=22，安装固定版本到
+  `linshi/springbok-sba-01-tools`。首次下载因 `ECONNRESET` 失败；改为单连接和有界
+  重试，缓存也放到该临时目录。Cloudflare 官方 DO migrations 页面在线返回 200；
+  environments 页面本次 TLS 请求失败，不引用为已核实依据。
+- 单连接重试后固定 Wrangler 安装成功；npm lock 固定完整性摘要，运行时依赖按
+  `cloud/package-lock.json` 安装。dry-run 成功构建 Worker 和 8 个静态资源，
+  上传包 147.50 KiB / gzip 31.17 KiB。独立配置明确只绑定已有 Access 应用的
+  `springbok-test.aiaimimi.com`；不开放 workers.dev，也不改其他域名或 Access 策略。

@@ -640,6 +640,13 @@ git ls-remote origin refs/heads/<本子任务分支>
 - 下一独立项 `SBA-04-S02`：先读取现有 Worker/admin/SQLite DO 接缝及当前 GitHub API，
   接入获准仓库固定 SHA 的持久任务、受控 workflow 与可信结果回收。S01 不提供
   云端授权或任务级去重，不得直接重复调用入口来恢复未知发布。
+- 接续 Session `01a110e1-926d-7c10-b1c6-44c2922ac350`：首提交
+  `346fc6f83f37faa2532f9c73db58214e9dd3a12d` 已推送并创建 PR #55。首轮 Windows
+  job 在超时后的 fixture 清理报 `EBUSY`，其余 job 通过；未合并或以重跑掩盖失败。
+  补充退出时序回归先验证旧实现失败，再修复为等待 close、最多额外宽限 5 秒。
+  Windows 聚焦 25 通过/1 平台跳过，Linux 23 通过/3 平台跳过，均无失败；使用
+  与工作树逐文件匹配的 LF 快照，保留既有 Q01 工作树 CRLF 失败记录。未改清理策略、
+  未跳过失败用例、未放宽权限或延长应用执行超时；精确新 head/PR/main 按最终回执。
 
 ### 7.23 后续交接记录模板
 

@@ -105,7 +105,12 @@ export function invokePowerShell({ root, entrypoint, requestPath, resultPath, en
       // 应用输出可能含业务数据或秘密；只消费经过校验的结果，不转发原始日志。
       stdio: 'ignore',
     });
-    let timedOut = false;
+    let timedOut = false, closeTimer;
+    const finish = exitCode => {
+      clearTimeout(timer);
+      clearTimeout(closeTimer);
+      resolveResult({ exitCode: timedOut ? null : exitCode, timedOut });
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       if (child.pid) {
@@ -116,12 +121,13 @@ export function invokePowerShell({ root, entrypoint, requestPath, resultPath, en
           });
         } catch { /* 无论外部进程是否已退出，超时一律归为 unknown。 */ }
       }
-      child.kill();
-      // 即使无法观测 close，也结束本地等待；不宣称所有外部副作用已停止。
-      resolveResult({ exitCode: null, timedOut: true });
+      // 终止请求不等于进程已经关闭；先给 close 事件释放工作目录句柄的机会。
+      // 无法观测 close 时仍有界结束，不宣称所有外部副作用已停止。
+      closeTimer = setTimeout(() => finish(null), 5000);
+      try { child.kill(); } catch { /* 终止失败也等待 close 或固定宽限上限。 */ }
     }, timeoutSeconds * 1000);
-    child.once('error', () => { clearTimeout(timer); resolveResult({ exitCode: null, timedOut }); });
-    child.once('close', exitCode => { clearTimeout(timer); resolveResult({ exitCode, timedOut }); });
+    child.once('error', () => { if (!timedOut) finish(null); });
+    child.once('close', finish);
   });
 }
 

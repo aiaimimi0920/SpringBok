@@ -331,3 +331,7 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
 - 下一独立项为 `SBA-04-S02`，先读 Worker/admin/DO 的真实接缝并联网核实 GitHub
   dispatch/run/artifact 接口，再接云端任务与受控 workflow。SBA-04 整体保持未完成；
   不以 S01 本地执行器代替用户通过云端 SpringBok 发起部署。
+- PR #55 首轮 Windows 原生 CI 暴露超时返回早于进程 close 的目录占用问题。
+  追加同任务修复：终止后等待 close，最多额外 5 秒；仍为 unknown，不自动重放。
+  回归先红后绿；匹配 LF 快照复验 Windows 25 通过/1 跳过、Linux 23 通过/3 跳过。
+  既有 Q01 工作树 CRLF 安全正则失败未混入本项修复；最终 PR/main 检查另记回执。

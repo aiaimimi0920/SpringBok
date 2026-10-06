@@ -56,8 +56,10 @@ Actions run 关联和回执回收。仅配置一个 origin URL 并不证明 GitH
 | 合法 failed/unknown | 保留应用的规范化结果，不推进部署成功 |
 | 零退出且合法 succeeded/deployed-unverified | 接受其状态，但不是独立业务验收证明 |
 
-超时会尝试终止本次进程树，终止调用也有 15 秒上限；无论终止结果如何均返回 unknown。
-没有证明所有复杂后代进程或云端操作已经停止，不能据此自动重试发布。目录与回执
+超时会尝试终止本次进程树，终止调用有 15 秒上限；随后等待进程 `close`，额外宽限
+最多 5 秒，避免终止请求刚发出就返回、调用方清理时工作目录仍被占用。终止报错不能
+绕过这段宽限；无论退出码或终止结果如何均返回 unknown。没有证明所有复杂后代
+进程或云端操作已经停止，不能据此自动重试发布。目录与回执
 生命周期由上层管理，本模块不清理其他任务目录或撤销外部副作用。
 
 ## 已测与未测
@@ -68,9 +70,13 @@ Actions run 关联和回执回收。仅配置一个 origin URL 并不证明 GitH
 node --test tests/sba-contract.test.mjs tests/sba-runner.test.mjs tests/cloud-admin-boundary.test.mjs scripts/ci/security-baseline.test.mjs
 ```
 
-2026-10-06：Windows Node.js 22.22.2 为 24 通过/1 平台跳过；Linux Node.js 24.18.1
-为 23 通过/2 平台跳过。包括原生 PowerShell 带空格参数、实际超时、已提交 synthetic
+2026-10-06 修复复验：Windows Node.js 22.22.2 为 25 通过/1 平台跳过；Linux Node.js
+24.18.1 为 23 通过/3 平台跳过。包括原生 PowerShell 带空格参数、实际超时、已提交 synthetic
 checkout 到绑定回执的完整调用，以及 SHA/目录链接/硬链接/ignored/索引/环境/结果边界。
+PR #55 首轮 Windows CI 暴露超时后清理 checkout 的 `EBUSY`；新增可重复的退出时序
+回归先在旧实现失败，修复后验证等待 close、终止错误不提前返回和缺失 close 的有界回退。
+聚焦复验使用与工作树逐文件匹配的 Git LF 快照；原工作树 CRLF 导致的既有安全正则
+失败保留为 Q01，不在本项放宽断言或修改其他工作流。
 既有 contract workflow 新增无部署凭据的 Windows job；CI 最终结果按精确 SHA 回执。
 
 尚未接入部署 workflow、云端持久任务/API/UI、可信下载或 NAccount 实际发布；未独立

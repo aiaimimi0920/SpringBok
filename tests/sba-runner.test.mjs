@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, link, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import childProcess, { execFileSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { syncBuiltinESMExports } from 'node:module';
 import { applicationEnvironment, inspectCheckout, executeCheckout, readExecutionResult, invokePowerShell } from '../src/sba/runner.mjs';
 
 const manifest = {
@@ -148,6 +150,41 @@ test('symlink entrypoint is rejected before execution', { skip: process.platform
   await symlink(join(f.base, 'outside.ps1'), entrypoint);
   await writeFile(join(f.base, 'outside.ps1'), '# outside');
   await assert.rejects(inspectCheckout(f.root, f.input));
+});
+
+test('timeout waits for close rather than a termination request and bounds a missing close', { skip: process.platform !== 'win32', timeout: 15000 }, async () => {
+  const originalSpawn = childProcess.spawn, originalExec = childProcess.execFileSync;
+  const child = new EventEmitter();
+  let notifyKill;
+  const killed = new Promise(resolve => { notifyKill = resolve; });
+  child.pid = 123;
+  child.kill = () => { notifyKill(); return true; };
+  childProcess.spawn = () => child;
+  childProcess.execFileSync = command => { assert.equal(command, 'taskkill.exe'); };
+  syncBuiltinESMExports();
+  const options = { root: 'synthetic', entrypoint: 'synthetic.ps1', requestPath: 'request.json',
+    resultPath: 'result.json', environment: {}, timeoutSeconds: 0.001 };
+  try {
+    let settled = false;
+    const pending = invokePowerShell(options).then(result => { settled = true; return result; });
+    await killed;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false, 'termination request is not process closure');
+    child.emit('error', new Error('synthetic kill failure'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false, 'a kill error must not bypass the close grace');
+    child.emit('close', 0);
+    assert.deepEqual(await pending, { exitCode: null, timedOut: true });
+    // 第二次不发出 close，必须由固定宽限上限结束，不能无限等待。
+    const bounded = await invokePowerShell(options);
+    assert.deepEqual(bounded, { exitCode: null, timedOut: true });
+    child.emit('close', 0);
+  } finally {
+    child.emit('close', null);
+    childProcess.spawn = originalSpawn;
+    childProcess.execFileSync = originalExec;
+    syncBuiltinESMExports();
+  }
 });
 
 test('native PowerShell receives spaced paths as arguments and has a bounded timeout', { skip: process.platform !== 'win32' }, async t => {

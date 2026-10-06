@@ -652,6 +652,22 @@ git ls-remote origin refs/heads/<本子任务分支>
   修复为先 open、同一描述符 fstat/读取，并保留读前后路径/身份一致性核对；补测
   目录、符号链接和 FIFO 结果拒绝。不关闭查询、不撤销告警，最终精确检查另核回执。
 
+### SBA-04-S02-A GitHub 传输适配（2026-10-06）
+
+- 负责人：主 AI；基线 main `1d8550009d141e192df68b5ad17348d288c51e48`，工作树干净。
+  S01 PR #55 已合并；接续回执确认 main 六个 workflow/13 jobs/14 checks 通过、源码树
+  与已审阅 head 一致，未发布 NAccount。回执目录仍为上一节证据根。
+- S02 拆为 A（GitHub 传输/身份）与 B（持久任务、workflow、回执下载及 API/UI）。
+  A 只新增 [传输适配](sba-github.md)、`src/sba/github.mjs` 和匹配测试，保持旧 fixture、
+  DO、默认关闭配置及现有 workflow 不变。单次 POST 不等于任务级幂等。
+- 已实现固定 commit/tree/blob 读取、规范请求摘要、直接 run ID dispatch、严格 run /
+  attempt / workflow / repository 核对和制品候选元数据校验。错误不回显秘密、没有重试，
+  200/成功工作流也不自动成为应用成功；未知保留给后续持久状态机。
+- 本地聚焦 21 项通过，无失败或跳过；真实 GitHub 仅核查官方接口及已有 CI run 字段，
+  未执行真实 dispatch。精确提交、PR/main 及补充回归的最终结果以交付回执为准。
+- 下一独立项 SBA-04-S02-B：写前 claim / 一次性执行许可与受控 workflow，再接可信
+  制品下载和管理员入口。不允许在这些边界就绪前拿此适配器直接发布真实应用。
+
 ### 7.23 后续交接记录模板
 
 ```text

@@ -37,6 +37,13 @@ test('updates use numeric stable versions and immutable different commit identit
   }
 });
 
+test('secret declarations cannot overwrite runtime or inject tool configuration', () => {
+  for (const name of ['PATH', 'SYSTEMROOT', 'TEMP', 'HOME', 'CI', 'NODE_OPTIONS', 'GIT_CONFIG_COUNT',
+    'GIT_SSH_COMMAND', 'PYTHONPATH', 'PSMODULEPATH', 'BASH_ENV', 'NPM_CONFIG_USERCONFIG']) {
+    assert.throws(() => validateManifest({ ...manifest(), secrets: [name] }), name);
+  }
+});
+
 test('verification is bound to the exact currently selected deployed release', () => {
   const r = {...request(), action: 'verify', previous: {sourceSha: 'a'.repeat(40), applicationVersion: '1.2.0'}};
   assert.deepEqual(validateRequest(r, manifest()), r);

@@ -92,6 +92,8 @@ M06 先只存有界最新快照，单包最多 8 KiB、上报间隔不短于 30 
 
 M02-S02 在同一对象/两张表内做保留式扩展：meta schema1 只允许旧 CPU-only latest，schema2 允许旧/新版 union。首次成功记录显式 `sampleVersion: 2` 的 CPU+memory 样本时，meta1→2 与 state 写入同一同步事务；read/start/deferred/失败不提前升级，schema2 接收旧客户端也不降级。schema1 配新版 latest 视为损坏并拒绝，不自动修复。旧 reader 遇 schema2 失败关闭且保留数据，切回新版可重新读取；不是可用性无损的旧代码回退，也没有 schema 降级/清表。名称、binding、Wrangler 类迁移和任务/心跳库不变，验证见 [指标协议](node-telemetry.md)。
 
+M03-S02 继续保留同一对象/两表：meta1/2→3 仅在成功 recorded 严格 `sampleVersion: 3` CPU+memory+disk 时与 state 同事务扩展，meta3 可接受旧 CPU-only/v2 latest 但不降级。磁盘完整规范 JSON 限 6 KiB，请求仍限 8 KiB；超预算只上传 `report-too-large`，不截断挂载点或静默丢字段。固定旧 v5 reader 遇 meta3 拒绝 read/start/sample/snapshot，库不清空，切回新 reader 恢复；矛盾 schema 视为损坏，不靠读取自动升级。没有 D1/KV/R2 或新 Wrangler 迁移。
+
 日志不混入指标 JSON 或任务回执。M10 首先提供授权服务的限量尾部读取，不做全盘日志采集；R2 是否归档由实际留存需求决定。无界离线缓冲、全量环境变量、完整 Core 响应、私钥和凭据均不得上传。
 
 ## 6. 迁移、回退、备份与验证

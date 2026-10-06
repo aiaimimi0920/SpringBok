@@ -1,6 +1,6 @@
 # M03-S01：普通用户只读磁盘容量采集
 
-总进度见 [开发计划](development-plan.md)，采集分权见 [执行架构](execution-architecture.md)。M03 分为本项采集与 M03-S02 版本化上报/只读展示。本项是可运行的普通用户 CLI，不是已部署监控、云端磁盘详情或 M07 完整总览；旧 v5 /26 文件包和 observe daemon 不包含新磁盘入口，不修改已有安装。
+总进度见 [开发计划](development-plan.md)，采集分权见 [执行架构](execution-architecture.md)。M03 分为本项采集与 M03-S02 版本化上报/只读展示。本项是可运行的普通用户 CLI，不是已部署监控、云端磁盘详情或 M07 完整总览；旧 v5 /26 文件包和 observe daemon 不包含新磁盘入口，不修改已有安装。M03-S02 的后续 v6 包/版本化上报与只读小详情见 [指标协议](node-telemetry.md)，本页验收数字仍是采集器任务的历史证据。
 
 ## 运行与权限
 

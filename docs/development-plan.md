@@ -164,9 +164,9 @@ SpringBok 的存储与被部署应用的数据库是两个边界。Platform、Ra
 | M02 | 内存用量采集与产品接入 | 已完成 | M02-S01/M02-S02；第 7.16/7.17 节；负责人：主 AI | 限定采集→版本化上报→独立 latest→只读小详情源码/验收闭环；精确 Git 交付以本项回执为准，真实宿主/Cloudflare 与 M07 完整总览仍开放 | N07 |
 | M02-S01 | 普通用户只读内存采集器与原生对照 | 已完成 | [采集与验收](memory-collection.md)；第 7.16 节；负责人：主 AI | 限定源码与本地验收闭环；提交/PR/main 最终交付按本项回执，真实宿主和 M02-S02 上报/展示仍开放 | N07 |
 | M02-S02 | 内存指标版本化上报与只读小详情 | 已完成 | [版本化指标](node-telemetry.md)；第 7.17 节；负责人：主 AI | 新 v5 observe 包采集→鉴权上报→独立 latest→只读小详情；旧 v4 CPU 客户端/快照/安装保留，未上报不显示 0；精确 Git 交付按回执，不冒充 M07 完整总览 | M02-S01/M06 |
-| M03 | 磁盘容量采集与产品接入 | 进行中 | M03-S01/M03-S02；第 7.18 节；负责人：主 AI | 按挂载点只读采集、过滤伪文件系统与版本化上报/详情；两子项验收前不关闭父项，不写满或清理磁盘 | N07 |
-| M03-S01 | 普通用户只读磁盘容量采集器与原生对照 | 已实现 | [采集与验收](disk-collection.md)；第 7.18 节；负责人：主 AI | 本地源码/契约通过，支持根文件系统的原生 df 容量验收及精确 PR/main 仍待本项回执；不更改 v5 包 | N07 |
-| M03-S02 | 磁盘指标版本化上报与只读小详情 | 待开发 | 后续复用 M06/M02-S02；本轮不领取 | 严格版本化、保留式 SQLite 扩展与旧客户端兼容、显式新包、按挂载点独立显示与单 GET；不把未上报当 0 或合计成物理磁盘总量 | M03-S01/M02-S02 |
+| M03 | 磁盘容量采集与产品接入 | 已完成 | M03-S01/M03-S02；第 7.18 节；负责人：主 AI | 两子项限定采集/版本化上报/按挂载点详情已验收；精确 Git 交付按回执，不代表真实宿主/Cloudflare/M07；不写满或清理磁盘 | N07 |
+| M03-S01 | 普通用户只读磁盘容量采集器与原生对照 | 已完成 | [采集与验收](disk-collection.md)；第 7.18 节；负责人：主 AI | 原生 df 容量对照和精确 head/main 已通过，PR #47 已合并；第 7.19 节记录最终回执，不更改 v5 包 | N07 |
+| M03-S02 | 磁盘指标版本化上报与只读小详情 | 已完成 | 第 7.19 节；负责人：主 AI | [版本化指标](node-telemetry.md)；严格 v3/保留式 SQLite 扩展、旧 v5 兼容与显式 v6/30 文件、单 GET 按挂载点详情已验收；精确 PR/main 另核回执，未上报不为0且不合计物理总盘 | M03-S01/M02-S02 |
 | M04 | 网络吞吐采集 | 待开发 | 当前无网络采集器 | 网卡累计计数差分、单位、重启/计数回绕处理；不抓取业务内容 | N07 |
 | M05 | 主机基础信息与运行时间 | 待开发 | N09 预检查可复用 | OS/架构/内核/运行时间/版本与时间戳；仅采集必要元数据，不上传完整环境变量 | N09 |
 | M06 | 指标上报与最新快照存储 | 已完成 | [实现与验收](node-telemetry.md)；负责人：主 AI；第 7.15 节 | 限定 CPU 鉴权/独立 latest/v4 observe 装配/小详情闭环已验收；提交/PR/main 最终交付按本项回执，不代表其他指标、真实宿主或生产部署 | ARC-02/N03/N08/M01 |
@@ -548,7 +548,27 @@ git ls-remote origin refs/heads/<本子任务分支>
 - contracts 重试 attempt2/job `112037221700` 已实际分配 runner，Node.js 22.23.3 全量契约 251 通过、4 取消（不是通过）：首个真实 timeout 测试报 `Promise resolution is still pending but the event loop has already resolved`，后续三个被父测试取消，原生对照步骤因此未运行。固定本地 Node22 镜像 `sha256:88f8ba583a884279252779bbe221bf1ff2c61cf236cc973f8ca97676ae6d07f0` 在未修改的 LF 快照聚焦复现同错；原 Node24 镜像单项通过，不能以其结果替代支持的 Node22 运行证据。
 - 原因是产品超时后按设计销毁自有管道并 `unref()`，测试等待 close 的 Promise 不保持 event loop 存活，Node22 的 test timeout 本身也不足以作该引用。只为两个真实自有 child 测试增加引用着的 8 秒/4 秒 close deadline，仍要求真实 close/SIGKILL、一个 worker、零迟到输出；不改产品 5 秒 deadline/192KiB/串行门禁或 D-state 退出边界，不跳过测试、不放宽断言。修复后相同 uid1000/只读 LF 快照的 Node22.23.3、Node24.18.1 磁盘聚焦均 18/18，Node24 全量契约 255/255，0 失败/取消/跳过。临时 verifier 首次只认 TAP 的 `# tests`，未识别 Node24 的 spec reporter 汇总，导致验证脚本断言失败；按保存原日志的真实汇总核对通过，不重跑或修改产品测试。精确追加提交与 Node22 完整 PR/main 结果另记回执，不预报通过。
 
-### 7.19 后续交接记录模板
+### 7.19 M03-S02 领取与边界
+
+- 日期：2026-10-05（本机 America/Los_Angeles，UTC 已为 2026-10-06）；负责人：主 AI；基线 `6b1c6cb279e115d9ebfc5367e47bb908daa43a70`；分支 `feat/disk-telemetry-20261005`。领取前本地/远程 main 一致、工作区干净，无其他修改 owner。
+- M03-S01 PR [#47](https://github.com/aiaimimi0920/SpringBok/pull/47) 已正常合并；最终 head `e1d94dce613046161457660d7010f0410d108f8a`，head/main tree `af90d1223dbac2b4094107f482a1f6e148cd0f05` 一致。[回执](https://github.com/aiaimimi0920/SpringBok/pull/47#issuecomment-6006451900) 已发布读回：main 6 workflow/12 job/13 check 成功，契约255/255、workerd58/58、Chrome9组PASS，原生支持根两 gauge 相隔30040ms，逐挂载点 df/stat 对照通过。保留原 runner/Node22 失败和追加 close 测试修复，不重复采集器开发或旧 fixture。
+- 范围：严格 `sampleVersion:3` CPU+memory+disk union、共享纯数据磁盘上报契约、SQLite meta1/2→3 保留式扩展及固定旧 reader/包兼容；普通用户 observe 采集/有界上报、显式 v6 固定新包；目录行单 GET 的按挂载点小详情，匹配 node/workerd/安装/browser 测试和专题文档。
+- 有界策略：保留请求实际/声明8KiB；磁盘规范 JSON 独占6KiB预算，超限整体报告 `report-too-large`、空 mounts/null 数值语义，不静默截断挂载点或放大 reader。ACK 仅指标调用显式允许8KiB，身份/心跳等旧读上限仍4KiB。32 mounts/4KiB路径的本地采集边界不等于上报容量。共享契约只公开固定字段，不上传 source/options/原始错误。
+- 验收：严格0/null/partial/失败/超限、合法路径与单位/bytes/占比、完整 disk/version 重送/ACK；旧 CPU-only/v2 不补字段，meta只在成功 recorded 同事务向前扩展，deferred/失败不扩展、旧写不降级；固定旧 v5 reader 拒绝meta3并原库保留/切回恢复，真实旧 v5 包仍可向新 Worker 上报；新 v6双角色实际安装→采样→鉴权→独立 latest→admin GET，小详情单 GET/各指标独立/迟到身份与快照过期/390px/文本安全。
+- 不做：磁盘I/O/物理总盘/历史/告警/M07完整总览、自动升级或清锁、schema降级/清库、生产开关/云资源/真实用户主机安装。保留自有worker5秒/192KiB/close gate、D-state/ABA及在途授权边界；execute不采指标，任务/心跳隔离不变。证据根 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-disk-telemetry-20261005/`。完成本项后立即 scoped commit/push、精确head审阅/正常merge/main核验；整体开发仍未完成。
+
+本地实施与验收记录：
+
+- 已实现严格旧 CPU-only/v2/v3 union、三端纯数据共享磁盘契约与完整 replay/ACK；规范化 disk 最大6144 UTF-8 bytes，超限整体 `report-too-large`，不截断挂载点。请求仍8KiB，只有 telemetry ACK 显式8KiB，identity/heartbeat仍4KiB；默认关闭与原collector边界不变。
+- SQLite meta1/2→3 仅成功 recorded 同事务扩展；真实 trigger 在 meta更新后阻断 state写入，验证回滚原库。deferred/失败/read/start不升级，旧样本不降级；固定真实 v5 reader read/start/sample/snapshot 拒绝meta3而保留库、切回恢复，矛盾schema不修复。固定旧两文件搬址后反向核原hash；binding/DO/两表/身份/任务/心跳职责不变。
+- 固定 Linux Node24.18.1/uid1000/只读LF快照：全量契约262/262、workerd60/60、聚焦28/28，无失败/取消/跳过；真实 v6双角色安装→CPU/memory/disk worker→workerd/admin，第二次相隔30974ms、CPU窗口31048ms，三指标和持久ACK/admin一致，execute指标请求0，SIGTERM收尾。Docker namespace仅无支持挂载点，明确 `no-supported-mounts`，不冒称支持根容量对照；原生S01证据保留。
+- 真实 Chrome/workerd通过磁盘0/1byte/partial/超限/坏字段/旧版本/恶意路径文本安全、长中文路径/极大安全bytes390px、三指标局部独立、每节点单GET、共同过期/迟到render和owner/visibility/pagehide/BFCache，GET-only且无storage/持久写。按静态审查补迟到disk独立断言，最终浏览器回执另核。
+- 已发布真实旧Git `5f8e648df5dbe053342048cbd268302949633e32` v5/26文件（manifest `5a25b61ce6fa65b946917e0d5b94c3d57f0eb7ab2abc4377e3a4dade652388c1`）自身双角色安装/daemon→新Worker/重装/version通过；旧latest仍7字段/v2、meta2、无disk。v6拒绝旧包/覆盖，release/credential/markers/state/锁bytes/inode/device/mode/uid/mtime全保持。不是动态旧fixture；真正精确Git绑定v6包在本项提交后构建验核。
+- 两项独立只读静态审查未发现确定阻断缺陷，不计独立执行通过；默认client+worker在途停止组合未直接独立实测，S01真实worker与S02受控sampler证据分开。实际daemon始终同一stop.signal，未承诺不同逐请求signal能取消前一次sampler。保留D-state/ABA/动态挂载和在途授权边界，不制造危险挂载。
+- 临时Docker两次缺嵌套mountpoint退出125，只补临时目录，原失败日志保留，未放宽只读/权限/产品门禁。固定actionlint1.7.12/Gitleaks8.30.1归档SHA复核与源码/workflow扫描通过，无leak，未额外ShellCheck/Pyflakes；没有依赖/lockfile/binding/默认开关变化。
+- 两子项限定源码/本地验收完成，立即按本项scoped commit/push、精确head审阅/正常merge/main验核推进；交付未核时不预报CI/生产成功，最终SHA/包/远程回执为准，不循环amend。下一独立项M04网络吞吐采集尚未领取；M07/真实Cloudflare/Access/用户主机/业务验收和整体开发仍开放。
+
+### 7.20 后续交接记录模板
 
 ```text
 日期 / 任务 ID / 负责人：

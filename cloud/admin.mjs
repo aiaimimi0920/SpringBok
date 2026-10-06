@@ -9,7 +9,7 @@ const reply = (value, status = 200) => new Response(JSON.stringify(value), { sta
 export async function adminRequest(request, env, readBody) {
   try {
     const session = await accessSession(request, env), url = new URL(request.url);
-    if (request.method === 'GET' && ['/', '/app.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/style.css'].includes(url.pathname)) {
+    if (request.method === 'GET' && ['/', '/app.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/style.css'].includes(url.pathname)) {
       const response = await env.ASSETS.fetch(request);
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
     }

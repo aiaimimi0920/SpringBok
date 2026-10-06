@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { adminFixture, origin } from './admin-fixture.mjs';
 import { heartbeatRpc as nodeRpc, heartbeatSample, heartbeatCall } from './heartbeat-fixture.mjs';
-import { telemetryFlags, telemetryOptions, telemetryNode, telemetryCall as call, telemetrySample, telemetryRpc as rpc, cpu, memory } from './telemetry-helper.mjs';
+import { telemetryFlags, telemetryOptions, telemetryNode, telemetryCall as call, telemetrySample, telemetryRpc as rpc, cpu, memory, disk } from './telemetry-helper.mjs';
 import { telemetryAuthorization } from '../../cloud/telemetry-contract.mjs';
 
 test('CPU telemetry is default-off, joined observe-only, owner/node/enrollment bound and never stores credentials or changes task/catalog/heartbeat', async () => {
@@ -151,4 +151,46 @@ test('a hanging cross-DO telemetry RPC never holds NodeMailbox execution seriali
     assert.equal(await rpc(f, n.telemetryContext, 'waiting'), true);
     await rpc(f, n.telemetryContext, 'release'); assert.equal((await pending).result.status, 'recorded'); pending = null;
   } finally { if (pending && n) { await rpc(f, n.telemetryContext, 'release'); await pending.catch(() => {}); } await f.close(); }
+});
+test('disk expansion from schema one/two is recorded-only and atomic, with real v5 reader rollback refusal and mixed latest preservation', async () => {
+  const f = await adminFixture(telemetryFlags, telemetryOptions);
+  try {
+    assert.equal((await f.call('/disk-contract.mjs', { token: null })).status, 403);
+    assert.equal((await f.call('/disk-contract.mjs')).status, 200);
+    for (const version of [1, 2]) {
+      const n = await telemetryNode(f), c = n.roles.observe, first = await telemetrySample(f, c, cpu(), version === 2 ? memory() : undefined);
+      const meta = async () => (await rpc(f, n.telemetryContext, 'inspect')).find(t => t.name === 'telemetry_meta').rows[0].schema_version;
+      assert.equal(await meta(), version);
+      f.bindings.TELEMETRY_READER = 'memory'; await f.restart(); assert.equal((await f.call(n.path, { token: n.token })).status, 200); await call(f, c, 'read', { protocolVersion: 2 });
+      f.bindings.TELEMETRY_READER = 'current'; await f.restart();
+      const next = { ...first.input, sequence: 2, sampleVersion: 3, memory: memory(), disk: disk() }, original = await rpc(f, n.telemetryContext, 'inspect');
+      for (const malformed of [{ ...next, disk: { ...disk(), status: 'partial' } }, { ...next, disk: undefined }, { ...next, sampleVersion: 2 }, { ...next, disk: { ...disk(), raw: 'secret' } }]) await call(f, c, 'sample', malformed, 409);
+      assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), original);
+      assert.equal((await call(f, c, 'sample', next)).result.status, 'deferred'); assert.equal(await meta(), version);
+      await rpc(f, n.telemetryContext, 'damage', ['age', 90000]); await rpc(f, n.telemetryContext, 'damage', ['upgrade-write']); const interrupted = await rpc(f, n.telemetryContext, 'inspect');
+      await call(f, c, 'sample', next, 409); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), interrupted); assert.equal(await meta(), version);
+      await rpc(f, n.telemetryContext, 'damage', ['remove-upgrade-write']); const recorded = await call(f, c, 'sample', next); assert.equal(recorded.result.status, 'recorded'); assert.equal(await meta(), 3); assert.deepEqual(recorded.result.sample.disk, disk());
+      await call(f, c, 'sample', { ...next, disk: disk(1) }, 409); await call(f, c, 'sample', { ...first.input, sequence: 2 }, 409);
+      const expanded = await rpc(f, n.telemetryContext, 'inspect'); await f.restart(); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), expanded); assert.deepEqual(await call(f, c, 'sample', next), recorded);
+      f.bindings.TELEMETRY_READER = 'memory'; await f.restart();
+      await call(f, c, 'read', { protocolVersion: 2 }, 409); await call(f, c, 'start', { protocolVersion: 2, bootId: randomUUID(), previousGeneration: 1 }, 409); await call(f, c, 'sample', first.input, 409);
+      assert.equal((await f.call(n.path, { token: n.token })).status, 409); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), expanded);
+      f.bindings.TELEMETRY_READER = 'current'; await f.restart(); assert.deepEqual((await f.call(n.path, { token: n.token })).json().sample, recorded.result.sample);
+      const { sampleVersion: ignoredVersion, memory: ignoredMemory, ...cpuOnly } = first.input;
+      for (const old of [cpuOnly, { ...cpuOnly, sampleVersion: 2, memory: memory() }]) {
+        await rpc(f, n.telemetryContext, 'damage', ['age', 90000]); const written = await call(f, c, 'sample', { ...old, sequence: old.sampleVersion === 2 ? 4 : 3 }); assert.equal(written.result.status, 'recorded'); assert.equal(await meta(), 3); assert.equal(Object.hasOwn(written.result.sample, 'disk'), false);
+      }
+      await f.restart(); assert.equal(await meta(), 3);
+    }
+  } finally { await f.close(); }
+});
+test('schema two with disk latest is corruption, and disk-only collection failure preserves valid CPU and memory', async () => {
+  const f = await adminFixture(telemetryFlags, telemetryOptions);
+  try {
+    const n = await telemetryNode(f), failed = { ...disk(), status: 'unavailable', reason: 'report-too-large', sampledAt: null, mounts: [], filtered: null };
+    await telemetrySample(f, n.roles.observe, cpu(), memory(), failed);
+    const snapshot = (await f.call(n.path, { token: n.token })).json(); assert.equal(snapshot.freshness, 'fresh'); assert.equal(snapshot.sample.cpu.status, 'available'); assert.equal(snapshot.sample.memory.status, 'available'); assert.deepEqual(snapshot.sample.disk, failed);
+    await rpc(f, n.telemetryContext, 'damage', ['schema-two']); const before = await rpc(f, n.telemetryContext, 'inspect'); await f.restart();
+    await call(f, n.roles.observe, 'read', { protocolVersion: 2 }, 409); assert.equal((await f.call(n.path, { token: n.token })).status, 409); assert.deepEqual(await rpc(f, n.telemetryContext, 'inspect'), before);
+  } finally { await f.close(); }
 });

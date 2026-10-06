@@ -271,3 +271,19 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
   不引入 Access Bypass、假 JWT 或机器身份来冒充管理员验收。
 - `SBA-01` 保持部分验收。等待身份交互时可领取不依赖它的 `SBA-02` 契约/执行端工作，
   但正式 NAccount 发布仍须有真实授权调用与回执；不能因登录待验收而退回无限离线优化。
+
+### SBA-02 领取（2026-10-06）
+
+- 负责人主 AI；文件范围：统一契约文档、纯函数校验与针对性测试。不修改 NAccount
+  业务逻辑，不在此子项创建部署 workflow、注入 GitHub secrets 或触发业务发布。
+- 选择受控 GitHub Actions Windows runner 调用仓库 `.sba`，复用现有 PowerShell 5.1 /
+  Python 部署工具。SpringBok Worker 只创建持久任务、触发及核对回执，不运行 shell。
+- 正式协议采用 `.sba/manifest.json` v2；现有 NAccount v1 保留直调能力，但不能直接
+  当作 v2 执行。应用提供 deploy/update/verify 三个固定动作，内部构建、备份、迁移和
+  组件次序完全归应用实现，平台不定义业务步骤 DAG。
+- 交付条件：版本/路径/动作/运行环境/结果协议可验证，旧版明确拒绝、输入不可变，
+  目标 SHA 与任务/版本绑定。真实 Actions 和 NAccount 接入在后续子项验收。
+- 已实现 [SBA v2 契约](sba-contract.md) 及 `src/sba/contract.mjs`；
+  `node --test tests/sba-contract.test.mjs` 5/5 通过，覆盖旧版拒绝、路径/运行环境限制、
+  数值版本比较、版本/SHA/任务绑定、假成功与非法结果拒绝；`git diff --check` 通过。
+  不是实际执行端或业务验收。精确提交/PR/main 状态按本项回执。

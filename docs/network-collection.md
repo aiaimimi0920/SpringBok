@@ -1,8 +1,8 @@
 # M04-S01：普通用户只读网络吞吐采集
 
 本项提供可以独立运行的 Linux 采集器，不表示已安装网络监控。开发状态见
-[总计划](development-plan.md)，后续 M04-S02 才扩展[版本化指标通道](node-telemetry.md)。
-原 v6 /30 文件包、daemon、Worker、SQLite 和 UI 不变，不在已有安装内追加文件。
+[总计划](development-plan.md)，后续 M04-S02 的上报与展示见[版本化指标通道](node-telemetry.md)。
+M04-S01 本身不改变原 v6 /30 文件包、daemon、Worker、SQLite 和 UI；M04-S02 也不在已有安装内追加文件。
 
 ## 运行与数据范围
 

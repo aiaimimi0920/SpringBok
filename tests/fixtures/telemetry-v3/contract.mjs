@@ -1,8 +1,7 @@
-import { exact } from './protocol.mjs';
-import { diskSample } from '../public/cloud-admin/disk-contract.mjs';
-import { networkSample, V4_DISK_REPORT_BYTES } from '../public/cloud-admin/network-contract.mjs';
-import { isUuid } from './catalog-contract.mjs';
-import { nodeContext } from './node-protocol.mjs';
+import { exact } from '../../../cloud/protocol.mjs';
+import { diskSample } from './disk-contract.mjs';
+import { isUuid } from '../../../cloud/catalog-contract.mjs';
+import { nodeContext } from '../../../cloud/node-protocol.mjs';
 
 export const TELEMETRY_INTERVAL_MS = 30000;
 export const TELEMETRY_STALE_MS = 90000;
@@ -43,12 +42,10 @@ function samplePayload(value) {
   const base = { bootId: value.bootId, generation: value.generation, sequence: value.sequence, cpu: cpuSample(value.cpu) };
   if (!Object.hasOwn(value, 'sampleVersion')) return base;
   const versioned = { ...base, sampleVersion: value.sampleVersion, memory: memorySample(value.memory) };
-  if (value.sampleVersion === 2) return versioned;
-  const withDisk = { ...versioned, disk: diskSample(value.disk, value.sampleVersion === 4 ? V4_DISK_REPORT_BYTES : undefined) };
-  return value.sampleVersion === 4 ? { ...withDisk, network: networkSample(value.network) } : withDisk;
+  return value.sampleVersion === 3 ? { ...versioned, disk: diskSample(value.disk) } : versioned;
 }
 function sampleKeys(value, keys) {
-  if (Object.hasOwn(value, 'sampleVersion')) { requireTelemetry([2, 3, 4].includes(value.sampleVersion)); exact(value, [...keys, 'sampleVersion', 'memory', ...(value.sampleVersion >= 3 ? ['disk'] : []), ...(value.sampleVersion === 4 ? ['network'] : [])]); }
+  if (Object.hasOwn(value, 'sampleVersion')) { requireTelemetry([2, 3].includes(value.sampleVersion)); exact(value, [...keys, 'sampleVersion', 'memory', ...(value.sampleVersion === 3 ? ['disk'] : [])]); }
   else exact(value, keys);
 }
 export function telemetryContext(value) {

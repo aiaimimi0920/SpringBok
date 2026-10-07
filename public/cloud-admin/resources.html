@@ -8,11 +8,24 @@
 <a href="/resources" data-icon="resources" aria-current="page"><span>云资源</span></a>
 <a href="/settings" data-icon="settings" class="nav-settings"><span>连接设置</span></a></nav></aside>
 <header class="topbar"><span class="context">部署控制台 <span>/</span> <strong>云资源</strong></span><span>Cloudflare Workers</span></header>
-<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">CLOUD RESOURCES</p><h1>云资源</h1></div><button id="resource-refresh" type="button" data-icon="refresh">刷新连接与登记</button></div>
+<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">CLOUD RESOURCES</p><h1>云资源</h1></div><div class="actions"><button id="resource-refresh" type="button" data-icon="refresh">刷新</button><button id="resource-add" class="primary" type="button" data-icon="add">添加资源</button></div></div>
 <div class="status-line"><p id="resource-notice" role="status" aria-live="polite">正在验证身份…</p></div>
-<div class="board"><section><div class="section-heading"><h2>发现已有资源</h2><span class="index">01 / DISCOVER</span></div>
-<form id="resource-form"><fieldset id="resource-fields" disabled><div class="form-grid"><div class="field"><label for="resource-connection">Cloudflare 连接</label><select id="resource-connection" required></select></div><div class="field"><label for="resource-kind">资源类型</label><select id="resource-kind"><option value="d1">D1 数据库</option><option value="kv">KV namespace</option><option value="r2">R2 bucket（默认管辖区）</option></select></div></div><div class="actions"><button id="resource-load" type="submit">读取已有资源</button></div></fieldset></form>
-<p class="section-note">只读取并登记，不创建或修改云资源。需要对应类型的读取权限，每页最多 100 条。</p><ul id="resource-discovered"></ul><button id="resource-next" type="button" disabled>下一页</button></section>
-<section><div class="section-heading"><h2>已登记资源</h2><span class="index">02 / REGISTERED</span></div><ul id="resource-registered"></ul><p class="section-note">连接停用或修订变化后，旧登记不可用于新部署。登记显示最近读取时间，部署前需重新核对。</p></section></div>
+<section><div class="section-heading"><h2>已登记资源</h2><span class="index">REGISTERED</span></div><ul id="resource-registered"></ul><p class="section-note">连接停用或修订变化后，旧登记不可用于新部署。登记显示最近读取时间，部署前需重新核对。</p></section>
 </main>
+<dialog id="resource-dialog" aria-labelledby="resource-dialog-title">
+<div class="section-heading"><h2 id="resource-dialog-title">添加资源</h2><button id="resource-close" type="button">关闭</button></div>
+<form id="resource-form"><fieldset id="resource-fields" disabled>
+<div class="resource-types" role="group" aria-label="资源类型">
+<label><input type="radio" name="resource-type" value="d1" checked autofocus><span data-icon="database">D1 数据库</span></label>
+<label><input type="radio" name="resource-type" value="kv"><span data-icon="keyvalue">KV 键值存储</span></label>
+<label><input type="radio" name="resource-type" value="r2"><span data-icon="bucket">R2 对象存储</span></label>
+</div>
+<input id="resource-kind" type="hidden" value="d1">
+<h3 id="resource-config-title">D1 数据库配置</h3><p id="resource-config-help" class="section-note">选择 Cloudflare 连接，读取已有 D1 数据库。</p>
+<div class="field"><label for="resource-connection">Cloudflare 连接</label><select id="resource-connection" required></select></div>
+<div class="actions"><button id="resource-load" type="submit">读取已有资源</button></div></fieldset></form>
+<p id="resource-dialog-notice" role="status" aria-live="polite"></p>
+<ul id="resource-discovered"></ul><button id="resource-next" type="button" disabled>下一页</button>
+<p class="section-note">只读取并登记，不创建或修改云资源。需要对应类型的读取权限，每页最多 100 条；读取列表 5 分钟内可登记。</p>
+</dialog>
 </body></html>

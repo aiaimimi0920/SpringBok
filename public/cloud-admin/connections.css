@@ -14,6 +14,17 @@
 .empty-state { padding: 28px 0; color: var(--neuro-text-muted); font-size: 13px; }
 #connection-disable-target { color: var(--neuro-text); font-weight: 700; overflow-wrap: anywhere; }
 #resource-form { max-width: 820px; }
+.resource-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
+.resource-types label { position: relative; margin: 0; cursor: pointer; }
+.resource-types input { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; clip-path: inset(50%); overflow: hidden; }
+.resource-types span { display: flex; height: 100%; flex-direction: column; align-items: center; gap: 10px; padding: 16px 4px; border: 1px solid var(--neuro-line); border-radius: 6px; background: var(--neuro-control); text-align: center; font-size: 12px; }
+.resource-types svg { width: 28px; height: 28px; }
+.resource-types label:hover span { background: var(--neuro-control-hover); }
+.resource-types input:checked + span { border-color: var(--neuro-signal-yellow); background: var(--neuro-yellow-soft); color: var(--neuro-signal-yellow); }
+.resource-types input:focus-visible + span { outline: 2px solid var(--neuro-signal-yellow); outline-offset: 3px; }
+.resource-types input:disabled + span { color: var(--neuro-text-muted); border-style: dashed; cursor: not-allowed; }
+#resource-config-help { border: 0; padding: 0; margin: 8px 0 20px; }
+#resource-dialog-notice { font-size: 13px; }
 #resource-discovered li { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 #resource-discovered p { margin: 0; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 #resource-discovered button { flex-shrink: 0; }

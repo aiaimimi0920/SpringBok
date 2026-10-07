@@ -11,9 +11,9 @@ test('private assets always enter the Worker and management defaults reject acce
   assert.equal(config.vars.ENABLE_NODE_CREDENTIALS, 'no');
   assert.equal(config.vars.ENABLE_NODE_CHANNEL, 'no');
   assert.equal(config.vars.ENABLE_NODE_TELEMETRY, 'no');
-  assert.deepEqual(config.durable_objects.bindings, [{ name: 'TARGET', class_name: 'TargetMailbox' }, { name: 'REGISTRY', class_name: 'OwnerCatalog' }, { name: 'NODES', class_name: 'NodeMailbox' }, { name: 'TELEMETRY', class_name: 'NodeTelemetry' }, { name: 'SBA_TASKS', class_name: 'SbaDeployment' }]);
-  assert.deepEqual(config.migrations, [{ tag: 'v1', new_sqlite_classes: ['TargetMailbox'] }, { tag: 'v2-catalog', new_sqlite_classes: ['OwnerCatalog'] }, { tag: 'v3-node-mailbox', new_sqlite_classes: ['NodeMailbox'] }, { tag: 'v4-node-telemetry', new_sqlite_classes: ['NodeTelemetry'] }, { tag: 'v5-sba-deployment', new_sqlite_classes: ['SbaDeployment'] }]);
-  for (const file of ['index.html', 'style.css', 'app.js', 'catalog.js', 'enrollment.js', 'telemetry.js', 'sba.js']) {
+  assert.deepEqual(config.durable_objects.bindings, [{ name: 'TARGET', class_name: 'TargetMailbox' }, { name: 'REGISTRY', class_name: 'OwnerCatalog' }, { name: 'NODES', class_name: 'NodeMailbox' }, { name: 'TELEMETRY', class_name: 'NodeTelemetry' }, { name: 'SBA_TASKS', class_name: 'SbaDeployment' }, { name: 'CONNECTIONS', class_name: 'ConnectionVault' }]);
+  assert.deepEqual(config.migrations, [{ tag: 'v1', new_sqlite_classes: ['TargetMailbox'] }, { tag: 'v2-catalog', new_sqlite_classes: ['OwnerCatalog'] }, { tag: 'v3-node-mailbox', new_sqlite_classes: ['NodeMailbox'] }, { tag: 'v4-node-telemetry', new_sqlite_classes: ['NodeTelemetry'] }, { tag: 'v5-sba-deployment', new_sqlite_classes: ['SbaDeployment'] }, { tag: 'v6-connections', new_sqlite_classes: ['ConnectionVault'] }]);
+  for (const file of ['settings.html', 'connections.js', 'connections.css', 'index.html', 'style.css', 'app.js', 'catalog.js', 'enrollment.js', 'telemetry.js', 'sba.js']) {
     const source = readFileSync(new URL(`../public/cloud-admin/${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /CONTROL_TOKEN|NODE_TOKEN|cf-access-jwt-assertion|localStorage|sessionStorage|innerHTML/);
   }

@@ -4,6 +4,9 @@
 
 SpringBok 是运行在 Cloudflare Workers 上的统一控制平台，包含两条产品主线：
 通过简单交互将服务部署到外部服务器，以及集中监控、管理这些服务器和服务。
+2026-10-07 用户明确当前聚焦部署：优先连接设置、资源登记和目标选择，不以大运维
+面板或监控 backlog 为部署前置；云运行目标包含 Cloudflare。见
+`docs/deployment-connections-plan.md`；历史监控能力与证据保留。
 D1、KV、R2 按实际用途选用；当前持久任务实现是 SQLite Durable Object，
 不能把它表述成已接入 D1/KV/R2，也不能因新增存储而丢失任务的持久化和幂等语义。
 

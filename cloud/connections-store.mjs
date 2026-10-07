@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { connectionInput, connectionMetadata, ownerId, validVaultKey } from './connections-contract.mjs';
 import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs';
 import { verifyConnection } from './connections-provider.mjs';
+import { resourceInput, discoverResources } from './resources.mjs';
 
 export class ConnectionVault extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
@@ -21,6 +22,61 @@ export class ConnectionVault extends DurableObject {
     sql.exec('SELECT id FROM connections LIMIT 1').toArray();
   }
   row(id) { return this.ctx.storage.sql.exec('SELECT * FROM connections WHERE id=?', id).toArray()[0]; }
+  resourceGuard(owner) {
+    this.guard(owner);
+    const sql = this.ctx.storage.sql, tables = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('resource_meta','resource_lists','resources')").toArray();
+    if (tables.length === 0) {
+      sql.exec('CREATE TABLE resource_meta (version INTEGER PRIMARY KEY CHECK(version=1))'); sql.exec('INSERT INTO resource_meta VALUES(1)');
+      sql.exec('CREATE TABLE resource_lists (connection TEXT NOT NULL, kind TEXT NOT NULL, listing TEXT NOT NULL, PRIMARY KEY(connection,kind))');
+      sql.exec('CREATE TABLE resources (id TEXT PRIMARY KEY, connection TEXT NOT NULL, kind TEXT NOT NULL, remote_id TEXT NOT NULL, metadata TEXT NOT NULL, UNIQUE(connection,kind,remote_id))');
+    } else if (tables.length !== 3 || sql.exec('SELECT version FROM resource_meta').toArray().length !== 1) throw new Error('resource storage damaged');
+  }
+  activeConnection(id, revision = null) {
+    const stored = this.row(id); if (!stored) throw new Error('missing connection');
+    const row = JSON.parse(stored.metadata);
+    if (row.state !== 'verified' || (revision !== null && row.revision !== revision)) throw new Error('connection unavailable');
+    return { row, sealed: stored.sealed };
+  }
+  resourceSnapshot(owner) {
+    return this.ctx.storage.transactionSync(() => {
+      this.resourceGuard(owner);
+      return { resources: this.ctx.storage.sql.exec('SELECT metadata FROM resources ORDER BY id').toArray().map(({metadata}) => {
+        const resource = JSON.parse(metadata), connection = JSON.parse(this.row(resource.connectionId).metadata);
+        return { ...resource, available: connection.state === 'verified' && connection.revision === resource.connectionRevision };
+      }) };
+    });
+  }
+  async resourceOperation(owner, raw) {
+    const input = resourceInput(raw); this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
+    const { row, sealed } = this.activeConnection(input.connectionId);
+    if (row.provider !== 'cloudflare') throw new Error('Cloudflare required');
+    if (input.action === 'discover') {
+      const pending = JSON.stringify({ operation: crypto.randomUUID() });
+      this.ctx.storage.sql.exec('INSERT INTO resource_lists VALUES(?,?,?) ON CONFLICT(connection,kind) DO UPDATE SET listing=excluded.listing',row.id,input.kind,pending);
+      const result = await discoverResources(row.target, await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, row, sealed), input.kind,input.cursor);
+      return this.ctx.storage.transactionSync(() => {
+        this.activeConnection(row.id,row.revision);
+        if (this.ctx.storage.sql.exec('SELECT listing FROM resource_lists WHERE connection=? AND kind=?',row.id,input.kind).one().listing !== pending) throw new Error('superseded discovery');
+        const listing = { id: crypto.randomUUID(), connectionId: row.id, connectionRevision: row.revision, accountId: row.target, kind: input.kind, checkedAt: Date.now(), ...result };
+        this.ctx.storage.sql.exec('UPDATE resource_lists SET listing=? WHERE connection=? AND kind=?',JSON.stringify(listing),row.id,input.kind);
+        return listing;
+      });
+    }
+    return this.ctx.storage.transactionSync(() => {
+      this.activeConnection(row.id,row.revision);
+      const saved = this.ctx.storage.sql.exec('SELECT listing FROM resource_lists WHERE connection=? AND kind=?',row.id,input.kind).toArray()[0];
+      const listing = saved && JSON.parse(saved.listing);
+      if (!listing || listing.id !== input.listingId || listing.connectionRevision !== row.revision || Date.now() - listing.checkedAt > 300000) throw new Error('listing expired');
+      const item = listing.items.find(r => r.id === input.resourceId); if (!item) throw new Error('resource not listed');
+      const prior = this.ctx.storage.sql.exec('SELECT metadata FROM resources WHERE connection=? AND kind=? AND remote_id=?',row.id,input.kind,item.id).toArray()[0];
+      if (!prior && this.ctx.storage.sql.exec('SELECT COUNT(*) AS n FROM resources').one().n >= 128) throw new Error('resource capacity');
+      const old = prior && JSON.parse(prior.metadata), resource = { id: old?.id ?? crypto.randomUUID(), revision: (old?.revision ?? 0) + 1,
+        connectionId: row.id, connectionRevision: row.revision, accountId: row.target, kind: input.kind, remoteId: item.id, name: item.name, checkedAt: listing.checkedAt };
+      if (old?.checkedAt === listing.checkedAt && old.connectionRevision === row.revision) return { resource: old };
+      this.ctx.storage.sql.exec('INSERT INTO resources VALUES(?,?,?,?,?) ON CONFLICT(connection,kind,remote_id) DO UPDATE SET metadata=excluded.metadata',resource.id,row.id,input.kind,item.id,JSON.stringify(resource));
+      return { resource };
+    });
+  }
   snapshot(owner) {
     return this.ctx.storage.transactionSync(() => {
       this.guard(owner);

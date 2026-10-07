@@ -50,6 +50,8 @@ jobs:
         run: node tests/browser/sba.mjs
       - name: Check encrypted connection settings with synthetic providers and actual workerd
         run: node tests/browser/connections.mjs
+      - name: Check existing cloud resource discovery and registration
+        run: node tests/browser/resources.mjs
       - name: Save demo and clearly labeled fake-backend screenshots
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

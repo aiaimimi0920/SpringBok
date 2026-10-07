@@ -1,5 +1,5 @@
 // 仅固定官方 GET。错误不带 token、上游 body、URL 或账号名称。
-async function readJson(url, token, github, transport, timeoutMs) {
+export async function readJson(url, token, github, transport = fetch, timeoutMs = 8000) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
   let reader;
   try {

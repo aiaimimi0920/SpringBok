@@ -18,8 +18,8 @@ Workers 是运行目标；D1 是数据库，KV/R2 分别是键值/对象存储�
 
 | ID | 范围 | 验收及停止条件 | 状态 |
 | --- | --- | --- | --- |
-| DC-01 | 设置页、Cloudflare/GitHub 连接添加、只读验证、加密保存、重新验证及停用 | Access/CSRF/owner 隔离；密钥不回显；SQLite 重启保持；真实浏览器合成链；默认关闭；独立 PR | 进行中 |
-| DC-02 | 基于 Cloudflare 连接列举并登记已有 D1/KV/R2 | 权限/账号核验、分页有界、资源归属与刷新状态；不创建云资源 | 待开发 |
+| DC-01 | 设置页、Cloudflare/GitHub 连接添加、只读验证、加密保存、重新验证及停用 | PR #68，main f1e6692；52 项本地、PR/main 六工作流通过；尚未启用线上 | 源码已交付 |
+| DC-02 | 基于 Cloudflare 连接列举并登记已有 D1/KV/R2 | 权限/账号核验、分页有界、资源归属与刷新状态；不创建云资源 | 已实现，待交付 |
 | DC-03 | `.sba` 驱动的应用版本、目标和资源绑定界面 | 不写死 NAccount 表单；固定 SHA、资源引用/revision、可审阅计划 | 待开发 |
 | DC-04 | 将连接和资源引用接入既有一次性执行许可链 | source/permit owner 与配置摘要绑定；停用连接阻止新部署；在途/unknown 不重放 | 待开发 |
 | DC-05 | 发布设置与整链真实手测 | 保留现有 Worker secrets/policy/DO；用户自助添加 → 配置 → GitHub Actions → 回执；不重复部署现有 NAccount | 待实施 |
@@ -68,10 +68,33 @@ Chrome + workerd 合成两供应商流程通过，桌面/390px 截图已检查�
 
 ## 发布与恢复边界
 
-本轮不发布、不改线上 secret。启用时由独立发布子任务读取当前线上配置，保留已有
+后续授权更新：用户要求完成 DC-02 至 DC-05 全流程并发布后再手测。主 AI 继续负责，
+逐个 scoped 子任务交付；允许发布 SpringBok 的本功能与必要服务端加密配置，不创建
+付费云资源、不重跑现有 NAccount 首次部署、不改其数据或旧 unknown 历史。
+
+### DC-02 领取
+
+基线 f1e6692，分支 `feat/dc-02-cloud-resources`，主 AI。
+复用 ConnectionVault，只读列举已有 D1/KV/R2，显式分页（每页最多 100）与账号/连接
+revision 绑定；只登记最近五分钟列表中的真实 ID，不接受浏览器伪造名称/账号归属。
+独立追加本地资源表，不改已有连接密文或部署任务。权限不足/连接停用/过期列表拒绝
+登记；不自动创建、删除或修改云资源。资源界面与真实 workerd/browser 回归为停止条件。
+
+DC-01/02 源码子任务不发布、不改线上 secret。DC-05 启用时由独立发布子任务读取当前线上配置，保留已有
 SBA policy/secret、五个 DO 和历史 migration，再追加 `CONNECTIONS` / `v6-connections`。
 不能直接用仓库默认 launch 配置覆盖线上动态 policy。服务端先安全生成并保存
 `CONNECTIONS_ENCRYPTION_KEY`（不得回显），再明确启用 `ENABLE_CONNECTIONS=yes`。
 回退首选关闭该开关；保留新 DO、原加密 key 和全部旧绑定，不删除数据、不撤销供应商
 密钥、不重放应用部署。新/旧页面重叠时新 API 默认关闭或仅接受严格 v1 连接输入，
 旧 SBA 仍读取原 env secrets，DC-04 前没有双写或自动迁移。
+
+## DC-02 验证
+
+61/61 聚焦 Node/workerd 检查通过；Chrome + workerd 的连接设置、资源登记、旧 SBA
+三条流程通过。覆盖 owner/CSRF、过期列表、伪造 ID、停用/修订、并发读取代际、
+失败读取失效、128 条容量、存储部分缺失、D1/KV 满页和 R2 start_after。
+身份失效会清除页面资源并禁用操作；390px 无横向溢出。只读代理审阅的两项中等
+问题均已修复并补回归。actionlint 通过（未运行 shellcheck/pyflakes）。
+证据目录：`linshi/springbok-dc-02-20261007/`；供应商与 Access 为合成测试，不是线上验收。
+官方 API 文档已联网核实：D1/database、KV/namespaces 的 page/per_page 与 R2/buckets
+的 start_after/order=name；当前 R2 只支持默认管辖区。后续安全扫描及 PR/main 按 SHA 留档。

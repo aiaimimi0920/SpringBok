@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>连接设置 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><script type="module" src="/connections.js"></script></head>
+<body>
+<header><strong>SpringBok</strong><nav aria-label="主导航"><a href="/">部署</a><a href="/settings" aria-current="page">设置</a></nav></header>
+<main>
+<h1>连接设置</h1>
+<p id="connection-identity">正在验证管理员身份…</p>
+<p id="connection-status" role="status" aria-live="polite">读取连接…</p>
+<div class="actions"><button id="connections-refresh" type="button">刷新连接</button></div>
+<section aria-labelledby="add-heading">
+<h2 id="add-heading">添加连接</h2>
+<form id="connection-form">
+<fieldset id="connection-fields" disabled>
+<label for="connection-provider">平台</label><select id="connection-provider"><option value="cloudflare">Cloudflare</option><option value="github">GitHub</option></select>
+<label for="connection-name">连接名称</label><input id="connection-name" maxlength="64" required placeholder="例如：生产 Cloudflare" autocomplete="off">
+<label id="connection-target-label" for="connection-target">Cloudflare Account ID</label><input id="connection-target" maxlength="140" required autocomplete="off" spellcheck="false" aria-describedby="connection-help">
+<label for="connection-token">API Token / GitHub PAT</label><input id="connection-token" type="password" minlength="20" maxlength="512" required autocomplete="new-password" spellcheck="false" aria-describedby="connection-secret-help">
+<p id="connection-help">需要指定账号的 Account Settings Read 权限。此处不检查部署写权限。</p>
+<p id="connection-secret-help">密钥仅加密保存在服务端，保存后不再显示。不接受 Cloudflare Global API Key。</p>
+<div class="actions"><button id="connection-save" type="submit">验证并保存</button><button id="connection-clear" type="button">清空输入</button></div>
+</fieldset>
+</form>
+</section>
+<section aria-labelledby="list-heading"><h2 id="list-heading">已添加连接</h2><p>连接验证仅检查账号或仓库的只读访问，不代表部署授权。资源选择和部署绑定尚未接入，现有部署不受影响。</p><ul id="connections-list"></ul></section>
+<dialog id="connection-disable-dialog" aria-labelledby="disable-heading"><h2 id="disable-heading">停用连接</h2><p id="connection-disable-target"></p><p>仅停用 SpringBok 中的连接，不撤销平台 Token，不停止或删除已部署服务。</p><div class="actions"><button id="connection-disable-cancel" type="button">取消</button><button id="connection-disable-confirm" type="button">确认停用</button></div></dialog>
+</main>
+</body></html>

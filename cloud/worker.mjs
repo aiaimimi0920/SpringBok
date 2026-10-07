@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { adminRequest } from './admin.mjs';
 import { isSbaMachineRequest, sbaMachineRequest } from './sba-api.mjs';
 export { SbaDeployment } from './sba-store.mjs';
+export { ConnectionVault } from './connections-store.mjs';
 import { NODE, ledger, transition } from './protocol.mjs';
 import { nodeEnrollmentRequest } from './enrollment-api.mjs';
 import { nodeCredentialRequest } from './credential-api.mjs';

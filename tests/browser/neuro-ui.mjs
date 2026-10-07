@@ -41,6 +41,10 @@ try {
   }
   assert.equal(writes, 0, 'Layout/navigation must never trigger mutations');
   await page.goto(origin + '/settings'); await page.getByText('连接已刷新', { exact: true }).waitFor();
+  assert.equal(await page.locator('.skip-link').evaluate(el => getComputedStyle(el).clipPath), 'inset(50%)');
+  await page.locator('.skip-link').focus();
+  assert.equal(await page.locator('.skip-link').evaluate(el => getComputedStyle(el).clipPath), 'none');
+  await page.keyboard.press('Enter'); assert.equal(await page.locator('main').evaluate(el => el === document.activeElement), true);
   await page.locator('#connection-name').focus();
   assert.equal(await page.locator('#connection-name').evaluate(el => getComputedStyle(el).outlineColor), 'rgb(217, 255, 56)');
   const button = page.locator('#connections-list li').first().getByRole('button', { name: '停用', exact: true });

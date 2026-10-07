@@ -79,8 +79,8 @@ dt { color: var(--neuro-text-muted); } dd { margin: 0; overflow-wrap: anywhere; 
 dialog { width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; padding: 28px; border: 1px solid var(--neuro-yellow-line); border-radius: 8px; color: var(--neuro-text); background: var(--neuro-panel); box-shadow: 0 24px 80px #0008; }
 dialog::backdrop { background: #000a; }
 body:has(dialog[open]) main { overflow: hidden; }
-.skip-link { position: fixed; left: 12px; top: -80px; z-index: 10; padding: 10px; background: var(--neuro-signal-yellow); color: var(--neuro-on-yellow); }
-.skip-link:focus-visible { top: 8px; }
+.skip-link { position: fixed; left: 12px; top: 8px; z-index: 10; padding: 10px; background: var(--neuro-signal-yellow); color: var(--neuro-on-yellow); width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip-link:focus-visible { width: auto; height: auto; clip-path: none; }
 [data-tone=error] { color: var(--neuro-danger-text); }
 [data-tone=success] { color: var(--neuro-green-text); }
 [data-tone=warning] { color: var(--neuro-signal-yellow); }

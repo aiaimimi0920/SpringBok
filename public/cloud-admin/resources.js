@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 let session, listing, busy = false, generation = 0;
-const notice = (text, tone = 'info') => { $('resource-notice').textContent = text; $('resource-notice').dataset.tone = tone; };
-function controls() { $('resource-fields').disabled = busy || !session; $('resource-refresh').disabled = busy; $('resource-next').disabled = busy || !listing?.next; }
+const notice = (text, tone = 'info') => { for (const id of ['resource-notice','resource-dialog-notice']) { $(id).textContent = text; $(id).dataset.tone = tone; } };
+function controls() { $('resource-fields').disabled = busy || !session; $('resource-refresh').disabled = busy; $('resource-next').disabled = busy || !session || !listing?.next; }
 function invalidate() { generation++; session = null; listing = null; $('resource-discovered').replaceChildren(); $('resource-registered').replaceChildren(); $('resource-connection').replaceChildren(); controls(); }
 async function request(path, body) {
   const r = await fetch(path,{ method: body ? 'POST' : 'GET',credentials:'same-origin',redirect:'error',headers: body ? {'content-type':'application/json','x-csrf-token':session?.csrf ?? ''} : {},...(body ? {body:JSON.stringify(body)} : {}) });
@@ -40,5 +40,15 @@ async function register(item,button){
 }
 $('resource-form').addEventListener('submit',event=>{event.preventDefault();void discover();});
 $('resource-next').addEventListener('click',()=>{if(listing?.next)void discover(listing.next);});
-for(const id of ['resource-kind','resource-connection'])$(id).addEventListener('change',()=>{listing=null;$('resource-discovered').replaceChildren();controls();});
+function clearListing() { listing=null;$('resource-discovered').replaceChildren();controls(); }
+$('resource-connection').addEventListener('change',()=>{clearListing();notice('请选择资源类型并读取');});
+const resourceTypes = {d1:['D1 数据库','选择 Cloudflare 连接，读取已有 D1 数据库。'],kv:['KV 键值存储','选择 Cloudflare 连接，读取已有 KV namespace。'],r2:['R2 对象存储','选择 Cloudflare 连接，读取已有 R2 bucket；当前仅支持默认管辖区。']};
+for (const radio of document.querySelectorAll('[name="resource-type"]')) radio.addEventListener('change',()=>{
+  $('resource-kind').value=radio.value;clearListing();
+  $('resource-config-title').textContent=resourceTypes[radio.value][0]+'配置';
+  $('resource-config-help').textContent=resourceTypes[radio.value][1];notice('请选择资源类型并读取');
+});
+$('resource-add').addEventListener('click',()=>{$('resource-dialog').showModal();($('resource-fields').disabled ? $('resource-close') : document.querySelector('[name="resource-type"]:checked')).focus();});
+$('resource-close').addEventListener('click',()=>{$('resource-dialog').close();});
+$('resource-dialog').addEventListener('close',()=>{$('resource-add').focus();});
 $('resource-refresh').addEventListener('click',refresh);addEventListener('pagehide',invalidate);addEventListener('pageshow',event=>{if(event.persisted)void refresh();});void refresh();

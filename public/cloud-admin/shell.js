@@ -1,5 +1,9 @@
 // Presentation only: no session, credentials, storage or deployment requests.
 const paths = {
+  add: 'M12 5v14M5 12h14',
+  database: 'M4 6a8 3 0 1 0 16 0 8 3 0 1 0-16 0m0 0v12a8 3 0 0 0 16 0V6M4 12a8 3 0 0 0 16 0',
+  keyvalue: 'M3 5h18v14H3ZM7 9h3m4 0h3M7 15h3m4 0h3',
+  bucket: 'M4 5h16l-2 16H6ZM4 5a8 2 0 0 1 16 0M8 10a4 4 0 0 0 8 0',
   brand: 'M5 3 11 7 18 3 15 10 20 14 13 14 9 21 7 13 3 9 8 9Z',
   deploy: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
   resources: 'm3 7 9-4 9 4-9 4-9-4Zm0 5 9 4 9-4M3 17l9 4 9-4',

@@ -15,6 +15,8 @@ try{
   await page.getByText('计划已生成，尚未执行部署',{exact:true}).waitFor();assert.match(await page.locator('#deploy-plan').textContent(),/test-database/);assert.equal(await page.locator('#deploy-submit').isDisabled(),false);
   await page.locator('#deploy-cancel').click();assert.equal(state.dispatches,0);
   await page.locator('#deploy-preview').click();await page.getByText('计划已生成，尚未执行部署',{exact:true}).waitFor();
+  // The notice can still describe the cancelled preview; wait for the new actionable result.
+  await page.waitForFunction(()=>!document.getElementById('deploy-submit').disabled);
   await page.locator('#deploy-submit').evaluate(button=>{button.click();button.click();});
   await page.getByText('任务已记录；请读取执行结果，GitHub workflow 成功不等于应用验收成功',{exact:true}).waitFor();assert.equal(state.dispatches,1);
   await page.reload();await page.getByText('请选择应用连接与精确版本',{exact:true}).waitFor();await page.locator('#deploy-task-open').click();await page.getByText('已读取任务记录；unknown 表示结果不确定，禁止自动重跑',{exact:true}).waitFor();

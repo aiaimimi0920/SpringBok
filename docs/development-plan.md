@@ -3,6 +3,26 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
+## UI-02：云资源图标选择弹窗（2026-10-07，实现与本地验证完成）
+
+负责人：主 AI；基线 `331cb4ba004105368958373ea84f93048202b215`，分支
+`feat/ui-02-resource-dialog`。范围：资源页右上角添加资源、原生二级弹窗、D1/KV/R2
+图标选择与对应配置；保留只读发现和登记契约，不创建云资源、不改后端或 NAccount。
+验证覆盖真实 Chrome/workerd 合成状态、键盘、关闭重开、窄屏和身份失效。
+证据目录 `linshi/springbok-ui-02-20261007/`；提交、PR、CI 和线上发布分别记录，未完成不视为交付。
+首轮 98 项聚焦检查、六条 Chrome/workerd 流程和 actionlint 通过；已查看桌面与 320px
+弹窗截图。只读审阅发现忙碌/403 关闭时焦点恢复目标被禁用，已改为添加入口始终可打开，
+仅禁用弹窗内业务字段；新增延迟请求关闭/重开不重放、键盘单选、Escape/关闭和 403
+恢复焦点回归并通过。最终源码指纹、安全扫描及精确 PR/main/发布回执存证据目录。
+浏览器使用合成 Access/Cloudflare，不能代替用户线上真实资源验收；不 dispatch NAccount。
+复验曾在既有 `tests/cloud/connections.test.mjs:10` 出现一次 undici `TypeError: terminated`，
+当轮 97/98；未修改该测试/后端，单文件针对性复验 8/8 通过。原始日志保留为
+`focused-failed-terminated.log`，原因未确定，不将失败归因为已证实的环境问题。
+随后聚焦检查 98/98 通过，旧 connected-execution 浏览器本地与 PR 首轮均曾等待提交反馈超时；
+保留 `execution-browser-failed-timeout.log`、`ci-browser-failed.log`。经延迟第二次 preview 的
+确定性复现，旧成功 notice 仍可见但提交按钮尚 disabled，测试的原生双 click 被忽略；
+补充等待新提交按钮可用，再验证双击只 dispatch 一次。只修测试同步，不改产品权限或后端。
+
 ## UI-01：Neuro 设计系统迁移（2026-10-07，实现与本地验证完成）
 
 负责人：主 AI；基线 `86e1af616bd46a305c9d014d0e9bda127e0ab1f2`，分支

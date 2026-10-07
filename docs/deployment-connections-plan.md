@@ -20,7 +20,7 @@ Workers 是运行目标；D1 是数据库，KV/R2 分别是键值/对象存储�
 | --- | --- | --- | --- |
 | DC-01 | 设置页、Cloudflare/GitHub 连接添加、只读验证、加密保存、重新验证及停用 | PR #68，main f1e6692；52 项本地、PR/main 六工作流通过；尚未启用线上 | 源码已交付 |
 | DC-02 | 基于 Cloudflare 连接列举并登记已有 D1/KV/R2 | 权限/账号核验、分页有界、资源归属与刷新状态；不创建云资源 | 已实现，待交付 |
-| DC-03 | `.sba` 驱动的应用版本、目标和资源绑定界面 | 不写死 NAccount 表单；固定 SHA、资源引用/revision、可审阅计划 | 待开发 |
+| DC-03 | `.sba` 驱动的应用版本、目标和资源绑定界面 | 不写死 NAccount 表单；固定 SHA、资源引用/revision、可审阅计划 | 已实现，待交付 |
 | DC-04 | 将连接和资源引用接入既有一次性执行许可链 | source/permit owner 与配置摘要绑定；停用连接阻止新部署；在途/unknown 不重放 | 待开发 |
 | DC-05 | 发布设置与整链真实手测 | 保留现有 Worker secrets/policy/DO；用户自助添加 → 配置 → GitHub Actions → 回执；不重复部署现有 NAccount | 待实施 |
 
@@ -98,3 +98,22 @@ SBA policy/secret、五个 DO 和历史 migration，再追加 `CONNECTIONS` / `v
 证据目录：`linshi/springbok-dc-02-20261007/`；供应商与 Access 为合成测试，不是线上验收。
 官方 API 文档已联网核实：D1/database、KV/namespaces 的 page/per_page 与 R2/buckets
 的 start_after/order=name；当前 R2 只支持默认管辖区。后续安全扫描及 PR/main 按 SHA 留档。
+
+## DC-03 领取与契约选择
+
+主 AI；基线 DC-02 PR #69 main `861ce47`；分支 `feat/dc-03-deployment-plans`。
+新增独立 `.sba/deployment.json` v1 公开表单声明，不修改 manifest v2。声明和 manifest
+都从选择的 GitHub 连接及精确提交 SHA 的正常 Git blob 读取；不接受 symlink/浮动 ref。
+仅支持 Cloudflare Workers 目标、公开文本/JSON、账号及已有 D1/KV/R2 字段，禁止任意
+表达式/命令/JSONPath。资源 ID、名称、账号由服务端登记记录构造，不信任前端填写。
+本子任务交付读取应用、配置与只读审阅，不 dispatch。DC-03-B 在 NAccount 独立仓库
+添加声明；DC-04 再接一次性执行。执行器仍是服务端固定可信仓库，应用连接只负责读源码。
+
+DC-03 本地 80/80 聚焦检查通过；声明表单、连接、资源、旧 SBA 共四条 Chrome/workerd
+流程通过，含 390px 布局、取消/编辑失效、身份失效清理。公开秘密键审阅发现已修复；
+契约见 [部署声明](sba-deployment-declaration.md)。证据 `linshi/springbok-dc-03-20261007/`。
+DC-02 主干首轮旧 telemetry-daemon 网络采样返回 unknown 而断言 available，保留失败日志，
+仅针对失败 job 复验；不得以本地或 PR 通过覆盖该记录。后续 main 回执另存。
+
+DC-02 main `861ce47` 的 Cloud Node Protocol attempt 2 通过，六工作流最终通过；
+首次失败未修改产品代码，尚不能确定网络采样瞬时 unknown 的具体环境原因。

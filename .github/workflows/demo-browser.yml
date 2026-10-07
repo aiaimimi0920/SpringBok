@@ -52,6 +52,8 @@ jobs:
         run: node tests/browser/connections.mjs
       - name: Check existing cloud resource discovery and registration
         run: node tests/browser/resources.mjs
+      - name: Check declaration-driven deployment planning without dispatch
+        run: node tests/browser/deployment-plan.mjs
       - name: Save demo and clearly labeled fake-backend screenshots
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

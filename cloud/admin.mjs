@@ -2,6 +2,7 @@ import { accessSession, signSession, sameProof, automationRoute } from './access
 import { adminSbaRequest } from './sba-api.mjs';
 import { sbaEnabled } from './sba-control.mjs';
 import { adminConnectionsRequest, connectionsEnabled } from './connections-api.mjs';
+import { adminDeploymentRequest } from './deployment-api.mjs';
 import { exact, NODE, submission } from './protocol.mjs';
 import { adminEnrollmentRequest, enrollmentEnabled } from './enrollment-api.mjs';
 import { adminNodeProbeRequest } from './node-channel-api.mjs';
@@ -13,11 +14,12 @@ export async function adminRequest(request, env, readBody) {
   try {
     const session = await accessSession(request, env), url = new URL(request.url);
     if (session.automation && !automationRoute(request.method, url.pathname)) throw new Error('automation scope denied');
-    if (request.method === 'GET' && ['/', '/resources', '/resources.html', '/resources.js', '/settings', '/settings.html', '/connections.js', '/connections.css', '/app.js', '/sba.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/network-contract.mjs', '/style.css'].includes(url.pathname)) {
+    if (request.method === 'GET' && ['/', '/deploy', '/deploy.html', '/deploy.js', '/resources', '/resources.html', '/resources.js', '/settings', '/settings.html', '/connections.js', '/connections.css', '/app.js', '/sba.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/network-contract.mjs', '/style.css'].includes(url.pathname)) {
       const response = await env.ASSETS.fetch(request);
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
     }
     if (url.pathname.startsWith('/api/admin/sba/')) return adminSbaRequest(request, env, session, readBody);
+    if (url.pathname.startsWith('/api/admin/deployments/')) return adminDeploymentRequest(request, env, session, readBody);
     if ((url.pathname.startsWith('/api/admin/connections') || url.pathname.startsWith('/api/admin/resources'))) return adminConnectionsRequest(request, env, session, readBody);
     const catalogEnabled = env.ENABLE_CATALOG === 'yes' && !!env.REGISTRY;
     if (url.pathname.startsWith('/api/admin/enrollments')) return adminEnrollmentRequest(request, env, session, readBody);

@@ -4,6 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { brandFixture } from './brand-fixture.mjs';
 import { fakeToken } from './connections-fixture.mjs';
 import { connectedFixture } from './connected-fixture.mjs';
+import { adminConnectionsRequest } from '../../cloud/connections-api.mjs';
+
+test('machine sessions never acquire brand enrollment or inventory through the admin facade',async()=>{
+  for(const path of ['/api/admin/connections','/api/admin/resources']){
+    const response=await adminConnectionsRequest(new Request('https://admin.example'+path,{method:'POST'}),{}, {automation:true},()=>{throw new Error('must not read credentials');});
+    assert.equal(response.status,403);
+  }
+});
 
 test('brand keys discover accounts atomically, list resources without registration, preserve legacy selection and parent revocation',async()=>{
   const {f,state}=await brandFixture();

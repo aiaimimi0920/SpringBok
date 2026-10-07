@@ -1,5 +1,7 @@
 // Presentation only: no session, credentials, storage or deployment requests.
 const paths = {
+  cloudflare: 'M4 17h15a3 3 0 0 0 0-6h-1a6 6 0 0 0-11-3 4 4 0 0 0-3 9Zm-2 3h20',
+  github: 'M8 21v-4c-4 1-4-2-6-2m14 6v-4c0-1-.4-2-1-2 4-.5 6-2 6-6 0-2-1-3-2-4 0-1 0-2-.5-3-2 0-3 1-4 2a14 14 0 0 0-5 0C8 3 7 2 5 2c-.5 1-.5 2-.5 3C3 6 2 7 2 9c0 4 2 5.5 6 6-.6 0-1 1-1 2',
   add: 'M12 5v14M5 12h14',
   database: 'M4 6a8 3 0 1 0 16 0 8 3 0 1 0-16 0m0 0v12a8 3 0 0 0 16 0V6M4 12a8 3 0 0 0 16 0',
   keyvalue: 'M3 5h18v14H3ZM7 9h3m4 0h3M7 15h3m4 0h3',

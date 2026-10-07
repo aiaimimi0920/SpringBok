@@ -16,7 +16,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
   await context.route('**/*', async route => {
     const req = route.request(); assert.equal(new URL(req.url()).origin, origin);
-    if (req.method() === 'POST') writes++;
+    if (req.method() === 'POST' && req.postDataJSON()?.action !== 'inventory') writes++;
     const response = await f.mf.dispatchFetch(req.url(), { method: req.method(), headers: { ...req.headers(), 'cf-access-jwt-assertion': token }, ...(req.postData() === null ? {} : { body: req.postData() }) });
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
   });
@@ -25,7 +25,7 @@ try {
   const pages = [['/', '历史部署', '#notice'], ['/settings', '连接设置', '#connection-status'], ['/resources', '云资源', '#resource-notice'], ['/deploy', '新建部署', '#deploy-notice']];
   for (const [path, label, status] of pages) {
     await page.goto(origin + path);
-    await page.waitForFunction(id => !/正在验证|读取持久记录|读取连接…/.test(document.querySelector(id).textContent), status);
+    await page.waitForFunction(id => !/正在验证|正在读取|读取持久记录|读取连接…/.test(document.querySelector(id).textContent), status);
     await page.locator('.brand svg').waitFor();
     assert.equal(await page.locator('nav a[aria-current=page]').textContent(), label);
     assert.equal(await page.locator('h1').count(), 1);

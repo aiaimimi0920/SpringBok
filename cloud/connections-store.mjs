@@ -7,6 +7,7 @@ import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connec
 import { sbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { connectedTaskId } from './connected-store.mjs';
+import { connectBrand, inventory, useRepository } from './brand-resources.mjs';
 
 export class ConnectionVault extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
@@ -39,6 +40,7 @@ export class ConnectionVault extends DurableObject {
     const stored = this.row(id); if (!stored) throw new Error('missing connection');
     const row = JSON.parse(stored.metadata);
     if (row.state !== 'verified' || (revision !== null && row.revision !== revision)) throw new Error('connection unavailable');
+    if (row.parentId) this.activeConnection(row.parentId,row.parentRevision);
     return { row, sealed: stored.sealed };
   }
   resourceSnapshot(owner) {
@@ -51,6 +53,7 @@ export class ConnectionVault extends DurableObject {
     });
   }
   async resourceOperation(owner, raw) {
+    if(raw?.action === 'inventory') return inventory(this,owner,raw);
     const input = resourceInput(raw); this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
     const { row, sealed } = this.activeConnection(input.connectionId);
     if (row.provider !== 'cloudflare') throw new Error('Cloudflare required');
@@ -84,7 +87,11 @@ export class ConnectionVault extends DurableObject {
   snapshot(owner) {
     return this.ctx.storage.transactionSync(() => {
       this.guard(owner);
-      return { connections: this.ctx.storage.sql.exec('SELECT metadata FROM connections ORDER BY id').toArray().map(r => connectionMetadata(JSON.parse(r.metadata))), deploymentIntegration: false };
+      return { connections: this.ctx.storage.sql.exec('SELECT metadata FROM connections ORDER BY id').toArray().map(r => {
+        const row=JSON.parse(r.metadata), metadata=connectionMetadata(row);
+        if(row.parentId){try{this.activeConnection(row.id,row.revision);metadata.deploymentAvailable=true;}catch{metadata.deploymentAvailable=false;}}
+        return metadata;
+      }), deploymentIntegration: false };
     });
   }
   // 仅供 Worker 内部受认证路径调用；不在任何 HTTP 响应中返回凭据。
@@ -131,6 +138,8 @@ export class ConnectionVault extends DurableObject {
     const row=JSON.parse(stored.metadata);requireSba(row.provider===provider);return openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,row,stored.sealed);
   }
   async mutate(owner, raw) {
+    if (raw?.action === 'connect') return connectBrand(this,owner,raw);
+    if (raw?.action === 'use-repository') return useRepository(this,owner,raw);
     const input = connectionInput(raw);
     this.ctx.storage.transactionSync(() => this.guard(owner));
     if (input.action === 'create') {

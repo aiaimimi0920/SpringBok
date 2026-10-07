@@ -37,7 +37,7 @@ test('service delegation denies malformed or inactive approval and every route o
   const token = f.jwt(claims());
   for (const path of ['/', '/sba.js', '/api/admin/state', '/api/admin/servers', '/api/admin/enrollments', '/api/admin/sba/new-route', '/api/admin/sba/state?key=value'])
     assert.equal((await f.call(path, { token })).status, 403, path);
-  for (const headers of [{ cookie: 'CF_Authorization=synthetic' }, { origin: 'https://foreign.invalid' }, { 'sec-fetch-site': 'cross-site' }])
+  for (const headers of [{ origin: 'https://foreign.invalid' }, { 'sec-fetch-site': 'cross-site' }])
     assert.equal((await f.call('/api/admin/sba/state', { token, headers })).status, 403);
   assert.equal((await f.call('/api/admin/sba/state', { token, method: 'POST', body: {} })).status, 403);
   f.bindings.SBA_AUTOMATION_PROOF_KEY = ''; await f.restart();
@@ -70,4 +70,22 @@ test('fresh service JWTs retain bounded proof, original owner and single submit;
   assert.equal((await f.call('/api/admin/sba/session', { token: refreshed })).status, 403);
   assert.deepEqual((await f.call('/api/admin/sba/state', { token: x.session })).json(), userState);
   assert.equal(x.state.dispatches, 1);
+});
+
+test('forwarded cookies never replace or override the verified service assertion', async t => {
+  const x = await sbaFixture(t, bindings(approval())), f = x.f, token = f.jwt(claims());
+  const session = (await f.call('/api/admin/sba/session', { token })).json();
+  for (const cookie of [`CF_Authorization=${token}`, 'CF_Authorization=untrusted; session=untrusted']) {
+    const forwarded = await f.call('/api/admin/sba/session', { token, headers: { cookie } });
+    assert.equal(forwarded.status, 200);
+    assert.deepEqual(forwarded.json(), session);
+    assert.equal((await f.call('/api/admin/sba/session', { token: null, headers: { cookie } })).status, 403);
+    assert.equal((await f.call('/api/admin/sba/session', { token: f.jwt(claims({ common_name: `${'e'.repeat(32)}.access` })), headers: { cookie } })).status, 403);
+    assert.equal((await f.call('/api/admin/state', { token, headers: { cookie } })).status, 403);
+    assert.equal((await f.call('/api/admin/sba/session', { token, headers: { cookie, origin: 'https://foreign.invalid' } })).status, 403);
+  }
+  const cookie = `CF_Authorization=${token}`, body = { taskId: 'forwarded-cookie-task' };
+  assert.equal((await f.call('/api/admin/sba/preview', { token, body, headers: { cookie } })).status, 409);
+  assert.equal((await f.call('/api/admin/sba/preview', { token, body, headers: { cookie, 'x-csrf-token': session.csrf } })).status, 200);
+  assert.equal(x.state.dispatches, 0);
 });

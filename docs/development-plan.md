@@ -858,3 +858,21 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
   Chrome/workerd synthetic 整链通过，无失败或跳过；固定归档 SHA-256 的 actionlint
   1.7.12 通过（无额外 ShellCheck/Pyflakes）。代码/测试指纹匹配、UTF-8 无 BOM。
   只读交叉审阅无确定阻断，不计独立执行；真实 token 访问和发布后原 owner 仍待实测。
+
+### SBA-05-S11 Service Token 边缘 Cookie 兼容修复（2026-10-07）
+
+- 负责人主 AI；基线 main `3e9927c317f35413d06049cb3b6405b5eaf23b71`，分支
+  `fix/sba-05-s11-access-forwarded-cookie`。S10 PR #65 head/main 六 workflows、15/13
+  checks 成功，四个产品文件匹配既有验收指纹；控制面已发布，但正确 service 访问仍 403。
+- 有界真实 tail 已确认：客户端未发送 Cookie，Access 转发给 Worker 的请求却包含 Cookie；
+  当前 service 分支的一律拒绝 Cookie 条件会阻断它。返回的 service cookie JWT 已独立
+  验签并核对 issuer/audience/time/client ID；tail 中 assertion 已脱敏，不将两者混为同一证据。
+- 只修 `cloud/access.mjs` 对冗余 Cookie 的处理并补匹配回归：身份只来自已验签 assertion，
+  Cookie 不参与认证、不能替代 assertion 或改变 owner；保留 expiry/client/scope/Origin/CSRF
+  与一次许可、unknown 历史。不会修改整个 Cloudflare organization 的 service-token 设置。
+- 范围为鉴权条件、对应 workerd 回归和专题文档；不新增 token，不变原 policy/DO/secret，
+  不恢复 unknown、不 dispatch NAccount。先红后绿、精确 PR/main 后再独立线上复测；
+  证据 `linshi/springbok-sba-05-s11-20261007/`，S10 原始失败证据保留。
+- 新 workerd 用例先以 `403 !== 200` 复现，修复后聚焦 workerd 55/55、Node 边界/契约
+  12/12、Chrome/workerd synthetic 整链通过，无失败或跳过。覆盖转发 Cookie、无 assertion、
+  错误 service identity、越权路由、跨域、缺 CSRF 和零 dispatch；线上成功仍待发布后核验。

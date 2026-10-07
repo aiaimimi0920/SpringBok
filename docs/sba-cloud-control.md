@@ -72,8 +72,11 @@ milliseconds；后者是 Worker secret，64hex。ownerActor 是显式机器委�
 owner；若身份不匹配即失败关闭，不改账本来迁就配置。
 
 服务身份只允许 GET `/api/admin/sba/session`、`/api/admin/sba/state` 及既有五个 POST
-SBA 操作的精确路径，不能读取管理静态页面、fixture/catalog/node 等接口；cookie、查询
-参数和跨域请求拒绝。session 返回 csrf、ownerId、机器认证方式与期限，不返回任何 secret
+SBA 操作的精确路径，不能读取管理静态页面、fixture/catalog/node 等接口；查询参数和
+跨域请求拒绝。Access 可能向服务请求附加 Cookie，因此 Cookie 不参与认证或 owner 判定，
+不能替代或覆盖已验签的 `cf-access-jwt-assertion`；没有有效 assertion 仍拒绝。遵循官方
+[JWT 验证入口](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)，
+不为此改变组织级认证设置。session 返回 csrf、ownerId、机器认证方式与期限，不返回任何 secret
 或 JWT。服务 proof 使用独立 secret 并绑定 clientId、批准窗口、origin、owner、purpose
 和内容，使 Access 每次刷新 JWT 不会使确认失效；每请求仍重新验身份及批准有效期，
 旧 csrf 不独立授权。原用户 proof 格式与全部 preview/submit/回执/单次许可约束不变。

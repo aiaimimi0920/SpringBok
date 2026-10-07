@@ -46,9 +46,10 @@ export async function accessSession(request, env) {
   if (payload.type !== 'app' || payload.iat > now + 5 || payload.exp <= payload.iat || payload.exp - payload.iat > 86400) throw new Error('admin not permitted');
   if (payload.sub === '') {
     // 这是明确限时的机器委托，不是邮箱登录，也不能降级为不验签的 API key。
+    // Access 可转发冗余 Cookie；身份只取已验签的 assertion，Cookie 不参与认证。
     if (Object.hasOwn(payload, 'email') || typeof env.SBA_AUTOMATION_ACCESS !== 'string' || env.SBA_AUTOMATION_ACCESS.length > 1024 ||
       typeof env.SBA_AUTOMATION_PROOF_KEY !== 'string' || !/^[a-f0-9]{64}$/.test(env.SBA_AUTOMATION_PROOF_KEY) ||
-      request.headers.has('cookie') || !automationRoute(request.method, url.pathname)) throw new Error('automation not permitted');
+      !automationRoute(request.method, url.pathname)) throw new Error('automation not permitted');
     const a = JSON.parse(env.SBA_AUTOMATION_ACCESS), keys = ['clientId', 'ownerActor', 'issuedAt', 'expiresAt'];
     const ms = Date.now();
     if (!a || typeof a !== 'object' || Array.isArray(a) || Object.keys(a).length !== keys.length || !keys.every(key => Object.hasOwn(a, key)) ||

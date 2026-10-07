@@ -378,3 +378,15 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
 - workerd 不支持 fetch redirect:error，传输层改用 manual 并严格核查状态码；已用 pinned upload-artifact 依赖的 archiver 7.0.1 本地 producer 验证 ZIP parser，仍不是实际 GitHub 上传下载验收。
 - 配置、安全前提与停止条件见 [云端首次部署控制链](sba-cloud-control.md)。证据目录为 `C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-04-s02-b-20261006/`。
 - 本项进入 scoped commit/PR/main 交付流程；精确提交、Gitleaks、远程 CI 与合并结果另记最终回执。真实 hostname、部署秘密、受保护 executor tag 及启用仍未执行；SBA-01 登录、SBA-04 真实 Actions、SBA-05 业务验收未关闭。
+### SBA-05-S02 执行启动修复领取（2026-10-06）
+
+- 负责人：主 AI；起始 main `ca4bee4ea3481c505f545ab52901816a3c15d26b`，工作树干净。
+- 管理员真实登录已通过，并从云端提交唯一任务 `sba-7fe0f4af-22da-4de4-8bc6-585815831b41`；GitHub run `37567644481` 在执行启动时返回 `SBA_WORKFLOW_UNCONFIRMED`。页面持久状态仍为 dispatched，permitAt=null；不能把已调度当作已部署。
+- 无凭据本地诊断复现：Git 拒绝 Windows Node devNull 的设备路径；同一条 rev-parse 改用 NUL 成功。真实 workflow 第一条 Git 命令失败，OIDC 调用和应用执行均为零。
+- 本项仅修 workflow Git 配置路径、增加安全阶段诊断及原生 Windows 回归/CI 入口，保留固定 SHA、过滤环境和一次许可。先红后绿、聚焦 gate、精确 PR/main 交付。
+- 不重跑 Actions、不删 DO、不清空任务、不改变既有许可/未知状态。恢复未开始任务另作独立子项；NAccount 业务及有数据升级仍未验收。
+- 证据目录：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-05-startup-20261006/`。
+
+SBA-05-S02 本地验收：原生 Windows 新回归先以 Git Invalid argument 失败；修复后聚焦检查 33 通过/1 平台跳过（无失败），覆盖原生 Git/环境隔离及 CLI 固定阶段脱敏。actionlint 1.7.12 校验归档 SHA-256 后通过（未运行 ShellCheck/Pyflakes）。未修改控制面的任务/许可数据或执行真实重试。
+
+继续无凭据真实 preflight 发现第二个独立阻塞：NAccount 为 private，匿名 fetch 固定 SHA 返回 `fatal: could not read Username for 'https://github.com': terminal prompts disabled`；OIDC/应用执行仍为零。下一子项需实现不向执行器发放广权限 token 的受控源码读取，并单独实现保留旧记录、证明许可未消费后的安全恢复；不能通过改公开仓库、清任务、换环境或手动重跑绕过。当前只有启动修复进入 PR 交付，首次发布、业务验收和升级均未完成。

@@ -39,7 +39,7 @@ async function readJson(url, options, fetchImpl) {
 }
 function git(args, cwd, environment) {
   const env = { PATH: environment.PATH ?? environment.Path, SYSTEMROOT: environment.SYSTEMROOT ?? environment.SystemRoot,
-    GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull, GIT_TERMINAL_PROMPT: '0' };
+    GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : devNull, GIT_TERMINAL_PROMPT: '0' };
   return execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.fsmonitor=false', ...args], {
     cwd, env, encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
@@ -54,17 +54,22 @@ async function checkoutApplication({ request, directory, environment, executorSh
   return inspectCheckout(checkout, request);
 }
 export async function runSbaWorkflow({ environment = process.env, fetchImpl = fetch, checkout = checkoutApplication,
-  execute = executeCheckout, tempRoot = environment.RUNNER_TEMP } = {}) {
+  execute = executeCheckout, tempRoot = environment.RUNNER_TEMP, onStage = () => {} } = {}) {
+  onStage('input');
   const input = await workflowInput(environment);
+  onStage('workspace');
   const temporary = await realpath(tempRoot), directory = await mkdtemp(join(temporary, 'sba-workflow-'));
+  onStage('checkout');
   const checked = await checkout({ ...input, directory, environment });
   if (canonicalSba(checked.input) !== canonicalSba(input.request)) reject();
+  onStage('oidc');
   const oidcUrl = new URL(environment.ACTIONS_ID_TOKEN_REQUEST_URL);
   if (oidcUrl.protocol !== 'https:' || oidcUrl.username || oidcUrl.password || oidcUrl.port ||
       !oidcUrl.hostname.endsWith('.actions.githubusercontent.com') || !environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN) reject();
   oidcUrl.searchParams.set('audience', input.endpoint);
   const identity = await readJson(oidcUrl.href, { headers: { authorization: `Bearer ${environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } }, fetchImpl);
   if (typeof identity.value !== 'string' || !identity.value || identity.value.length > 16384) reject();
+  onStage('permit');
   // 不重试：POST 的任何丢响应都可能已经消费许可。
   const permit = await readJson(input.endpoint, { method: 'POST', headers: { authorization: `Bearer ${identity.value}`, 'content-type': 'application/json' },
     body: JSON.stringify({ taskId: input.request.taskId, requestDigest: environment.SBA_REQUEST_SHA256 }) }, fetchImpl);
@@ -73,8 +78,10 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
       !permit.secrets || typeof permit.secrets !== 'object' || Array.isArray(permit.secrets) ||
       canonicalSba(Object.keys(permit.secrets).sort()) !== canonicalSba([...checked.manifest.secrets].sort()) ||
       Object.values(permit.secrets).some(value => typeof value !== 'string' || !value)) reject();
+  onStage('execution');
   const execution = await execute({ checkout: checked.root, request: input.request, tempRoot: directory,
     environment: { ...environment, ...permit.secrets } });
+  onStage('receipt');
   const envelope = { schemaVersion: 1, runId: input.runId, runAttempt: 1, executorSha: input.executorSha,
     requestDigest: environment.SBA_REQUEST_SHA256, permitId: permit.permitId, result: execution.result };
   // 只上传确定的回执，不上传 checkout、输入、环境或应用原始日志。
@@ -83,6 +90,8 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
   return envelope;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  try { if (process.platform !== 'win32') reject(); await runSbaWorkflow(); }
-  catch { console.error('SBA_WORKFLOW_UNCONFIRMED'); process.exitCode = 1; }
+  let stage = 'platform';
+  try { if (process.platform !== 'win32') reject(); await runSbaWorkflow({ onStage: value => { stage = value; } }); }
+  // 只输出代码内的固定阶段名，不输出异常、Git/应用日志、输入或环境。
+  catch { console.error(`SBA_WORKFLOW_UNCONFIRMED stage=${stage}`); process.exitCode = 1; }
 }

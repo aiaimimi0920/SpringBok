@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 let session = null, connections = [], generation = 0, busy = false, lastRead = 0, createId = crypto.randomUUID();
-const labels = { worker:'Workers', d1:'D1 数据库', kv:'KV 键值存储', r2:'R2 对象存储', repository:'GitHub 仓库' };
+const labels = { worker:'Workers', d1:'D1 数据库', kv:'KV 键值存储', r2:'R2 对象存储（默认管辖区）', repository:'GitHub 仓库' };
 const notice = (text, tone='info') => { for (const id of ['resource-notice','resource-dialog-notice']) { $(id).textContent=text; $(id).dataset.tone=tone; } };
 const clearSecret = () => { $('resource-token').value=''; };
 function controls() { $('resource-fields').disabled=busy || !session; }

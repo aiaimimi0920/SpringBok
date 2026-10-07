@@ -1,6 +1,6 @@
 # SpringBok UI 设计规范
 
-版本：UI-01 · 2026-10-07。适用范围：`public/cloud-admin/` 的正式云管理界面。
+版本：UI-03 · 2026-10-07。适用范围：`public/cloud-admin/` 的正式云管理界面。
 本文件是 Neuro 设计方案在 SpringBok 中的落地规则，不另建竞争主题。
 
 ## 1. 权威来源与当前实现

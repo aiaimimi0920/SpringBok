@@ -3,6 +3,9 @@ import { connectionInput, connectionMetadata, ownerId, validVaultKey } from './c
 import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs';
 import { verifyConnection } from './connections-provider.mjs';
 import { resourceInput, discoverResources } from './resources.mjs';
+import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connectionReference } from './deployment-contract.mjs';
+import { sbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
+import { createGithubExecutor } from '../src/sba/github.mjs';
 
 export class ConnectionVault extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
@@ -82,6 +85,26 @@ export class ConnectionVault extends DurableObject {
       this.guard(owner);
       return { connections: this.ctx.storage.sql.exec('SELECT metadata FROM connections ORDER BY id').toArray().map(r => connectionMetadata(JSON.parse(r.metadata))), deploymentIntegration: false };
     });
+  }
+  // 仅供 Worker 内部受认证路径调用；不在任何 HTTP 响应中返回凭据。
+  async deploymentDraft(owner, raw) {
+    const input=deploymentInput(raw);this.ctx.storage.transactionSync(()=>this.resourceGuard(owner));
+    const {row:github,sealed}=this.activeConnection(input.github.id,input.github.revision);requireSba(github.provider==='github');
+    const base=sbaPolicy(this.env), executor=createGithubExecutor({...base.github,applicationRepository:github.target},{token:await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,github,sealed)});
+    const manifest=await executor.readManifest(input.sourceSha), declaration=deploymentDeclaration(await executor.readDeclaration(input.sourceSha));
+    requireSba(manifest.secrets.length===1&&manifest.secrets[0]==='CLOUDFLARE_API_TOKEN');
+    this.activeConnection(github.id,github.revision);
+    const application={repository:github.target,sourceSha:input.sourceSha,manifest,declaration};
+    if(input.action==='application')return application;
+    const {row:cloudflare}=this.activeConnection(input.cloudflare.id,input.cloudflare.revision);requireSba(cloudflare.provider==='cloudflare');
+    const resources={};
+    for(const field of declaration.resources){const ref=connectionReference(input.resources[field.key]);const stored=this.ctx.storage.sql.exec('SELECT metadata FROM resources WHERE id=?',ref.id).toArray()[0];requireSba(stored);const row=JSON.parse(stored.metadata);
+      requireSba(row.revision===ref.revision&&row.connectionId===cloudflare.id&&row.connectionRevision===cloudflare.revision&&Date.now()-row.checkedAt<=300000);resources[field.key]=row;}
+    requireSba(Object.keys(input.resources).length===declaration.resources.length);
+    const configuration=deploymentConfiguration(declaration,input.values,resources,cloudflare.target);
+    const policy={...base,github:{...base.github,applicationRepository:github.target},sourceSha:input.sourceSha,environment:input.environment,configuration,secretNames:manifest.secrets};
+    sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(policy)});
+    return {application,policy,connections:{github:input.github,cloudflare:input.cloudflare},resources,configuration,digest:await sbaDigest({application,policy,connections:{github:input.github,cloudflare:input.cloudflare},resources})};
   }
   async mutate(owner, raw) {
     const input = connectionInput(raw);

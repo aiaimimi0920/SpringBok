@@ -21,7 +21,7 @@ export async function accessSession(request, env) {
   const allowed = JSON.parse(env.ADMIN_EMAILS ?? '[]');
   if (!Array.isArray(allowed) || allowed.length !== 1 || typeof allowed[0] !== 'string' || allowed[0] !== allowed[0].trim().toLowerCase() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(allowed[0])) throw new Error('admin disabled');
   const url = new URL(request.url);
-  const navigation = request.method === 'GET' && ['/', '/settings', '/settings.html', '/resources', '/resources.html'].includes(url.pathname); // Safe page entry from an external link; identity is still required.
+  const navigation = request.method === 'GET' && ['/', '/settings', '/settings.html', '/deploy', '/deploy.html', '/resources', '/resources.html'].includes(url.pathname); // Safe page entry from an external link; identity is still required.
   if (url.origin !== origin || url.search || (request.headers.has('origin') && request.headers.get('origin') !== origin) || (!navigation && request.headers.has('sec-fetch-site') && !['same-origin', 'none'].includes(request.headers.get('sec-fetch-site')))) throw new Error('admin request denied');
   const token = request.headers.get('cf-access-jwt-assertion');
   if (typeof token !== 'string' || token.length > 8192) throw new Error('admin identity required');

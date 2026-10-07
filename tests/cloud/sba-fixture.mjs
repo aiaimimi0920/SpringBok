@@ -13,7 +13,7 @@ const manifest = { schemaVersion: 2, id: 'sample-app', name: 'Sample', version: 
   actions: { deploy: { timeoutSeconds: 60 }, update: { timeoutSeconds: 60 }, verify: { timeoutSeconds: 60 } }, secrets: policy.secretNames };
 export async function sbaFixture(t, overrides = {}) {
   const state = { sourceRequests: 0, sourceStatus: 200, sourceBytes: Buffer.from('synthetic-source-bytes'), urls: [], dispatches: 0, title: null, requestDigest: null, runStatus: 'in_progress', archive: null, badTitle: false, networkDown: false, dispatchLost: false };
-  const f = await adminFixture({ ENABLE_SBA: 'yes', SBA_POLICY: JSON.stringify(policy), SBA_GITHUB_TOKEN: 'synthetic-github',
+  const f = await adminFixture({ ENABLE_SBA: 'yes', SBA_POLICY: JSON.stringify(policy), SBA_GITHUB_TOKEN: 'synthetic-github', SBA_RECOVERY_EXECUTOR_SHA: 'f'.repeat(40),
     SBA_APPLICATION_SECRETS: JSON.stringify({ CLOUDFLARE_API_TOKEN: 'synthetic-deployment-secret', UNRELATED_SECRET: 'never-return' }), ...overrides },
   { sba: true, outbound: async (request, { jwk }) => {
     const url = request.url; state.urls.push(url);
@@ -44,7 +44,7 @@ export async function sbaFixture(t, overrides = {}) {
     }
     if (url.endsWith('/actions/runs/456')) return Response.json({ id: 456, workflow_id: 99, event: 'workflow_dispatch', head_sha: sha, head_branch: policy.github.ref,
       path: policy.github.workflowPath, run_attempt: 1, repository: { id: 123, full_name: policy.github.repository }, head_repository: { id: 123, full_name: policy.github.repository },
-      display_title: state.badTitle ? 'wrong-task' : state.title, pull_requests: [], status: state.runStatus, conclusion: state.runStatus === 'completed' ? 'success' : null });
+      display_title: state.badTitle ? 'wrong-task' : state.title, pull_requests: [], status: state.runStatus, conclusion: state.runStatus === 'completed' ? (state.conclusion ?? 'success') : null });
     if (url.endsWith('/actions/runs/456/artifacts?per_page=100')) return Response.json({ total_count: 1, artifacts: [{ id: 789,
       name: `sba-result-${state.request.taskId}-${state.requestDigest}`, expired: false, size_in_bytes: state.archive.length,
       digest: `sha256:${createHash('sha256').update(state.archive).digest('hex')}`,

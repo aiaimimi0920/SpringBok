@@ -94,7 +94,7 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
       return { status: 'dispatched', runId: value.workflow_run_id, requestDigest: binding.requestDigest };
     } catch { return { status: 'unknown', runId: null, requestDigest: binding.requestDigest, errorCode: 'SBA_GITHUB_DISPATCH_UNKNOWN' }; }
   }
-  async function inspectRun(runId, request, manifest) {
+  async function readRun(runId, request, manifest) {
     if (!positiveId(runId)) fail('SBA_GITHUB_REQUEST_INVALID');
     const binding = await prepare(request, manifest);
     const run = await api(`${base}/actions/runs/${runId}`);
@@ -103,6 +103,18 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
         run.repository?.id !== c.repositoryId || run.repository?.full_name !== c.repository ||
         run.head_repository?.id !== c.repositoryId || run.head_repository?.full_name !== c.repository ||
         run.display_title !== binding.title || !Array.isArray(run.pull_requests) || run.pull_requests.length !== 0) fail('SBA_GITHUB_RUN_IDENTITY_INVALID');
+    return { run, binding };
+  }
+  async function inspectUnstartedRun(runId, request, manifest) {
+    const { run, binding } = await readRun(runId, request, manifest);
+    if (run.status !== 'completed' || !['failure', 'cancelled', 'timed_out'].includes(run.conclusion))
+      fail('SBA_GITHUB_RUN_NOT_TERMINAL_FAILURE');
+    // 此事实不能单独证明未执行；DO 必须在同一事务中另核许可从未消费。
+    return { runId, requestDigest: binding.requestDigest, executorSha: c.executorSha,
+      conclusion: run.conclusion, verifiedAt: Date.now() };
+  }
+  async function inspectRun(runId, request, manifest) {
+    const { run, binding } = await readRun(runId, request, manifest);
     if (['queued', 'in_progress', 'waiting', 'pending', 'requested'].includes(run.status) && run.conclusion === null)
       return { status: 'pending', runId, requestDigest: binding.requestDigest };
     if (run.status !== 'completed' || run.conclusion !== 'success')
@@ -122,5 +134,5 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     return { status: 'receipt-available', runId, requestDigest: binding.requestDigest,
       artifact: { id: artifact.id, name: artifact.name, size: artifact.size_in_bytes, digest: artifact.digest } };
   }
-  return Object.freeze({ prepare, readManifest, dispatch, inspectRun });
+  return Object.freeze({ prepare, readManifest, dispatch, inspectRun, inspectUnstartedRun });
 }

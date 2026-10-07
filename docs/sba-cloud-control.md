@@ -53,6 +53,31 @@ Worker 复用既有任务与 GitHub run 核验，只向 policy 批准的应用�
 
 ## 验收与仍开放的边界
 
+### SBA-05-S04 未开始任务恢复与执行器过渡
+
+此入口不是普通 retry/update/rollback。先把已审阅、已通过精确 head/main 检查且受保护
+的 executor SHA 写入部署配置 `SBA_RECOVERY_EXECUTOR_SHA`；未配置时恢复默认关闭。
+保持旧 `SBA_POLICY` 发布新的控制面代码，读取原任务，管理员通过已有 Access/同源/CSRF
+调用 `POST /api/admin/sba/recover-unstarted`，请求仅为 `{taskId, executorSha}`。
+管理员不能通过此接口指定任意仓库、应用 SHA、环境、配置、origin、秘密或未经部署配置批准的执行器。
+
+Worker 只读核验旧 run 的完整身份、task/digest、首次 attempt、completed 和
+failure/cancelled/timed_out。该事实本身不证明未执行：DO 在串行边界内再次验证 runId
+及所有许可字段仍为空，拒绝缺少 runId 的 dispatch uncertainty、已消费许可、结果或不匹配任务。
+60 秒内的核验事实才可用于事务；许可与恢复竞态最多成功一方。
+
+同一 SQLite 事务向 additive `sba_unstarted_history` 追加完整旧状态、旧 policy、核验事实及
+摘要链，再将活动槽设为无任务并把 metadata digest 切换到只改变 executor SHA/tag 的新 policy。
+没有删除旧记录、旧表或 DO，没有重跑/dispatch。最多保留 20 条恢复记录，达到上限失败关闭，
+不自动淘汰历史。原 schema v1 可原位读取，恢复事务标记 metadata v2 并保存历史条数和链头；
+缺行、缺表、断链或损坏 history 拒绝继续授权，旧 task ID 永久不得复用。
+
+事务后旧 policy 立即失败关闭；若响应丢失，不重复恢复或猜测 dispatch，先发布已批准的精确
+新 policy，并读取 `GET /api/admin/sba/state` 的 history/task/proof/nextPolicyDigest 核对。
+只有核对成功且 ready=true 才能按既有预览确认创建新任务；同一管理员 owner 关联保留。
+控制面的 GET/history 与页面只显示公开摘要，不输出 permitId、GitHub token 或应用秘密。
+此恢复不保证 Cloudflare 应用部署成功；短期 token 有效期、迁移和业务验收仍独立核实。
+
 证据目录：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-04-s02-b-20261006/`。
 
 - Linux 非 root 根测试：324 通过、3 跳过、0 失败；cloud suite：93/93。

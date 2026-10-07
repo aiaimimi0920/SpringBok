@@ -418,3 +418,18 @@ SBA-05-S03 接续验收与交付边界：
   正则告警阻止合并。已按 SHA-256 核验并读取 SARIF，改为 Git remote URL 精确相等断言；
   本地 workflow 9/9 回归通过。保留首轮扫描证据，不 suppress、不绕过，修复后的精确
   PR/main 结果仍须在最终回执独立核实。
+
+### SBA-05-S04 未开始任务的安全恢复（2026-10-06）
+
+负责人主 AI；基线 main `fdf80470c42a2f864fc5c6353ebb44a4014240f3`。联网重核旧 run
+completed/failure、attempt=1 和精确 task/digest/executor；线上 NAccount Workers 尚不存在。
+实现默认关闭、部署配置批准 executor SHA 的管理员恢复入口；Worker 重核旧 run，DO 原子
+拒绝已消费许可/缺失 run/未知副作用，完整归档旧任务、旧 policy 和核验事实，只过渡
+executor SHA/tag。保留原 schema v1，恢复时追加 metadata v2 和有条数/链头的历史摘要链；
+不删 DO/历史、不复用旧 task、不手动重跑或自动 dispatch。说明见 [云端控制链](sba-cloud-control.md)。
+
+本地 Windows 聚焦 24/24、workerd 41/41、Chrome/workerd synthetic 整链及历史页面通过，
+固定 actionlint 通过。交叉审阅的历史缺行缺口已修复，真实 SQLite 两次过渡后缺首行的
+失败关闭回归通过；不冒称真实 Actions/恢复/业务验收。证据 `linshi/springbok-sba-05-s04-20261006/`。
+立即 scoped commit/push、精确 PR/main 验证；发布和原许可状态必须在实际 Access 会话下另核。
+短期 Cloudflare token 无法保证覆盖当前两次构建，不用本机 CLI 发布代替产品链。

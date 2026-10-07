@@ -1,5 +1,5 @@
 import { signSession, sameProof } from './access.mjs';
-import { sbaPolicy, sbaStub, sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba } from './sba-control.mjs';
+import { sbaPolicy, sbaStub, sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba, sbaExecutorTransition } from './sba-control.mjs';
 import { createSbaOidcVerifier } from './sba-oidc.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
@@ -54,11 +54,19 @@ export async function adminSbaRequest(request, env, session, readBody) {
   try {
     const policy = sbaPolicy(env), stub = sbaStub(env, policy), url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/api/admin/sba/state') return reply(await stub.snapshot(session.actor));
-    requireSba(request.method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile'].includes(url.pathname));
+    requireSba(request.method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted'].includes(url.pathname));
     requireSba(request.headers.get('origin') === session.origin &&
       sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null)));
     const input = await readBody(request, 65536);
     const executor = createGithubExecutor(policy.github, { token: env.SBA_GITHUB_TOKEN });
+    if (url.pathname.endsWith('/recover-unstarted')) {
+      exactSba(input, ['taskId', 'executorSha']);
+      const nextPolicy = sbaExecutorTransition(env, policy, input.executorSha);
+      const job = await stub.inspect(session.actor);
+      requireSba(job && job.request.taskId === input.taskId && job.runId !== null && job.permitId === null);
+      const proof = await executor.inspectUnstartedRun(job.runId, job.request, job.manifest);
+      return reply(await stub.recoverUnstarted(session.actor, input.taskId, nextPolicy, proof));
+    }
     if (url.pathname.endsWith('/preview')) {
       exactSba(input, ['taskId']);
       requireSba(typeof input.taskId === 'string' && /^[a-z][a-z0-9-]{1,62}$/.test(input.taskId));

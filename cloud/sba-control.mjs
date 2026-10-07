@@ -34,6 +34,13 @@ export function sbaRequest(policy, taskId, manifest) {
 }
 export const sbaObjectName = p => `sba/v1/${p.github.applicationRepository}/${p.environment}`;
 export const sbaStub = (env, p) => env.SBA_TASKS.get(env.SBA_TASKS.idFromName(sbaObjectName(p)));
+export function sbaExecutorTransition(env, policy, executorSha) {
+  requireSba(typeof executorSha === 'string' && /^[a-f0-9]{40}$/.test(executorSha) && executorSha !== policy.github.executorSha &&
+    env.SBA_RECOVERY_EXECUTOR_SHA === executorSha);
+  const next = structuredClone(policy);
+  next.github.executorSha = executorSha; next.github.ref = `sba-executor-${executorSha}`;
+  return sbaPolicy({ ...env, SBA_POLICY: JSON.stringify(next) });
+}
 export function sbaSummary(job) {
   if (!job) return { mode: 'sba-first-deployment', ready: true, job: null };
   const { request, status, runId, submittedAt, permitAt, result, errorCode } = job;

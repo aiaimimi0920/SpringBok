@@ -472,3 +472,21 @@ run/repo/ref/SHA。只输出固定字段 presence/type/empty/expected 布尔投�
 JWT；不把诊断的 identityVerified 标记当作生产 context 已全通过。匹配测试12/12、固定
 actionlint 通过，独立只读审阅无确定阻断；成功链须由真实 run 验核。先 scoped Git/PR/main
 交付，再受保护 tag 单次诊断；不重跑旧任务或本机 CLI 发布。证据 `linshi/springbok-sba-05-s06-20261007/`。
+
+### SBA-05 当前停点：首次发布已发生，就绪回执与业务验收尚待闭环（2026-10-07）
+
+S07–S11 的交付与当前 S12 详细证据见[总计划](development-plan.md)。Service Token
+真实免 OTP 访问已通过；旧 unknown 经精确批准成为第四条保留历史，短期恢复批准已撤下。
+
+新任务 `sba-20261007-naccount-e7ac963` / run `37617881272` attempt 1 从 GitHub
+固定 NAccount `6964b64cdbc04ada6d896f85ba24298ac6c0b8c0` 实际发布 server/admin，D1
+有 46 条迁移、KV 有 3 个初始键。但原可信应用回执为 `unknown / NACCOUNT_READINESS_FAILED`。
+只读对照定位默认 Python-urllib 被边缘返回 403/1010；真实应用探针标识三项均 200。
+NAccount PR #4 已修复且本地 51/51，通过用户仅本 PR 的 CI 未执行例外正常合并；没有
+重新部署、关闭防护、改写 unknown 或重跑旧 run。本机只读成功不是新云端可信回执。
+
+真实注册与邮件验证 API 已通过（用户提供收到的验证码，emailVerified=1），密码登录
+进入正常 MFA 注册步骤，尚未授予管理员。MFA、登录/退出、后台授权、浏览器验收仍待
+完成；当前没有可连接浏览器，API 结果不替代 UI 验收。
+先补保留旧回执的云端独立只读复验闭环，不得用完整 deploy 重试来解除 unknown。
+SBA-05 仍未关闭，SBA-06/07/08 的有数据升级尚未执行。

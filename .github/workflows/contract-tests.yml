@@ -63,7 +63,7 @@ jobs:
         with:
           node-version: '22'
       - name: Validate SBA boundaries and native PowerShell process lifecycle without deployment credentials
-        run: node --test tests/sba-contract.test.mjs tests/sba-runner.test.mjs tests/sba-workflow.test.mjs
+        run: node --test tests/sba-contract.test.mjs tests/sba-runner.test.mjs tests/sba-workflow.test.mjs tests/sba-source.test.mjs
   isolated-fixtures:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { adminFixture, origin } from './admin-fixture.mjs';
 import { sbaDigest } from '../../cloud/sba-control.mjs';
 import { zip } from '../sba-zip-fixture.mjs';
+import { sourceWant, SOURCE_CONTENT_TYPE } from '../../src/sba/source.mjs';
 const sha = 'a'.repeat(40), sourceSha = 'b'.repeat(40);
 const policy = { github: { repository: 'owner/executor', repositoryId: 123, applicationRepository: 'owner/application', workflowId: 99,
   workflowPath: '.github/workflows/sba-execute.yml', executorSha: sha, ref: `sba-executor-${sha}` },
@@ -11,7 +12,7 @@ const manifest = { schemaVersion: 2, id: 'sample-app', name: 'Sample', version: 
   runtime: { runner: 'windows-2025', powershell: '5.1', python: '3.12', node: '22' },
   actions: { deploy: { timeoutSeconds: 60 }, update: { timeoutSeconds: 60 }, verify: { timeoutSeconds: 60 } }, secrets: policy.secretNames };
 export async function sbaFixture(t, overrides = {}) {
-  const state = { urls: [], dispatches: 0, title: null, requestDigest: null, runStatus: 'in_progress', archive: null, badTitle: false, networkDown: false, dispatchLost: false };
+  const state = { sourceRequests: 0, sourceStatus: 200, sourceBytes: Buffer.from('synthetic-source-bytes'), urls: [], dispatches: 0, title: null, requestDigest: null, runStatus: 'in_progress', archive: null, badTitle: false, networkDown: false, dispatchLost: false };
   const f = await adminFixture({ ENABLE_SBA: 'yes', SBA_POLICY: JSON.stringify(policy), SBA_GITHUB_TOKEN: 'synthetic-github',
     SBA_APPLICATION_SECRETS: JSON.stringify({ CLOUDFLARE_API_TOKEN: 'synthetic-deployment-secret', UNRELATED_SECRET: 'never-return' }), ...overrides },
   { sba: true, outbound: async (request, { jwk }) => {
@@ -19,6 +20,14 @@ export async function sbaFixture(t, overrides = {}) {
     if (url === 'https://token.actions.githubusercontent.com/.well-known/jwks') return Response.json({ keys: [jwk] });
     if (state.networkDown) return new Response(null, { status: 503 });
     if (url.startsWith('https://api.github.com/')) assert.equal(request.headers.get('authorization'), 'Bearer synthetic-github');
+    if (url === 'https://github.com/owner/application.git/git-upload-pack') {
+      state.sourceRequests++;
+      assert.equal(request.method, 'POST');
+      assert.equal(request.headers.get('authorization'), `Basic ${Buffer.from('x-access-token:synthetic-github').toString('base64')}`);
+      assert.equal(request.headers.get('content-type'), 'application/x-git-upload-pack-request');
+      assert.equal(await request.text(), sourceWant(sourceSha));
+      return new Response(state.sourceBytes, { status: state.sourceStatus, headers: { 'content-type': SOURCE_CONTENT_TYPE } });
+    }
     if (url.endsWith(`/git/commits/${sourceSha}`)) return Response.json({ sha: sourceSha, tree: { sha: '1'.repeat(40) } });
     if (url.endsWith(`/git/trees/${'1'.repeat(40)}`)) return Response.json({ sha: '1'.repeat(40), truncated: false, tree: [{ path: '.sba', type: 'tree', mode: '040000', sha: '2'.repeat(40) }] });
     if (url.endsWith(`/git/trees/${'2'.repeat(40)}`)) return Response.json({ sha: '2'.repeat(40), truncated: false, tree: [{ path: 'manifest.json', type: 'blob', mode: '100644', sha: '3'.repeat(40) }] });
@@ -61,7 +70,10 @@ export async function sbaFixture(t, overrides = {}) {
     const response = await f.mf.dispatchFetch(url, { method: 'POST', headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     return { status: response.status, value: await response.json() };
   };
-  return { f, state, post, preview, permit, token, adminState, session };
+  const source = async (extra = {}) => f.mf.dispatchFetch(`${policy.runnerOrigin}/sba/v2/source`, { method: 'POST',
+    headers: { authorization: `Bearer ${token()}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ taskId: state.request?.taskId ?? 'sba-test-task', requestDigest: state.requestDigest }), ...extra });
+  return { f, state, post, preview, permit, source, token, adminState, session };
 }
 
 export { policy, manifest, sha, sourceSha };

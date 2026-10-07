@@ -18,11 +18,11 @@ Workers 是运行目标；D1 是数据库，KV/R2 分别是键值/对象存储�
 
 | ID | 范围 | 验收及停止条件 | 状态 |
 | --- | --- | --- | --- |
-| DC-01 | 设置页、Cloudflare/GitHub 连接添加、只读验证、加密保存、重新验证及停用 | PR #68，main f1e6692；52 项本地、PR/main 六工作流通过；尚未启用线上 | 源码已交付 |
-| DC-02 | 基于 Cloudflare 连接列举并登记已有 D1/KV/R2 | 权限/账号核验、分页有界、资源归属与刷新状态；不创建云资源 | 已实现，待交付 |
-| DC-03 | `.sba` 驱动的应用版本、目标和资源绑定界面 | 不写死 NAccount 表单；固定 SHA、资源引用/revision、可审阅计划 | 已实现，待交付 |
-| DC-04 | 将连接和资源引用接入既有一次性执行许可链 | source/permit owner 与配置摘要绑定；停用连接阻止新部署；在途/unknown 不重放 | 已实现，待交付 |
-| DC-05 | 发布设置与整链真实手测 | 保留现有 Worker secrets/policy/DO；用户自助添加 → 配置 → GitHub Actions → 回执；不重复部署现有 NAccount | 待实施 |
+| DC-01 | 设置页、Cloudflare/GitHub 连接添加、只读验证、加密保存、重新验证及停用 | PR #68/main f1e6692；52 项本地、PR/main 六工作流通过 | 已交付并上线 |
+| DC-02 | 基于 Cloudflare 连接列举并登记已有 D1/KV/R2 | PR #69/main 861ce47；61 项检查；不创建云资源 | 已交付并上线 |
+| DC-03 | `.sba` 驱动的应用版本、目标和资源绑定界面 | PR #70/main 0a6957d；80 项检查；NAccount PR #5 正常合并 | 已交付并上线 |
+| DC-04 | 将连接和资源引用接入既有一次性执行许可链 | PR #71/main d1de592；98 项检查；PR/main 六工作流成功 | 已交付并上线 |
+| DC-05 | 发布设置与整链真实手测 | 保留旧 secrets/policy/DO/历史；15 项线上只读检查通过，不重复部署现有 NAccount | 已发布，真实用户整链待验收 |
 
 一次只领取一个子任务，验证后 scoped commit/push、精确 head PR 检查和正常合并。
 DC-01 不构造资源自动创建、任意 URL 探测、密钥导出、凭据轮换或任意执行器配置。
@@ -138,7 +138,9 @@ JavaScript configuration 比较不可用的 neutral 提示，各语言实际 Ana
 DC-03-B NAccount PR #5 已推送 `009b3de`，标准 52 项通过，新增 targets 后应用入口
 15 项再次通过、跨仓库实际 declaration 校验通过。私有仓库 push/PR hosted jobs 均在
 runner 启动前失败（runner_name 空、steps 0）；当前 Token 读取 check-runs 返回 403。
-已请求用户确认外部限制，不假定账单原因、不豁免、不合并、不部署该应用。
+当时已请求用户确认外部限制，没有豁免或合并。后续用户确认私有仓库 Actions 时间限制，
+并自行改为公开；两次原 run 的 attempt 2 均实际执行 9 steps 后成功。PR #5 正常合并为
+`06fdb8b99e5941a6b899bdc76991beedefc5087a`，main run `37651114730` 成功。没有重新部署应用。
 
 DC-04 本地 98/98 聚焦检查，执行/声明表单/连接/资源/旧 SBA 五条 Chrome/workerd
 流程通过。仅合成供应商，非实际应用发布。审阅发现的目标保护缺口已修复并补回归；
@@ -150,3 +152,26 @@ DC-04 本地 98/98 聚焦检查，执行/声明表单/连接/资源/旧 SBA 五�
 回退优先关闭 ENABLE_CONNECTED_DEPLOYMENTS，保留绑定/migration/加密 key，不回退
 为缺少新 DO 的配置。DC-05 发布必须从线上当前变量及 secrets 名称构造配置，不能用
 launch 默认值覆盖实际 policy。
+
+## DC-05 发布与验收记录
+
+负责人主 AI；代码发布基线为 PR #71 main `d1de5925f11e726399db304417722e2182f5549d`。
+读取当前线上配置后增量发布，新增加密 key 仅 DPAPI 保管、服务端 secret 存储，不轮换
+或记录明文。八个 DO binding 齐备，旧五个 namespace 身份不变；旧 secret、变量、CPU、
+Access app/policies 和完整旧 state 均逐项读回一致。两个功能开关已启用。
+初次 Worker version `643adf0a-7c3f-4b42-9dd5-67cd3ea5a27e` 承接 100% 流量。
+deployment 列表 message 被截短，发布后断言首次失败；没有重发，改读 exact version
+完整 message 并与 CLI version ID 匹配后通过，原失败证据保留。
+
+线上 15 项只读检查：三个页面和三个 API 匿名被拒绝，旧 service 身份仍全部 403；
+NAccount discovery/JWKS/admin 页面各 200。旧任务仍为 unknown/NACCOUNT_READINESS_FAILED，
+run `37617881272`、四条历史完整保留，不以当前探针成功覆盖原回执。
+
+当前没有可连接的真实用户浏览器；本地五条合成 UI 流程不是线上 Access 登录和真实
+云应用发布验收。没有用机器 service 权限绕过凭据管理边界，也未创建云资源或 dispatch
+应用。下一步按 [手测指南](deployment-connections-testing.md) 验证用户操作；真实发布只选
+明确授权的全新目标，已有 NAccount 不重新首次部署。已知身份冲突保护不是任意代码沙箱。
+
+收尾分支 `docs/dc-05-release-evidence` 同步文档并修正设置页一处过时提示；匹配浏览器检查、
+精确 PR/main、线上补充发布回执放在 `linshi/springbok-dc-05-20261007/`。回退首选关闭执行
+开关，保留加密 key、新旧 DO 及任务，不删除资源或重放未知任务。

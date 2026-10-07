@@ -1,11 +1,22 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>新建部署 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><script type="module" src="/deploy.js"></script></head><body>
-<header><strong>SpringBok</strong><nav aria-label="主导航"><a href="/">历史部署</a><a href="/deploy" aria-current="page">新建部署</a><a href="/settings">连接设置</a><a href="/resources">云资源</a></nav></header>
-<main><h1>新建部署</h1><p id="deploy-notice" role="status" aria-live="polite">正在验证身份…</p><button id="deploy-refresh" type="button">刷新连接与资源</button>
-<form id="deploy-form"><fieldset id="deploy-fields" disabled><section><h2>1. 应用版本</h2><label for="deploy-github">GitHub 应用连接</label><select id="deploy-github" required></select><label for="deploy-sha">精确 Git commit SHA（40 位）</label><input id="deploy-sha" pattern="[a-f0-9]{40}" maxlength="40" required autocomplete="off"><button id="deploy-load" type="button">读取应用声明</button><p id="deploy-application"></p><p>仅部署你信任的代码。应用连接读取源码；执行器由平台固定，不接受任意工作流。仓库需包含 .sba/manifest.json 和 .sba/deployment.json。</p></section>
-<section><h2>2. 运行目标与资源</h2><p>Cloudflare Workers · 首次部署。已有实例不要重新执行首次部署；更新需独立升级流程。</p><label for="deploy-cloudflare">Cloudflare 连接</label><select id="deploy-cloudflare" required></select><label for="deploy-environment">部署环境标识</label><input id="deploy-environment" pattern="[a-z][a-z0-9-]{1,62}" maxlength="63" placeholder="例如 staging" required><div id="deploy-resources"></div><p>只绑定已登记资源，不自动创建 D1、KV 或 R2。读取超过 5 分钟或连接变更后，请到云资源页重新读取并登记。</p></section>
-<section><h2>3. 应用公开配置</h2><div id="deploy-inputs"></div><p>配置随公开任务传给 GitHub Actions；不要填写密钥、密码或 Token。Cloudflare API Token 由服务端在一次性许可中单独交付。</p></section>
-<button id="deploy-preview" type="submit" disabled>审阅部署计划</button></fieldset></form>
-<section id="deploy-review" hidden><h2>4. 审阅与确认</h2><pre id="deploy-plan"></pre><p id="deploy-execution-note">此版本只生成计划，执行入口尚未启用。</p><button id="deploy-submit" type="button" disabled>确认部署</button><button id="deploy-cancel" type="button">取消审阅</button></section>
-<section><h2>部署任务</h2><button id="deploy-tasks-refresh" type="button">刷新任务列表</button><select id="deploy-tasks" aria-label="部署任务"></select><button id="deploy-task-open" type="button">打开任务</button></section>
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>新建部署 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><script type="module" src="/shell.js"></script><script type="module" src="/deploy.js"></script></head>
+<body>
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+<aside class="rail"><a class="brand" href="/" aria-label="SpringBok 首页" data-icon="brand">SpringBok</a><nav aria-label="主导航"><a href="/" data-icon="history"><span>历史部署</span></a>
+<a href="/deploy" data-icon="deploy" aria-current="page"><span>新建部署</span></a>
+<a href="/resources" data-icon="resources"><span>云资源</span></a>
+<a href="/settings" data-icon="settings" class="nav-settings"><span>连接设置</span></a></nav></aside>
+<header class="topbar"><span class="context">部署控制台 <span>/</span> <strong>新建部署</strong></span><span>Cloudflare Workers</span></header>
+<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">DEPLOYMENT</p><h1>新建部署</h1></div><button id="deploy-refresh" type="button" data-icon="refresh">刷新连接与资源</button></div>
+<div class="status-line"><p id="deploy-notice" role="status" aria-live="polite">正在验证身份…</p></div>
+<form id="deploy-form" class="deploy-board"><fieldset id="deploy-fields" disabled>
+<section><h2><span class="step">01</span>应用版本</h2><div class="form-grid"><div class="field"><label for="deploy-github">GitHub 应用连接</label><select id="deploy-github" required></select></div><div class="field"><label for="deploy-sha">精确 Git commit SHA（40 位）</label><input id="deploy-sha" pattern="[a-f0-9]{40}" maxlength="40" required autocomplete="off" placeholder="输入完整提交 SHA"></div></div><div class="actions"><button id="deploy-load" type="button">读取应用声明</button></div><p id="deploy-application"></p><p class="field-note">仅部署你信任的代码。应用连接读取源码；执行器由平台固定，不接受任意工作流。</p><details><summary>应用声明文件要求</summary><p>仓库需包含 .sba/manifest.json 和 .sba/deployment.json。</p></details></section>
+<section><h2><span class="step">02</span>运行目标与资源</h2><p>Cloudflare Workers · 首次部署。已有实例不要重新执行首次部署；更新需独立升级流程。</p><div class="form-grid"><div class="field"><label for="deploy-cloudflare">Cloudflare 连接</label><select id="deploy-cloudflare" required></select></div><div class="field"><label for="deploy-environment">部署环境标识</label><input id="deploy-environment" pattern="[a-z][a-z0-9-]{1,62}" maxlength="63" placeholder="例如 staging" required></div></div><div id="deploy-resources"></div><p class="field-note">只绑定已登记资源，不自动创建 D1、KV 或 R2。读取超过 5 分钟或连接变更后，请到云资源页重新读取并登记。</p></section>
+<section><h2><span class="step">03</span>应用公开配置</h2><div id="deploy-inputs"></div><p class="section-note">配置随公开任务传给 GitHub Actions；不要填写密钥、密码或 Token。Cloudflare API Token 由服务端在一次性许可中单独交付。</p></section>
+<div class="actions"><button id="deploy-preview" type="submit" disabled>审阅部署计划</button></div></fieldset></form>
+<section id="deploy-review" hidden><h2><span class="step">04</span>审阅与确认</h2><pre id="deploy-plan"></pre><p id="deploy-execution-note">此版本只生成计划，执行入口尚未启用。</p><div class="actions"><button id="deploy-submit" type="button" disabled>确认部署</button><button id="deploy-cancel" type="button">取消审阅</button></div></section>
+<section><div class="section-heading"><h2>部署任务</h2><button id="deploy-tasks-refresh" type="button" data-icon="refresh">刷新任务列表</button></div><div class="task-toolbar"><div class="field"><label for="deploy-tasks">选择任务</label><select id="deploy-tasks" aria-label="部署任务"></select></div><button id="deploy-task-open" type="button">打开任务</button></div></section>
 <section id="deploy-result" hidden><h2>部署结果</h2><pre id="deploy-record"></pre><a id="deploy-run" target="_blank" rel="noopener noreferrer" hidden>查看 GitHub Actions</a><button id="deploy-reconcile" type="button">读取执行结果</button></section>
-</main></body></html>
+</main>
+</body></html>

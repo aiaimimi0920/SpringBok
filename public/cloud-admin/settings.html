@@ -1,28 +1,24 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>连接设置 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><script type="module" src="/connections.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>连接设置 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><script type="module" src="/shell.js"></script><script type="module" src="/connections.js"></script></head>
 <body>
-<header><strong>SpringBok</strong><nav aria-label="主导航"><a href="/">历史部署</a><a href="/deploy">新建部署</a><a href="/settings" aria-current="page">设置</a><a href="/resources">云资源</a></nav></header>
-<main>
-<h1>连接设置</h1>
-<p id="connection-identity">正在验证管理员身份…</p>
-<p id="connection-status" role="status" aria-live="polite">读取连接…</p>
-<div class="actions"><button id="connections-refresh" type="button">刷新连接</button></div>
-<section aria-labelledby="add-heading">
-<h2 id="add-heading">添加连接</h2>
-<form id="connection-form">
-<fieldset id="connection-fields" disabled>
-<label for="connection-provider">平台</label><select id="connection-provider"><option value="cloudflare">Cloudflare</option><option value="github">GitHub</option></select>
-<label for="connection-name">连接名称</label><input id="connection-name" maxlength="64" required placeholder="例如：生产 Cloudflare" autocomplete="off">
-<label id="connection-target-label" for="connection-target">Cloudflare Account ID</label><input id="connection-target" maxlength="140" required autocomplete="off" spellcheck="false" aria-describedby="connection-help">
-<label for="connection-token">API Token / GitHub PAT</label><input id="connection-token" type="password" minlength="20" maxlength="512" required autocomplete="new-password" spellcheck="false" aria-describedby="connection-secret-help">
-<p id="connection-help">需要指定账号的 Account Settings Read 权限。此处不检查部署写权限。</p>
-<p id="connection-secret-help">密钥仅加密保存在服务端，保存后不再显示。不接受 Cloudflare Global API Key。</p>
-<div class="actions"><button id="connection-save" type="submit">验证并保存</button><button id="connection-clear" type="button">清空输入</button></div>
-</fieldset>
-</form>
-</section>
-<section aria-labelledby="list-heading"><h2 id="list-heading">已添加连接</h2><p>连接验证仅检查账号或仓库的只读访问，不代表部署写权限。保存后可在云资源页登记资源，再到新建部署页选择连接；现有部署不会自动切换。</p><ul id="connections-list"></ul></section>
-<dialog id="connection-disable-dialog" aria-labelledby="disable-heading"><h2 id="disable-heading">停用连接</h2><p id="connection-disable-target"></p><p>仅停用 SpringBok 中的连接，不撤销平台 Token，不停止或删除已部署服务。</p><div class="actions"><button id="connection-disable-cancel" type="button">取消</button><button id="connection-disable-confirm" type="button">确认停用</button></div></dialog>
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+<aside class="rail"><a class="brand" href="/" aria-label="SpringBok 首页" data-icon="brand">SpringBok</a><nav aria-label="主导航"><a href="/" data-icon="history"><span>历史部署</span></a>
+<a href="/deploy" data-icon="deploy"><span>新建部署</span></a>
+<a href="/resources" data-icon="resources"><span>云资源</span></a>
+<a href="/settings" data-icon="settings" aria-current="page" class="nav-settings"><span>连接设置</span></a></nav></aside>
+<header class="topbar"><span class="context">部署控制台 <span>/</span> <strong>连接设置</strong></span><span>Cloudflare Workers</span></header>
+<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">CONNECTIONS</p><h1>连接设置</h1></div><button id="connections-refresh" type="button" data-icon="refresh">刷新连接</button></div>
+<div class="status-line"><p id="connection-identity">正在验证管理员身份…</p><p id="connection-status" role="status" aria-live="polite">读取连接…</p></div>
+<div class="board">
+<section aria-labelledby="add-heading"><div class="section-heading"><h2 id="add-heading">添加连接</h2><span class="index">01 / CONNECT</span></div>
+<form id="connection-form"><fieldset id="connection-fields" disabled><div class="form-grid">
+<div class="field"><label for="connection-provider">平台</label><select id="connection-provider"><option value="cloudflare">Cloudflare</option><option value="github">GitHub</option></select></div>
+<div class="field"><label for="connection-name">连接名称</label><input id="connection-name" maxlength="64" required placeholder="例如：生产 Cloudflare" autocomplete="off"></div>
+<div class="field span-all"><label id="connection-target-label" for="connection-target">Cloudflare Account ID</label><input id="connection-target" maxlength="140" required autocomplete="off" spellcheck="false" aria-describedby="connection-help"><p id="connection-help">需要指定账号的 Account Settings Read 权限。此处不检查部署写权限。</p></div>
+<div class="field span-all"><label for="connection-token">API Token / GitHub PAT</label><input id="connection-token" type="password" minlength="20" maxlength="512" required autocomplete="new-password" spellcheck="false" aria-describedby="connection-secret-help"><p id="connection-secret-help">密钥仅加密保存在服务端，保存后不再显示。不接受 Cloudflare Global API Key。</p></div>
+</div><div class="actions"><button id="connection-save" type="submit">验证并保存</button><button id="connection-clear" type="button">清空输入</button></div></fieldset></form></section>
+<section aria-labelledby="list-heading"><div class="section-heading"><h2 id="list-heading">已添加连接</h2><span class="index">02 / MANAGE</span></div><ul id="connections-list"></ul><p class="section-note">只读验证不代表部署写权限。保存后到云资源页登记资源，再新建部署；现有部署不会自动切换连接。</p></section></div>
+<dialog id="connection-disable-dialog" aria-labelledby="disable-heading"><h2 id="disable-heading">停用连接</h2><p id="connection-disable-target"></p><p>仅停用 SpringBok 中的连接，不撤销平台 Token，不停止或删除已部署服务。</p><div class="actions"><button id="connection-disable-cancel" type="button" autofocus>取消</button><button id="connection-disable-confirm" type="button">确认停用</button></div></dialog>
 </main>
 </body></html>

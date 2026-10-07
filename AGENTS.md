@@ -1,5 +1,13 @@
 # SpringBok repository rules
 
+## UI 设计规则
+
+正式 cloud-admin 界面统一使用 Neuro 设计方案，先读 `docs/ui-design-system.md`。
+本地跨项目规范位于 `C:/Users/Public/nas_home/AI/GameEditor/Neuro/docs/UI设计与颜色方案/`；
+项目令牌入口为 `public/cloud-admin/tokens.css`。不得另造竞争黄/绿主色，不以视觉简化
+删除权限、风险、unknown/回执语义；保留键盘、窄屏、错误和禁用状态。修改共享布局
+需运行四页 Neuro UI 浏览器回归及受影响业务流程，合成截图不等于线上用户验收。
+
 ## 产品目的与接续开发
 
 SpringBok 是运行在 Cloudflare Workers 上的统一控制平台，包含两条产品主线：

@@ -1,6 +1,14 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SpringBok · 私有管理</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head><body>
-<header><strong>SpringBok</strong><span>私有管理 · 固定节点联调</span><a href="/deploy">新建部署</a><a href="/settings">连接设置</a></header>
-<main><h1>部署执行记录</h1><p>当前只验收 PC2 的固定测试应用：部署 v1、更新 v2、验证预期失败、回滚 v1。Gateway、Platform 等真实业务尚未接入，此结果不代表业务部署完成。</p>
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>部署记录 · SpringBok</title><link rel="stylesheet" href="/style.css"><script type="module" src="/shell.js"></script><script type="module" src="/app.js"></script></head>
+<body>
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+<aside class="rail"><a class="brand" href="/" aria-label="SpringBok 首页" data-icon="brand">SpringBok</a><nav aria-label="主导航"><a href="/" data-icon="history" aria-current="page"><span>历史部署</span></a>
+<a href="/deploy" data-icon="deploy"><span>新建部署</span></a>
+<a href="/resources" data-icon="resources"><span>云资源</span></a>
+<a href="/settings" data-icon="settings" class="nav-settings"><span>连接设置</span></a></nav></aside>
+<header class="topbar"><span class="context">部署控制台 <span>/</span> <strong>部署记录</strong></span><span>Cloudflare Workers</span></header>
+<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">DEPLOYMENT HISTORY</p><h1>部署记录</h1></div></div><details class="legacy-note"><summary>固定节点联调范围</summary><p>当前只验收 PC2 的固定测试应用：部署 v1、更新 v2、验证预期失败、回滚 v1。Gateway、Platform 等真实业务尚未接入，此结果不代表业务部署完成。</p></details>
 <p id="identity">正在验证管理员身份…</p><div class="actions"><button id="refresh">刷新记录</button><button id="start" disabled>检查并确认测试计划</button></div><p id="notice" role="status" aria-live="polite">读取持久记录…</p>
 <section id="catalog" hidden><h2>服务器与服务目录</h2><p>只登记元数据，不收集地址或凭据，不代表服务器接入或服务已部署；归档不停止、卸载或删除业务数据。有关联的未归档服务时，必须先归档服务条目才能归档服务器。</p><form id="server-form"><label for="server-name">新服务器名称</label><div class="actions server-actions"><input id="server-name" name="server-name" maxlength="128" required autocomplete="off" placeholder="例如：测试服务器"><button id="server-add" disabled>创建条目</button></div></form><p id="catalog-notice" role="status" aria-live="polite"></p><button id="catalog-refresh" type="button">刷新目录</button><ol id="servers"></ol><h3>服务目录</h3><form id="service-form"><label for="service-server">所属服务器（稳定 ID）</label><select id="service-server" required disabled></select><label for="service-name">新服务名称</label><div class="actions server-actions"><input id="service-name" maxlength="128" required autocomplete="off" placeholder="例如：网关服务"><button id="service-add" disabled>登记服务</button></div></form><ol id="services"></ol></section>
 <section id="enrollment-panel" hidden><h2>服务器加入</h2><p>加入材料只授权一个已登记目标，10 分钟内一次使用。节点需先保存独立材料，再完成加入；加入登记不代表在线、已安装或部署就绪。云端只保存摘要。</p><p id="enrollment-notice" role="status" aria-live="polite"></p><button id="enrollment-finish" type="button" hidden>恢复准备或完成目录核对</button></section>
@@ -10,4 +18,5 @@
 <dialog id="enrollment-dialog" aria-labelledby="enrollment-title"><h2 id="enrollment-title">准备一次性加入</h2><p id="enrollment-target"></p><p>先保存加入材料，再授权它的摘要。材料包含秘密，请只交给该节点；不要上传到 Git、日志或其他服务器。取消不会发起注册。</p><button id="enrollment-download" type="button">保存加入材料</button><label><input id="enrollment-confirm-saved" type="checkbox">我已确认加入材料保存成功</label><div class="actions"><button id="enrollment-cancel" type="button">取消授权</button><button id="enrollment-authorize" type="button" disabled>授权一次性加入</button></div></dialog>
 <section id="sba-panel" hidden><h2>SBA 首次部署</h2><p>仅执行服务端批准的应用版本和环境。未知结果禁止重发；刷新记录不触发部署。执行完成后可主动核对回执。</p><div class="actions"><button id="sba-start" disabled>预览首次部署</button><button id="sba-reconcile" disabled>核对执行回执</button></div><p id="sba-notice" role="status" aria-live="polite"></p><pre id="sba-record"></pre></section>
 <dialog id="sba-confirm" aria-labelledby="sba-title"><h2 id="sba-title">确认首次部署</h2><p>确认后会发起一次部署请求；响应丢失也不会自动重发。仅显示公开配置，不包含部署凭据。</p><pre id="sba-plan"></pre><div class="actions"><button id="sba-cancel">取消部署</button><button id="sba-submit" disabled>确认首次部署</button></div></dialog>
-</main></body></html>
+</main>
+</body></html>

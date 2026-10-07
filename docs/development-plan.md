@@ -3,6 +3,24 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
+## UI-01：Neuro 设计系统迁移（2026-10-07，实现与本地验证完成）
+
+负责人：主 AI；基线 `86e1af616bd46a305c9d014d0e9bda127e0ab1f2`，分支
+`feat/ui-01-neuro-design`。用户要求参考 Gateway/Crow，并使用 Neuro 唯一 UI/主题规范。
+范围：线上 cloud-admin 四页共享导航、颜色令牌、表单、列表、回执和响应式布局，以及
+项目设计指南和匹配浏览器验证。保留所有功能入口、权限反馈、表单 ID、一次性许可及
+unknown 语义；不改 NAccount、不增加主题/登录/服务器能力、不 dispatch 应用。
+停止条件：设计文档、真实产品合成状态/桌面窄屏截图及交互回归、精确 PR/main 检查后
+保留既有配置发布控制面。证据目录 `linshi/springbok-ui-01-20261007/`。
+设计规则落在 [UI 设计规范](ui-design-system.md)，AGENTS.md 已引用。初轮 98 项聚焦
+检查与四页 5 种宽度的 Chrome/workerd 检查通过；只读审阅确认原 ID/鉴权未丢失，
+可信代码警告恢复为常显。Windows 上旧 cloud-admin 浏览器在执行日志阶段报
+`execution journal currently supports Linux only`，不是通过；保留日志，交由原有
+Linux CI 检查。最终 98/98 聚焦检查、六条 Chrome/workerd 浏览器流程和 actionlint 通过，
+无本地功能失败/跳过（Linux-only 旧流程另记未在 Windows 完成）。桌面/窄屏、错误、
+禁用、焦点和审阅截图已检查；文案未伪造在线或部署成功。精确源码指纹、PR/main 与
+发布回执另存证据目录；当前交接阶段为提交审阅和控制面发布，不 dispatch 应用。
+
 > **2026-10-07 用户新优先级：** 聚焦部署，不先扩展成大运维面板。先建设
 > [连接设置、资源与目标选择](deployment-connections-plan.md)，按 DC-01 → DC-05
 > 补齐用户自助流程。用户随后要求完成 DC-02 至 DC-05 并发布后再手测；逐项交付，

@@ -56,6 +56,8 @@ jobs:
         run: node tests/browser/deployment-plan.mjs
       - name: Check connected deployment execution with synthetic GitHub and actual workerd
         run: node tests/browser/connected-execution.mjs
+      - name: Check Neuro shell, colors, responsive layouts and keyboard states
+        run: node tests/browser/neuro-ui.mjs
       - name: Save demo and clearly labeled fake-backend screenshots
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

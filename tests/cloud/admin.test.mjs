@@ -4,12 +4,12 @@ import { adminFixture, origin } from './admin-fixture.mjs';
 test('actual workerd protects all static assets and admin APIs with verified Access identity', async () => {
   const f = await adminFixture();
   try {
-    for (const path of ['/', '/app.js', '/style.css', '/api/admin/state']) assert.equal((await f.call(path, { token: null, headers: { 'cf-access-authenticated-user-email': 'owner@example.invalid' } })).status, 403);
+    for (const path of ['/', '/app.js', '/style.css', '/tokens.css', '/shell.js', '/api/admin/state']) assert.equal((await f.call(path, { token: null, headers: { 'cf-access-authenticated-user-email': 'owner@example.invalid' } })).status, 403);
     const now = Math.floor(Date.now() / 1000);
     for (const claims of [{ email: 'other@example.invalid' }, { email: undefined }, { sub: undefined }, { iss: 'https://attacker.invalid' }, { aud: ['3'.repeat(64)] }, { exp: now - 60 }, { nbf: now + 120 }, { iat: now + 120 }, { type: 'service' }, { exp: now + 90000 }]) assert.equal((await f.call('/api/admin/state', { token: f.jwt(claims) })).status, 403);
     for (const header of [{ alg: 'none' }, { alg: 'HS256' }, { kid: 'unknown' }]) assert.equal((await f.call('/api/admin/state', { token: f.jwt({}, header) })).status, 403);
     const jwt = f.jwt(); assert.equal((await f.call('/api/admin/state', { token: jwt.slice(0, -10) + 'tampered!!' })).status, 403);
-    for (const path of ['/', '/app.js', '/style.css']) { const r = await f.call(path); assert.equal(r.status, 200); assert.equal(r.headers.get('cache-control'), 'no-store'); assert.ok(!r.text.includes(f.bindings.CONTROL_TOKEN) && !r.text.includes(f.bindings.NODE_TOKEN)); }
+    for (const path of ['/', '/app.js', '/style.css', '/tokens.css', '/shell.js']) { const r = await f.call(path); assert.equal(r.status, 200); assert.equal(r.headers.get('cache-control'), 'no-store'); assert.ok(!r.text.includes(f.bindings.CONTROL_TOKEN) && !r.text.includes(f.bindings.NODE_TOKEN)); }
     assert.equal((await f.call('/control/state', { headers: { authorization: `Bearer ${f.bindings.CONTROL_TOKEN}` } })).status, 404);
     assert.equal((await f.call('/api/admin/state', { headers: { origin: 'https://other.invalid' } })).status, 403);
     assert.equal((await f.call('/api/admin/state', { headers: { 'sec-fetch-site': 'cross-site' } })).status, 403);

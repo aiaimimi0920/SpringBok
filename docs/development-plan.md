@@ -839,3 +839,22 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
   not-executed outcome 断言。真实 Chrome + workerd synthetic 整链本地通过，产品代码指纹
   不变；新 head 将完整重核，不将旧失败忽略或视为通过。Gitleaks 首提交扫描 115 commits
   无检出，最终提交另核。
+
+### SBA-05-S10 限时机器管理员访问（2026-10-07）
+
+- 负责人主 AI；基线 main `db596e74586f8c0de4dfb11da3ef5c4c90e9d92b`，分支
+  `feat/sba-05-s10-service-token-access`。S09 PR #64 精确 head/main 已通过并发布控制面；
+  原 unknown 尚未恢复，NAccount 首次部署未完成。
+- 用户要求测试阶段不再反复邮箱验证码。采用 Cloudflare Access Service Token，不关闭
+  Access、不增加公开 bypass、不改变原邮箱管理员策略。联网核官方 service JWT 形状，
+  继续 RS256/JWKS/issuer/audience/time 验核，默认关闭的最长 24 小时显式 owner 委托仅允许
+  精确 SBA 路由。稳定 proof 独立 Worker secret，JWT 刷新不破坏 CSRF/确认；每请求仍验身份。
+- 非目标：通用 API key 管理、其他管理员接口/静态页面、业务迁移和自动 unknown 解锁。
+  先匹配测试与精确 PR/main 交付，再配置一个限时 token、保原 policy/DO/secret 身份，
+  真实核验免 OTP 的允许/拒绝及既有任务 owner。随后按既有恢复批准继续独立部署。
+  NAccount 本次 CI 例外另行确认，不把机器访问授权当作 CI 例外。证据
+  `linshi/springbok-sba-05-s10-20261007/`。
+- 本地聚焦：真实 workerd 54/54、Node 管理边界/契约/安全 baseline 12/12、真实
+  Chrome/workerd synthetic 整链通过，无失败或跳过；固定归档 SHA-256 的 actionlint
+  1.7.12 通过（无额外 ShellCheck/Pyflakes）。代码/测试指纹匹配、UTF-8 无 BOM。
+  只读交叉审阅无确定阻断，不计独立执行；真实 token 访问和发布后原 owner 仍待实测。

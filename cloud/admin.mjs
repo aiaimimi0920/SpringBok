@@ -1,4 +1,4 @@
-import { accessSession, signSession, sameProof } from './access.mjs';
+import { accessSession, signSession, sameProof, automationRoute } from './access.mjs';
 import { adminSbaRequest } from './sba-api.mjs';
 import { sbaEnabled } from './sba-control.mjs';
 import { exact, NODE, submission } from './protocol.mjs';
@@ -11,6 +11,7 @@ const reply = (value, status = 200) => new Response(JSON.stringify(value), { sta
 export async function adminRequest(request, env, readBody) {
   try {
     const session = await accessSession(request, env), url = new URL(request.url);
+    if (session.automation && !automationRoute(request.method, url.pathname)) throw new Error('automation scope denied');
     if (request.method === 'GET' && ['/', '/app.js', '/sba.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/network-contract.mjs', '/style.css'].includes(url.pathname)) {
       const response = await env.ASSETS.fetch(request);
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });

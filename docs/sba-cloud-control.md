@@ -56,6 +56,32 @@ SQLite 同事务保存完整旧 unknown、已消费许可、原 policy、批准�
 缺批准、缺可信结果、过期/不匹配、网络/制品错误或历史损坏均不解锁。切换成功后撤下
 批准变量，不把这次窄批准扩展为其他 unknown 的恢复授权。
 
+### SBA-05-S10：限时 Service Token 委托
+
+测试自动化使用 Cloudflare Access 的 `CF-Access-Client-Id` / `CF-Access-Client-Secret`，
+边缘 policy 只接受专用 token，原邮箱策略保持。Worker 不信任客户端头中的身份，仍从
+`cf-access-jwt-assertion` 验 RS256、固定 issuer/audience、时间和 signed service shape：
+`type=app`、`sub=""`、无 email、`common_name` 等于批准 client ID。
+官方契约见 [Service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
+及 [Application token](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)。
+
+默认没有 `SBA_AUTOMATION_ACCESS` 和 `SBA_AUTOMATION_PROOF_KEY` 时服务身份拒绝。
+前者只含 `clientId`、`ownerActor`、`issuedAt`、`expiresAt`，最长 24 小时，时间用 epoch
+milliseconds；后者是 Worker secret，64hex。ownerActor 是显式机器委托的原操作者，不能
+由客户端选择或从 service 空 sub 推导。真实启用后先调用 session/state 核对持久任务
+owner；若身份不匹配即失败关闭，不改账本来迁就配置。
+
+服务身份只允许 GET `/api/admin/sba/session`、`/api/admin/sba/state` 及既有五个 POST
+SBA 操作的精确路径，不能读取管理静态页面、fixture/catalog/node 等接口；cookie、查询
+参数和跨域请求拒绝。session 返回 csrf、ownerId、机器认证方式与期限，不返回任何 secret
+或 JWT。服务 proof 使用独立 secret 并绑定 clientId、批准窗口、origin、owner、purpose
+和内容，使 Access 每次刷新 JWT 不会使确认失效；每请求仍重新验身份及批准有效期，
+旧 csrf 不独立授权。原用户 proof 格式与全部 preview/submit/回执/单次许可约束不变。
+
+凭据应只放受控环境变量或 OS 加密存储，不进入 Git、URL、日志、浏览器 storage 或普通
+JSON。可禁用/撤销边缘 token，或撤下委托配置及 proof secret；凭据过期不自动续期。
+机器访问不是人类邮箱登录，也不是 CI 例外、业务验收或 unknown 恢复的单独批准。
+
 制品回收先核验 run/artifact 关联，下载跳转只接受受限 Azure Blob HTTPS 主机，绝不转发 GitHub bearer。ZIP 限 64 KiB、解压限 32 KiB，只接收一个 receipt.json，并验证 SHA-256、CRC、envelope 和应用结果。应用报告成功不等于用户业务验收。
 
 ## SBA-05-S03 私有源码通道

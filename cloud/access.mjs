@@ -6,8 +6,14 @@ export function sameProof(value, expected) {
   return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) && crypto.subtle.timingSafeEqual(encode(value), encode(expected));
 }
 export async function signSession(session, purpose, value) {
-  const key = await crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', encode(session.token)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  return hex(await crypto.subtle.sign('HMAC', key, encode(JSON.stringify([purpose, session.origin, session.actor, value]))));
+  const key = await crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', encode(session.proofKey ?? session.token)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const context = [purpose, session.origin, session.actor, value];
+  if (session.automation) context.push(['access-service-token', session.automation.clientId, session.automation.issuedAt, session.automation.expiresAt]);
+  return hex(await crypto.subtle.sign('HMAC', key, encode(JSON.stringify(context))));
+}
+export function automationRoute(method, pathname) {
+  return (method === 'GET' && ['/api/admin/sba/session', '/api/admin/sba/state'].includes(pathname)) ||
+    (method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized'].includes(pathname));
 }
 export async function accessSession(request, env) {
   const origin = env.ADMIN_ORIGIN, issuer = env.ACCESS_ISSUER, audience = env.ACCESS_AUD;
@@ -35,8 +41,22 @@ export async function accessSession(request, env) {
       },
     }));
   }
-  const { payload } = await jwtVerify(token, sets.get(issuer), { algorithms: ['RS256'], issuer, audience, requiredClaims: ['sub', 'email', 'iat', 'exp', 'iss', 'aud'], clockTolerance: 5, maxTokenAge: '24h' });
+  const { payload } = await jwtVerify(token, sets.get(issuer), { algorithms: ['RS256'], issuer, audience, requiredClaims: ['sub', 'iat', 'exp', 'iss', 'aud'], clockTolerance: 5, maxTokenAge: '24h' });
   const now = Math.floor(Date.now() / 1000);
-  if (payload.type !== 'app' || typeof payload.sub !== 'string' || payload.sub.length < 1 || payload.sub.length > 128 || typeof payload.email !== 'string' || payload.email.toLowerCase() !== allowed[0] || payload.iat > now + 5 || payload.exp <= payload.iat || payload.exp - payload.iat > 86400) throw new Error('admin not permitted');
+  if (payload.type !== 'app' || payload.iat > now + 5 || payload.exp <= payload.iat || payload.exp - payload.iat > 86400) throw new Error('admin not permitted');
+  if (payload.sub === '') {
+    // 这是明确限时的机器委托，不是邮箱登录，也不能降级为不验签的 API key。
+    if (Object.hasOwn(payload, 'email') || typeof env.SBA_AUTOMATION_ACCESS !== 'string' || env.SBA_AUTOMATION_ACCESS.length > 1024 ||
+      typeof env.SBA_AUTOMATION_PROOF_KEY !== 'string' || !/^[a-f0-9]{64}$/.test(env.SBA_AUTOMATION_PROOF_KEY) ||
+      request.headers.has('cookie') || !automationRoute(request.method, url.pathname)) throw new Error('automation not permitted');
+    const a = JSON.parse(env.SBA_AUTOMATION_ACCESS), keys = ['clientId', 'ownerActor', 'issuedAt', 'expiresAt'];
+    const ms = Date.now();
+    if (!a || typeof a !== 'object' || Array.isArray(a) || Object.keys(a).length !== keys.length || !keys.every(key => Object.hasOwn(a, key)) ||
+      typeof a.clientId !== 'string' || !/^[a-f0-9]{32}\.access$/.test(a.clientId) || payload.common_name !== a.clientId ||
+      typeof a.ownerActor !== 'string' || !/^[a-f0-9]{64}$/.test(a.ownerActor) || !Number.isSafeInteger(a.issuedAt) || a.issuedAt <= 0 ||
+      !Number.isSafeInteger(a.expiresAt) || a.issuedAt > ms || a.expiresAt <= ms || a.expiresAt <= a.issuedAt || a.expiresAt > a.issuedAt + 86400000) throw new Error('automation not permitted');
+    return { token, origin, actor: a.ownerActor, automation: a, proofKey: env.SBA_AUTOMATION_PROOF_KEY };
+  }
+  if (typeof payload.sub !== 'string' || payload.sub.length < 1 || payload.sub.length > 128 || typeof payload.email !== 'string' || payload.email.toLowerCase() !== allowed[0]) throw new Error('admin not permitted');
   return { token, origin, email: payload.email, actor: hex(await crypto.subtle.digest('SHA-256', encode(JSON.stringify([issuer, payload.sub])))) };
 }

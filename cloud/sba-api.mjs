@@ -69,6 +69,12 @@ export async function sbaMachineRequest(request, env, readBody) {
 export async function adminSbaRequest(request, env, session, readBody) {
   try {
     const policy = sbaPolicy(env), stub = sbaStub(env, policy), url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/api/admin/sba/session') {
+      // 先核对持久任务 owner，不能凭一个配置的 actor 声称已取得原任务委托。
+      await stub.snapshot(session.actor);
+      return reply({ csrf: await signSession(session, 'csrf', null), ownerId: session.actor,
+        authentication: session.automation ? { type: 'access-service-token', clientId: session.automation.clientId, expiresAt: session.automation.expiresAt } : { type: 'access-user' } });
+    }
     if (request.method === 'GET' && url.pathname === '/api/admin/sba/state') return reply(await stub.snapshot(session.actor));
     requireSba(request.method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized'].includes(url.pathname));
     requireSba(request.headers.get('origin') === session.origin &&

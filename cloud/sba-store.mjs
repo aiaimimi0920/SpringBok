@@ -6,9 +6,13 @@ const id = v => Number.isSafeInteger(v) && v > 0;
 
 // 独立的首次部署槽；旧 fixture/节点账本不复用、不改名、不迁移。
 export class SbaDeployment extends DurableObject {
-  async #run(actor, operation) {
+  async policyFor(_actor) {
     const policy = sbaPolicy(this.env);
     requireSba(this.ctx.id.toString() === this.env.SBA_TASKS.idFromName(sbaObjectName(policy)).toString());
+    return policy;
+  }
+  async #run(actor, operation) {
+    const policy = await this.policyFor(actor);
     requireSba(actor === null || (typeof actor === 'string' && /^[a-f0-9]{64}$/.test(actor)));
     return this.ctx.blockConcurrencyWhile(async () => {
       const policyDigest = await sbaDigest(policy);

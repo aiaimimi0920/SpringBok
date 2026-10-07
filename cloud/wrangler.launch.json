@@ -16,7 +16,7 @@
     "ENABLE_NODE_CREDENTIALS": "no",
     "ENABLE_NODE_CHANNEL": "no",
     "ENABLE_NODE_HEARTBEAT": "no",
-    "ENABLE_NODE_TELEMETRY": "no", "ENABLE_SBA": "no", "ENABLE_CONNECTIONS": "no",
+    "ENABLE_NODE_TELEMETRY": "no", "ENABLE_SBA": "no", "ENABLE_CONNECTIONS": "no", "ENABLE_CONNECTED_DEPLOYMENTS": "no",
     "ADMIN_EMAILS": "[\"vmjcv666@gmail.com\"]",
     "ADMIN_ORIGIN": "https://springbok-test.aiaimimi.com",
     "ACCESS_ISSUER": "https://aiaimimi.cloudflareaccess.com",
@@ -27,14 +27,14 @@
       { "name": "TARGET", "class_name": "TargetMailbox" },
       { "name": "REGISTRY", "class_name": "OwnerCatalog" },
       { "name": "NODES", "class_name": "NodeMailbox" },
-      { "name": "TELEMETRY", "class_name": "NodeTelemetry" }, { "name": "SBA_TASKS", "class_name": "SbaDeployment" }, { "name": "CONNECTIONS", "class_name": "ConnectionVault" }
+      { "name": "TELEMETRY", "class_name": "NodeTelemetry" }, { "name": "SBA_TASKS", "class_name": "SbaDeployment" }, { "name": "CONNECTIONS", "class_name": "ConnectionVault" }, { "name": "CONNECTED_TASKS", "class_name": "ConnectedDeployment" }, { "name": "DEPLOYMENT_LOCKS", "class_name": "DeploymentLocks" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["TargetMailbox"] },
     { "tag": "v2-catalog", "new_sqlite_classes": ["OwnerCatalog"] },
     { "tag": "v3-node-mailbox", "new_sqlite_classes": ["NodeMailbox"] },
-    { "tag": "v4-node-telemetry", "new_sqlite_classes": ["NodeTelemetry"] }, { "tag": "v5-sba-deployment", "new_sqlite_classes": ["SbaDeployment"] }, { "tag": "v6-connections", "new_sqlite_classes": ["ConnectionVault"] }
+    { "tag": "v4-node-telemetry", "new_sqlite_classes": ["NodeTelemetry"] }, { "tag": "v5-sba-deployment", "new_sqlite_classes": ["SbaDeployment"] }, { "tag": "v6-connections", "new_sqlite_classes": ["ConnectionVault"] }, { "tag": "v7-connected-deployments", "new_sqlite_classes": ["ConnectedDeployment", "DeploymentLocks"] }
   ],
   "assets": { "directory": "../public/cloud-admin", "binding": "ASSETS", "run_worker_first": true },
   "observability": { "enabled": false }

@@ -19,7 +19,7 @@ export async function adminRequest(request, env, readBody) {
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
     }
     if (url.pathname.startsWith('/api/admin/sba/')) return adminSbaRequest(request, env, session, readBody);
-    if (url.pathname.startsWith('/api/admin/deployments/')) return adminDeploymentRequest(request, env, session, readBody);
+    if (url.pathname.startsWith('/api/admin/deployments')) return adminDeploymentRequest(request, env, session, readBody);
     if ((url.pathname.startsWith('/api/admin/connections') || url.pathname.startsWith('/api/admin/resources'))) return adminConnectionsRequest(request, env, session, readBody);
     const catalogEnabled = env.ENABLE_CATALOG === 'yes' && !!env.REGISTRY;
     if (url.pathname.startsWith('/api/admin/enrollments')) return adminEnrollmentRequest(request, env, session, readBody);

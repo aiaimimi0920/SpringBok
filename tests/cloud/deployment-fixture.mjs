@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { connectionsFixture, fakeToken } from './connections-fixture.mjs';
 import { policy, manifest, sourceSha } from './sba-fixture.mjs';
-export const declaration={schemaVersion:1,target:'cloudflare-workers',accountPath:['accountId'],defaults:{vars:{},server:{name:''}},fields:[{path:['server','name'],label:'Worker 名称',type:'text',required:true},{path:['vars'],label:'公开变量 JSON',type:'json',required:true}],resources:[{key:'database',label:'数据库',kind:'d1',idPath:['database','id'],namePath:['database','name']}]};
-export async function deploymentFixture(){
-  const {f,state}=await connectionsFixture({ENABLE_SBA:'yes',SBA_POLICY:JSON.stringify(policy),SBA_GITHUB_TOKEN:'synthetic-executor'});
+export const declaration={schemaVersion:1,target:'cloudflare-workers',accountPath:['accountId'],defaults:{vars:{},server:{name:''}},fields:[{path:['server','name'],label:'Worker 名称',type:'text',required:true},{path:['vars'],label:'公开变量 JSON',type:'json',required:true}],targets:[{kind:'worker',path:['server','name']}],resources:[{key:'database',label:'数据库',kind:'d1',idPath:['database','id'],namePath:['database','name']}]};
+export async function deploymentFixture(overrides={}){
+  const {f,state}=await connectionsFixture({ENABLE_SBA:'yes',SBA_POLICY:JSON.stringify(policy),SBA_GITHUB_TOKEN:'synthetic-executor',...overrides});
   state.symlink=false;state.declaration=declaration;
   state.provider=async request=>{
     const url=request.url;assert.equal(request.headers.get('authorization'),'Bearer '+fakeToken);

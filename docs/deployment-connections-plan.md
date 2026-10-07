@@ -21,7 +21,7 @@ Workers 是运行目标；D1 是数据库，KV/R2 分别是键值/对象存储�
 | DC-01 | 设置页、Cloudflare/GitHub 连接添加、只读验证、加密保存、重新验证及停用 | PR #68，main f1e6692；52 项本地、PR/main 六工作流通过；尚未启用线上 | 源码已交付 |
 | DC-02 | 基于 Cloudflare 连接列举并登记已有 D1/KV/R2 | 权限/账号核验、分页有界、资源归属与刷新状态；不创建云资源 | 已实现，待交付 |
 | DC-03 | `.sba` 驱动的应用版本、目标和资源绑定界面 | 不写死 NAccount 表单；固定 SHA、资源引用/revision、可审阅计划 | 已实现，待交付 |
-| DC-04 | 将连接和资源引用接入既有一次性执行许可链 | source/permit owner 与配置摘要绑定；停用连接阻止新部署；在途/unknown 不重放 | 待开发 |
+| DC-04 | 将连接和资源引用接入既有一次性执行许可链 | source/permit owner 与配置摘要绑定；停用连接阻止新部署；在途/unknown 不重放 | 已实现，待交付 |
 | DC-05 | 发布设置与整链真实手测 | 保留现有 Worker secrets/policy/DO；用户自助添加 → 配置 → GitHub Actions → 回执；不重复部署现有 NAccount | 待实施 |
 
 一次只领取一个子任务，验证后 scoped commit/push、精确 head PR 检查和正常合并。
@@ -117,3 +117,36 @@ DC-02 主干首轮旧 telemetry-daemon 网络采样返回 unknown 而断言 avai
 
 DC-02 main `861ce47` 的 Cloud Node Protocol attempt 2 通过，六工作流最终通过；
 首次失败未修改产品代码，尚不能确定网络采样瞬时 unknown 的具体环境原因。
+
+## DC-04 领取
+
+主 AI；基线 DC-03 PR #70 main `0a6957d`，分支 `feat/dc-04-connected-execution`。
+独立 ConnectedDeployment 持久每任务 policy/owner/引用，复用旧 SBA begin/permit/settle；
+旧 SbaDeployment 默认 policy 和对象名称不变，原 NAccount 任务完全不迁移。
+新增账号级串行锁与首次部署资源/环境占用；unknown/失败不释放，成功回执才释放执行
+串行锁，既有资源/环境仍禁止作为另一个首次部署复用。保留原固定 policy 资源保护。
+先持久连接授权和索引，再 claim/一次 dispatch；任何不确定结果都不得自动重新执行。
+停用阻止新的批准；已经批准的在途任务仍可在既有有限许可期限内使用其固定连接，
+停用不是撤回在途执行。secret 不进入 DO 任务、浏览器、dispatch 或日志。
+machine 仅从任务 ID 找持久 policy，严格 OIDC+run/task/digest 校验，不接受 owner 输入。
+
+
+DC-03 PR #70 已合并 main `0a6957d`，六工作流通过；PR CodeQL 汇总有主干
+JavaScript configuration 比较不可用的 neutral 提示，各语言实际 Analyze 成功，main
+实际语言分析亦通过；不称该 PR 差异告警比较已被证明完整。
+
+DC-03-B NAccount PR #5 已推送 `009b3de`，标准 52 项通过，新增 targets 后应用入口
+15 项再次通过、跨仓库实际 declaration 校验通过。私有仓库 push/PR hosted jobs 均在
+runner 启动前失败（runner_name 空、steps 0）；当前 Token 读取 check-runs 返回 403。
+已请求用户确认外部限制，不假定账单原因、不豁免、不合并、不部署该应用。
+
+DC-04 本地 98/98 聚焦检查，执行/声明表单/连接/资源/旧 SBA 五条 Chrome/workerd
+流程通过。仅合成供应商，非实际应用发布。审阅发现的目标保护缺口已修复并补回归；
+目标声明、最终配置中的已知旧身份与跨环境永久身份占用共同校验。未知准备状态可
+从索引读取 preparation-unconfirmed，禁止新任务重试。证据 `linshi/springbok-dc-04-20261007/`。
+
+增量迁移仅新增 `v7-connected-deployments` 的两个 SQLite DO 与 Vault 新表；不改旧
+表，不删除数据。混合版本期间旧 Worker 不认识新路由，新 Worker 默认执行开关关闭；
+回退优先关闭 ENABLE_CONNECTED_DEPLOYMENTS，保留绑定/migration/加密 key，不回退
+为缺少新 DO 的配置。DC-05 发布必须从线上当前变量及 secrets 名称构造配置，不能用
+launch 默认值覆盖实际 policy。

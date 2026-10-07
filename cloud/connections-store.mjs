@@ -6,6 +6,7 @@ import { resourceInput, discoverResources } from './resources.mjs';
 import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connectionReference } from './deployment-contract.mjs';
 import { sbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
+import { connectedTaskId } from './connected-store.mjs';
 
 export class ConnectionVault extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
@@ -105,6 +106,29 @@ export class ConnectionVault extends DurableObject {
     const policy={...base,github:{...base.github,applicationRepository:github.target},sourceSha:input.sourceSha,environment:input.environment,configuration,secretNames:manifest.secrets};
     sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(policy)});
     return {application,policy,connections:{github:input.github,cloudflare:input.cloudflare},resources,configuration,digest:await sbaDigest({application,policy,connections:{github:input.github,cloudflare:input.cloudflare},resources})};
+  }
+  deploymentGuard(owner){
+    this.resourceGuard(owner);const sql=this.ctx.storage.sql,tables=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('connection_deployment_meta','connection_deployments')").toArray();
+    if(!tables.length){sql.exec('CREATE TABLE connection_deployment_meta (version INTEGER PRIMARY KEY CHECK(version=1))');sql.exec('INSERT INTO connection_deployment_meta VALUES(1)');sql.exec('CREATE TABLE connection_deployments (task TEXT PRIMARY KEY,record TEXT NOT NULL)');}
+    else requireSba(tables.length===2&&sql.exec('SELECT version FROM connection_deployment_meta').toArray().length===1);
+  }
+  reserveDeployment(owner,taskId,plan){
+    connectedTaskId(taskId);return this.ctx.storage.transactionSync(()=>{
+      this.deploymentGuard(owner);const sql=this.ctx.storage.sql,prior=sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];
+      const record={taskId,digest:plan.digest,connections:plan.connections,accountId:null,createdAt:Date.now()};
+      // 声明路径可能嵌套；账号身份以已核验的 Cloudflare 连接为准。
+      const cloudflare=this.row(plan.connections.cloudflare.id);requireSba(cloudflare);record.accountId=JSON.parse(cloudflare.metadata).target;
+      if(prior){const old=JSON.parse(prior.record);requireSba(old.digest===record.digest);return old;}
+      for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
+      for(const row of Object.values(plan.resources)){const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&Date.now()-row.checkedAt<=300000);}
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
+    });
+  }
+  deploymentIndex(owner){return this.ctx.storage.transactionSync(()=>{this.deploymentGuard(owner);return this.ctx.storage.sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record));});}
+  async deploymentCredential(owner,taskId,provider){
+    this.ctx.storage.transactionSync(()=>this.deploymentGuard(owner));connectedTaskId(taskId);requireSba(['github','cloudflare'].includes(provider));
+    const saved=this.ctx.storage.sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];requireSba(saved);const record=JSON.parse(saved.record),stored=this.row(record.connections[provider].id);requireSba(stored);
+    const row=JSON.parse(stored.metadata);requireSba(row.provider===provider);return openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,row,stored.sealed);
   }
   async mutate(owner, raw) {
     const input = connectionInput(raw);

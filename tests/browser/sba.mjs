@@ -55,7 +55,8 @@ try {
   assert.equal(recovered.status, 200);
   y.f.bindings.SBA_POLICY = JSON.stringify({ ...policy, github: { ...policy.github, executorSha: 'f'.repeat(40), ref: `sba-executor-${'f'.repeat(40)}` } });
   await y.f.restart(); await page.reload(); await page.getByText('已读取持久记录，没有触发部署或自动回收', { exact: true }).waitFor();
-  assert.equal(await start.isEnabled(), true); assert.match(await page.locator('#sba-record').textContent(), /已核实未执行的历史/);
+  assert.equal(await start.isEnabled(), true); assert.match(await page.locator('#sba-record').textContent(), /归档历史（保留原 outcome，不重放旧任务）/);
+  assert.match(await page.locator('#sba-record').textContent(), /"outcome": "not-executed"/);
   assert.match(await page.locator('#sba-record').textContent(), /sba-test-task/);
   assert.doesNotMatch(await page.locator('body').textContent(), /synthetic-deployment-secret|permitId|never-return/);
   assert.equal(y.state.dispatches, 1); assert.deepEqual(errors, []);

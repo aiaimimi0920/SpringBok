@@ -1,5 +1,5 @@
 import { signSession, sameProof } from './access.mjs';
-import { sbaPolicy, sbaStub, sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba, sbaExecutorTransition } from './sba-control.mjs';
+import { sbaPolicy, sbaStub, sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba, sbaExecutorTransition, sbaAuthorizedRecovery } from './sba-control.mjs';
 import { createSbaOidcVerifier } from './sba-oidc.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
@@ -70,7 +70,7 @@ export async function adminSbaRequest(request, env, session, readBody) {
   try {
     const policy = sbaPolicy(env), stub = sbaStub(env, policy), url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/api/admin/sba/state') return reply(await stub.snapshot(session.actor));
-    requireSba(request.method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted'].includes(url.pathname));
+    requireSba(request.method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized'].includes(url.pathname));
     requireSba(request.headers.get('origin') === session.origin &&
       sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null)));
     const input = await readBody(request, 65536);
@@ -82,6 +82,22 @@ export async function adminSbaRequest(request, env, session, readBody) {
       requireSba(job && job.request.taskId === input.taskId && job.runId !== null && job.permitId === null);
       const proof = await executor.inspectUnstartedRun(job.runId, job.request, job.manifest);
       return reply(await stub.recoverUnstarted(session.actor, input.taskId, nextPolicy, proof));
+    }
+    if (url.pathname.endsWith('/recover-authorized')) {
+      exactSba(input, ['taskId', 'evidenceDigest']);
+      const { approval, nextPolicy } = await sbaAuthorizedRecovery(env, policy);
+      requireSba(input.taskId === approval.taskId && input.evidenceDigest === approval.evidenceDigest);
+      const job = await stub.inspect(session.actor);
+      requireSba(job && job.status === 'unknown' && job.result?.status === 'unknown' && job.permitId !== null &&
+        job.runId === approval.runId && job.request.taskId === approval.taskId && job.requestDigest === approval.requestDigest &&
+        await sbaDigest(job.result) === approval.resultDigest);
+      // 管理员批准不是 GitHub 回执；重新下载、验核原精确 envelope，不能用 workflow success 代替。
+      const outcome = await recoverSbaReceipt(policy.github, job, { token: env.SBA_GITHUB_TOKEN });
+      requireSba(outcome.status === 'verified-receipt');
+      await stub.settle(session.actor, outcome.envelope);
+      const proof = { runId: job.runId, requestDigest: job.requestDigest, executorSha: policy.github.executorSha,
+        conclusion: 'success', verifiedAt: Date.now() };
+      return reply(await stub.recoverAuthorized(session.actor, input.taskId, nextPolicy, proof));
     }
     if (url.pathname.endsWith('/preview')) {
       exactSba(input, ['taskId']);

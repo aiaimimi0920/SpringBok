@@ -38,6 +38,33 @@ test('authenticated preview → durable single dispatch → OIDC permit → veri
   assert.equal((await x.post('reconcile', { taskId: 'sba-test-task' })).json().job.status, 'succeeded');
   assert.equal(x.state.dispatches, 1);
 });
+
+test('authorized unknown recovery needs server approval, CSRF, exact fresh artifact and evidence and does not dispatch', async t => {
+  const x = await setup(t); await x.post('submit', await x.preview()); const permit = (await x.permit()).value;
+  const result = { schemaVersion: 2, taskId: permit.request.taskId, action: 'deploy', sourceSha,
+    applicationVersion: '1.0.0', status: 'unknown', checks: [], errorCode: 'SYNTHETIC_APPLICATION_FAILURE' };
+  x.state.archive = zip({ schemaVersion: 1, runId: 456, runAttempt: 1, executorSha: sha, requestDigest: permit.requestDigest, permitId: permit.permitId, result });
+  x.state.runStatus = 'completed'; assert.equal((await x.post('reconcile', { taskId: permit.request.taskId })).json().job.status, 'unknown');
+  const body = { taskId: permit.request.taskId, evidenceDigest: 'd'.repeat(64) }, now = Date.now();
+  const approval = { ...body, runId: 456, requestDigest: permit.requestDigest, resultDigest: await sbaDigest(result),
+    oldPolicyDigest: await sbaDigest(policy), executorSha: 'f'.repeat(40), sourceSha: 'e'.repeat(40), approvedAt: now, expiresAt: now + 3600000 };
+  assert.equal((await x.post('recover-authorized', body)).status, 409);
+  for (const changed of [{ expiresAt: now - 1 }, { oldPolicyDigest: 'f'.repeat(64) }, { resultDigest: 'f'.repeat(64) }, { runId: 457 }]) {
+    x.f.bindings.SBA_OPERATOR_RECOVERY = JSON.stringify({ ...approval, ...changed }); await x.f.restart();
+    assert.equal((await x.post('recover-authorized', body)).status, 409);
+  }
+  x.f.bindings.SBA_OPERATOR_RECOVERY = JSON.stringify(approval); await x.f.restart();
+  assert.equal((await x.post('recover-authorized', body, { headers: {} })).status, 409);
+  assert.equal((await x.post('recover-authorized', { ...body, evidenceDigest: 'f'.repeat(64) })).status, 409);
+  x.state.badTitle = true; assert.equal((await x.post('recover-authorized', body)).status, 409); x.state.badTitle = false;
+  x.state.networkDown = true; assert.equal((await x.post('recover-authorized', body)).status, 409); x.state.networkDown = false;
+  const validArchive = x.state.archive; x.state.archive = zip({ schemaVersion: 1, runId: 456, runAttempt: 1, executorSha: sha,
+    requestDigest: permit.requestDigest, permitId: 'f'.repeat(64), result });
+  assert.equal((await x.post('recover-authorized', body)).status, 409); x.state.archive = validArchive;
+  const response = await x.post('recover-authorized', body); assert.equal(response.status, 200); assert.equal(response.json().outcome, 'operator-authorized-retry');
+  assert.equal(x.state.dispatches, 1); assert.equal((await x.permit()).status, 403);
+  assert.equal((await x.post('recover-authorized', body)).status, 409);
+});
 test('unknown dispatch can be bound by exact OIDC run without redispatch; machine host exposes no admin page', async t => {
   const x = await setup(t); x.state.dispatchLost = true;
   const plan = await x.preview(); assert.equal((await x.post('submit', plan)).json().job.status, 'dispatch-unknown');

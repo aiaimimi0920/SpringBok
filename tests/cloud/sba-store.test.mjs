@@ -50,7 +50,7 @@ async function fixture(t) {
   const restart = async () => { await mf?.dispose(); mf = new Miniflare(convertV4MiniflareOptions(options)); await mf.ready; };
   t.after(async () => { await mf?.dispose(); rmSync(directory, { recursive: true, force: true }); });
   await restart();
-  return { restart, policy: async (value, approved = 'f'.repeat(40)) => { options.bindings.SBA_POLICY = JSON.stringify(value); options.bindings.SBA_RECOVERY_EXECUTOR_SHA = approved; await restart(); }, call: async (method, ...args) => {
+  return { restart, approve: async value => { options.bindings.SBA_OPERATOR_RECOVERY = JSON.stringify(value); await restart(); }, policy: async (value, approved = 'f'.repeat(40)) => { options.bindings.SBA_POLICY = JSON.stringify(value); options.bindings.SBA_RECOVERY_EXECUTOR_SHA = approved; await restart(); }, call: async (method, ...args) => {
     const response = await mf.dispatchFetch('https://test.invalid/', { method: 'POST', body: JSON.stringify({ method, args }) });
     return { status: response.status, value: response.ok ? await response.json() : await response.text() };
   } };
@@ -81,6 +81,62 @@ test('write-before-dispatch and one-time permit survive concurrency and restart'
   await f.restart();
   assert.equal((await f.call('settle', actor, envelope)).value.job.status, 'succeeded');
   assert.equal((await f.call('settle', actor, { ...envelope, result: { ...result, status: 'failed' } })).status, 409);
+});
+
+test('explicit approved unknown recovery preserves consumed permit and unknown result across restart and never reuses an old task', async t => {
+  const f = await fixture(t); await f.call('begin', actor, { request, manifest });
+  const permit = (await f.call('permit', request.taskId, requestDigest, 456)).value;
+  const result = { schemaVersion: 2, taskId: request.taskId, action: 'deploy', sourceSha: request.sourceSha,
+    applicationVersion: '1.0.0', status: 'unknown', checks: [], errorCode: 'SYNTHETIC_APPLICATION_FAILURE' };
+  const envelope = { schemaVersion: 1, runId: 456, runAttempt: 1, executorSha: policy.github.executorSha, requestDigest, permitId: permit.permitId, result };
+  await f.call('settle', actor, envelope);
+  const next = { ...successor(), sourceSha: 'e'.repeat(40) }, proof = { ...recoveryProof(), conclusion: 'success' };
+  assert.equal((await f.call('recoverAuthorized', actor, request.taskId, next, proof)).status, 409);
+  const now = Date.now(), approval = { taskId: request.taskId, runId: 456, requestDigest, resultDigest: await sbaDigest(result),
+    oldPolicyDigest: await sbaDigest(policy), executorSha: next.github.executorSha, sourceSha: next.sourceSha,
+    evidenceDigest: 'd'.repeat(64), approvedAt: now, expiresAt: now + 3600000 };
+  await f.approve(approval);
+  for (const altered of [{ ...next, configuration: { drift: true } }, successor(), policy])
+    assert.equal((await f.call('recoverAuthorized', actor, request.taskId, altered, { ...proof, verifiedAt: Date.now() })).status, 409);
+  for (const changed of [{ runId: 457 }, { conclusion: 'failure' }, { verifiedAt: Date.now() - 60001 }, { requestDigest: 'f'.repeat(64) }])
+    assert.equal((await f.call('recoverAuthorized', actor, request.taskId, next, { ...proof, ...changed })).status, 409);
+  assert.equal((await f.call('recoverAuthorized', 'd'.repeat(64), request.taskId, next, { ...proof, verifiedAt: Date.now() })).status, 409);
+  const responses = await Promise.all([1, 2].map(() => f.call('recoverAuthorized', actor, request.taskId, next, { ...proof, verifiedAt: Date.now() })));
+  assert.equal(responses.filter(x => x.status === 200).length, 1); assert.equal(responses.find(x => x.status === 200).value.outcome, 'operator-authorized-retry');
+  assert.equal((await f.call('permit', request.taskId, requestDigest, 456)).status, 409);
+  await f.policy(next); await f.restart();
+  const state = (await f.call('snapshot', actor)).value; assert.equal(state.ready, true);
+  assert.equal(state.history[0].outcome, 'operator-authorized-retry'); assert.deepEqual(state.history[0].job.result, result);
+  assert.equal(state.history[0].job.permitAt > 0, true); assert.equal(state.history[0].approval.evidenceDigest, approval.evidenceDigest);
+  assert.doesNotMatch(JSON.stringify(state), new RegExp(permit.permitId));
+  assert.equal((await f.call('begin', actor, { request: { ...request, sourceSha: next.sourceSha }, manifest })).status, 409);
+  const fresh = { ...request, sourceSha: next.sourceSha, taskId: 'new-authorized-task' };
+  assert.equal((await f.call('begin', actor, { request: fresh, manifest })).value.dispatch, true);
+  await f.call('tamperHistory'); await f.restart(); assert.equal((await f.call('snapshot', actor)).status, 409);
+});
+
+test('mixed unstarted and authorized histories retain a legal unknown result without errorCode after cutover', async t => {
+  const f = await fixture(t); await f.call('begin', actor, { request, manifest });
+  await f.call('attachRun', actor, request.taskId, { status: 'dispatched', requestDigest, runId: 456 });
+  await f.call('recoverUnstarted', actor, request.taskId, successor(), recoveryProof()); await f.policy(successor());
+  const before = (await f.call('snapshot', actor)).value.history[0];
+  const second = { ...request, taskId: 'second-unknown-task' }, digest = await sbaDigest(second);
+  await f.call('begin', actor, { request: second, manifest }); const permit = (await f.call('permit', second.taskId, digest, 457)).value;
+  const result = { schemaVersion: 2, taskId: second.taskId, action: 'deploy', sourceSha: second.sourceSha,
+    applicationVersion: '1.0.0', status: 'unknown', checks: [] };
+  await f.call('settle', actor, { schemaVersion: 1, runId: 457, runAttempt: 1, executorSha: successor().github.executorSha, requestDigest: digest, permitId: permit.permitId, result });
+  const next = { ...successor(), sourceSha: 'e'.repeat(40), github: { ...successor().github, executorSha: 'd'.repeat(40), ref: `sba-executor-${'d'.repeat(40)}` } }, now = Date.now();
+  const approval = { taskId: second.taskId, runId: 457, requestDigest: digest, resultDigest: await sbaDigest(result), oldPolicyDigest: await sbaDigest(successor()),
+    executorSha: next.github.executorSha, sourceSha: next.sourceSha, evidenceDigest: 'c'.repeat(64), approvedAt: now, expiresAt: now + 3600000 };
+  await f.approve({ ...approval, approvedAt: now - 3600001, expiresAt: now - 1 });
+  const proof = { runId: 457, requestDigest: digest, executorSha: successor().github.executorSha, conclusion: 'success', verifiedAt: Date.now() };
+  assert.equal((await f.call('recoverAuthorized', actor, second.taskId, next, proof)).status, 409);
+  await f.approve(approval);
+  assert.equal((await f.call('recoverAuthorized', actor, second.taskId, next, { ...proof, verifiedAt: Date.now() })).status, 200);
+  await f.policy(next); await f.restart(); const state = (await f.call('snapshot', actor)).value;
+  assert.equal(state.ready, true); assert.deepEqual(state.history[0], before); assert.equal(state.history.length, 2);
+  assert.equal(state.history[1].job.errorCode, null); assert.deepEqual(state.history[1].job.result, result);
+  await f.call('loseFirstHistory'); await f.restart(); assert.equal((await f.call('snapshot', actor)).status, 409);
 });
 
 const successor = () => ({ ...policy, github: { ...policy.github, executorSha: 'f'.repeat(40), ref: `sba-executor-${'f'.repeat(40)}` } });

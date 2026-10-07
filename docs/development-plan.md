@@ -811,3 +811,31 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
   未放宽机器 API。fixed SHA-256 actionlint 1.7.12 通过（无额外 ShellCheck/Pyflakes）；
   只读交叉审阅无确定阻断，不计独立执行。所有修改文本 UTF-8 无 BOM，代码/测试
   指纹绑定验收；精确 Git/PR/main、安全扫描、真实 self-match 及部署结果另记回执。
+
+### SBA-05-S09 显式批准的 unknown 任务归档与新版本过渡（2026-10-07）
+
+- 负责人主 AI；基线 `36bca2486ee3ae932b378301eb0cb1746c092037`，分支
+  `feat/sba-05-s09-authorized-unknown-recovery`。S07 PR #63 head/main 六 workflows、
+  15/13 checks 成功，真实只读 run `37596718381` 已证实 signed self-match；实际修复
+  Worker version `9a943be1-b335-447c-93c1-057fa2300e59`，前三条未执行历史完整保留。
+- 新 task `sba-20261007-naccount-36bca24` / run `37597856049` 的 source/permit 通过，
+  已消费许可并返回精确 unknown/NACCOUNT_EXECUTION_FAILED 回执。Actions success
+  仅制品上传成功。新鲜目标检查尚无 Worker、业务表和 KV keys；隔离无凭据复现 Windows
+  无 RTK 时裸 npm 启动 WinError2。应用修复由 NAccount 的 SBA-05-S08 独立负责。
+- 用户已明确批准：在核验并保留现场后继续，新增窄管理员恢复，不清库、不重跑旧 run。
+  范围为精确 task/run/原回执、短期服务端批准（当前/下一 policy、证据摘要）与同源/CSRF
+  双门；重新验核 GitHub 回执后原子保留旧 unknown 为 operator-authorized-retry。
+  该 outcome 不声称旧任务未执行；资源核验归获授权操作者与应用 owner，平台只绑定证据。
+  只允许更换已审阅 executor 和 application SHA，其余目标/配置/secret 名称不变。
+- 历史链、条数/链头、旧 ID 禁复用、单次许可和未批准 unknown 仍失败关闭；不自动解除
+  所有 unknown、不增加应用迁移推断。先匹配本地/精确 PR/main，再 fresh-read 资源与旧
+  回执并生成唯一短期批准，随后人工确认新独立任务。证据 `linshi/springbok-sba-05-s09-20261007/`。
+- 本地最终验收：Node 44/44、真实 workerd/SQLite/OIDC 48/48，无失败或跳过；覆盖默认关闭、
+  精确批准/旧结果、同源/CSRF、并发仅一次、混合历史、合法省略 errorCode、过期批准和历史
+  缺行失败关闭。fixed SHA-256 actionlint 1.7.12 通过（无额外 ShellCheck/Pyflakes）。代码/
+  测试 LF 指纹匹配，修改文本 UTF-8 无 BOM；Git/PR/main、安全扫描和真实恢复另记回执，
+  本地通过不代表 NAccount 已部署或业务验收通过。
+- 首 head 的浏览器 CI 因仍断言旧“已核实未执行”标题失败；已仅更新为中性归档标题并保留
+  not-executed outcome 断言。真实 Chrome + workerd synthetic 整链本地通过，产品代码指纹
+  不变；新 head 将完整重核，不将旧失败忽略或视为通过。Gitleaks 首提交扫描 115 commits
+  无检出，最终提交另核。

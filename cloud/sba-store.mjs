@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { validateResult } from '../src/sba/contract.mjs';
-import { sbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba, sbaObjectName, sbaSummary, sbaExecutorTransition } from './sba-control.mjs';
+import { sbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba, sbaObjectName, sbaSummary, sbaExecutorTransition, sbaAuthorizedRecovery, sbaRecoveryApproval, sbaRecoveryNextPolicy } from './sba-control.mjs';
 const statuses = ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'succeeded', 'deployed-unverified', 'failed', 'unknown'];
 const id = v => Number.isSafeInteger(v) && v > 0;
 
@@ -37,18 +37,33 @@ export class SbaDeployment extends DurableObject {
           recoveryMeta[0].id === 1 && recoveryMeta[0].history_count === rows.length);
         for (const row of rows) {
           const record = JSON.parse(row.record);
-          exactSba(record, ['job', 'policy', 'proof', 'nextPolicyDigest', 'previousDigest']);
+          const authorized = Object.hasOwn(record, 'approval');
+          exactSba(record, ['job', 'policy', 'proof', 'nextPolicyDigest', 'previousDigest', ...(authorized ? ['approval', 'outcome'] : [])]);
           const previousPolicy = sbaPolicy({ ...this.env, SBA_POLICY: JSON.stringify(record.policy) });
           requireSba(row.sequence === history.length + 1 && record.previousDigest === historyHead &&
             (!history.length || history.at(-1).nextPolicyDigest === await sbaDigest(previousPolicy)) &&
             row.task_id === record.job.request.taskId && row.actor === record.job.actor &&
-            (actor === null || row.actor === actor) && record.job.permitId === null && record.job.permitAt === null &&
-            record.job.result === null && record.job.requestDigest === await sbaDigest(record.job.request) &&
+            (actor === null || row.actor === actor) && record.job.requestDigest === await sbaDigest(record.job.request) &&
             canonicalSba(record.job.request) === canonicalSba(sbaRequest(previousPolicy, row.task_id, record.job.manifest)) &&
             row.digest === await sbaDigest(record));
+          if (authorized) {
+            const a = sbaRecoveryApproval(record.approval), j = record.job, p = record.proof;
+            exactSba(j, ['actor', 'request', 'manifest', 'requestDigest', 'status', 'runId', 'submittedAt', 'permitDeadline', 'permitAt', 'permitId', 'resultDeadline', 'result', 'errorCode']);
+            exactSba(p, ['runId', 'requestDigest', 'executorSha', 'conclusion', 'verifiedAt']);
+            requireSba(record.outcome === 'operator-authorized-retry' && j.status === 'unknown' && j.result?.status === 'unknown' &&
+              typeof j.permitId === 'string' && /^[a-f0-9]{64}$/.test(j.permitId) && id(j.permitAt) && id(j.runId) &&
+              id(j.submittedAt) && j.permitDeadline === j.submittedAt + 900000 &&
+              j.resultDeadline === j.permitAt + j.manifest.actions.deploy.timeoutSeconds * 1000 + 600000 && j.errorCode === (j.result.errorCode ?? null) &&
+              a.taskId === row.task_id && a.runId === j.runId && a.requestDigest === j.requestDigest && a.resultDigest === await sbaDigest(j.result) &&
+              a.oldPolicyDigest === await sbaDigest(previousPolicy) && record.nextPolicyDigest === await sbaDigest(sbaRecoveryNextPolicy(this.env, previousPolicy, a)) &&
+              p.runId === j.runId && p.requestDigest === j.requestDigest && p.executorSha === previousPolicy.github.executorSha && p.conclusion === 'success' &&
+              id(p.verifiedAt) && p.verifiedAt >= a.approvedAt && p.verifiedAt < a.expiresAt);
+            validateResult(j.result, j.request);
+          } else requireSba(record.job.permitId === null && record.job.permitAt === null && record.job.result === null);
           historyHead = row.digest;
-          history.push({ taskId: row.task_id, outcome: 'not-executed', job: sbaSummary(record.job).job,
-            executorSha: previousPolicy.github.executorSha, proof: record.proof, nextPolicyDigest: record.nextPolicyDigest });
+          history.push({ taskId: row.task_id, outcome: authorized ? record.outcome : 'not-executed', job: sbaSummary(record.job).job,
+            executorSha: previousPolicy.github.executorSha, proof: record.proof, nextPolicyDigest: record.nextPolicyDigest,
+            ...(authorized ? { approval: record.approval } : {}) });
         }
         requireSba(recoveryMeta[0].head_digest === historyHead && history.at(-1).nextPolicyDigest === policyDigest);
       }
@@ -132,6 +147,31 @@ export class SbaDeployment extends DurableObject {
       });
       // 旧配置从此失败关闭；发布精确 nextPolicy 后才允许新任务，不在此 dispatch。
       return { policyTransitionPending: true, nextPolicyDigest, archivedTaskId: taskId, outcome: 'not-executed' };
+    });
+  }
+  recoverAuthorized(actor, taskId, nextPolicy, proof) {
+    requireSba(typeof actor === 'string' && /^[a-f0-9]{64}$/.test(actor));
+    return this.#run(actor, async (job, _save, policy, history, historyHead) => {
+      const approved = await sbaAuthorizedRecovery(this.env, policy), a = approved.approval;
+      requireSba(job && job.status === 'unknown' && job.result?.status === 'unknown' && job.permitId !== null &&
+        taskId === a.taskId && job.request.taskId === a.taskId && job.runId === a.runId && job.requestDigest === a.requestDigest &&
+        await sbaDigest(job.result) === a.resultDigest && history.length < 20 && canonicalSba(nextPolicy) === canonicalSba(approved.nextPolicy));
+      exactSba(proof, ['runId', 'requestDigest', 'executorSha', 'conclusion', 'verifiedAt']);
+      requireSba(proof.runId === job.runId && proof.requestDigest === job.requestDigest && proof.executorSha === policy.github.executorSha &&
+        proof.conclusion === 'success' && id(proof.verifiedAt) && proof.verifiedAt <= Date.now() && proof.verifiedAt > Date.now() - 60000 &&
+        proof.verifiedAt >= a.approvedAt && proof.verifiedAt < a.expiresAt);
+      const nextPolicyDigest = await sbaDigest(nextPolicy), record = { job, policy, proof, nextPolicyDigest, previousDigest: historyHead,
+        approval: a, outcome: 'operator-authorized-retry' }, recordDigest = await sbaDigest(record);
+      // 这是显式的新尝试批准，不是“未执行”的证明；保留许可、原 unknown 结果及批准证据。
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS sba_unstarted_history (sequence INTEGER PRIMARY KEY, task_id TEXT NOT NULL UNIQUE, actor TEXT NOT NULL, record TEXT NOT NULL, digest TEXT NOT NULL)');
+        this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS sba_recovery_meta (id INTEGER PRIMARY KEY CHECK(id=1), history_count INTEGER NOT NULL, head_digest TEXT NOT NULL)');
+        this.ctx.storage.sql.exec('INSERT INTO sba_unstarted_history (task_id,actor,record,digest) VALUES(?,?,?,?)', taskId, actor, JSON.stringify(record), recordDigest);
+        this.ctx.storage.sql.exec('INSERT INTO sba_recovery_meta VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET history_count=excluded.history_count,head_digest=excluded.head_digest', history.length + 1, recordDigest);
+        this.ctx.storage.sql.exec('UPDATE sba_deployment SET state=? WHERE id=1', 'null');
+        this.ctx.storage.sql.exec('UPDATE sba_meta SET version=2,policy_digest=? WHERE id=1', nextPolicyDigest);
+      });
+      return { policyTransitionPending: true, nextPolicyDigest, archivedTaskId: taskId, outcome: record.outcome };
     });
   }
   attachRun(actor, taskId, outcome) {

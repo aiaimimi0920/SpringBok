@@ -729,3 +729,8 @@ SBA-05-S03 接续实施与本地验收：
   复核；最终 SHA/CI/Gitleaks 以交付回执为准，不循环 amend、不提前宣称已交付。
   下一独立子项为旧任务安全恢复：先核实原 run 终态、permit 未消费、policy 绑定及历史保留，
   再设计和验证恢复。没有重跑 run `37567644481`、修改线上 policy、发布应用或清除 DO。
+- 首提交 `e62e824a1110e8a970065d889aa09187c04dab13` 已推送，PR #59。六个 workflow 执行
+  成功，但 CodeQL 独立 finding check 报新增 `js/regex/missing-regexp-anchor`，因此未合并。
+  已下载 JavaScript SARIF 并匹配 GitHub 制品 SHA-256，确认新测试 URL 正则未完整锚定。
+  同任务追加修复为 Git remote URL 的精确相等断言，不修改 scanner 或忽略告警；修复后
+  本地 workflow 回归 9/9，其他未变源码沿用指纹匹配证据，最新 head/main 检查另核回执。

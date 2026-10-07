@@ -414,3 +414,7 @@ SBA-05-S03 接续验收与交付边界：
   Gitleaks/CI 结果写回执，不预报。无真实 Actions、Worker 发布、policy/tag 变更、NAccount
   应用发布或业务验收；原失败任务及许可数据保留。下一子项只处理有证据的安全恢复，
   不通过手动重跑或清空任务绕过未知状态。
+- PR #59 首 head `e62e824` 六个 workflow 执行成功，但 CodeQL finding check 的新 URL
+  正则告警阻止合并。已按 SHA-256 核验并读取 SARIF，改为 Git remote URL 精确相等断言；
+  本地 workflow 9/9 回归通过。保留首轮扫描证据，不 suppress、不绕过，修复后的精确
+  PR/main 结果仍须在最终回执独立核实。

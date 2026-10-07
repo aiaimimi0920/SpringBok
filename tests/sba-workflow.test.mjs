@@ -146,7 +146,8 @@ test('native Git upload-pack → broker bytes → strict checkout precedes one-t
       executions++;
       assert.equal(execFileSync('git', ['-C', checkout, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), x.input.sourceSha);
       const config = await readFile(join(checkout, '.git/config'), 'utf8');
-      assert.match(config, /https:\/\/github\.com\/owner\/application\.git/);
+      assert.equal(execFileSync('git', ['-C', checkout, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim(),
+        'https://github.com/owner/application.git');
       assert.doesNotMatch(config, /synthetic-oidc|token|extraheader/i);
       return { result: x.result };
     },

@@ -18,8 +18,10 @@
 复验曾在既有 `tests/cloud/connections.test.mjs:10` 出现一次 undici `TypeError: terminated`，
 当轮 97/98；未修改该测试/后端，单文件针对性复验 8/8 通过。原始日志保留为
 `focused-failed-terminated.log`，原因未确定，不将失败归因为已证实的环境问题。
-随后聚焦检查 98/98 通过，旧 connected-execution 浏览器曾等待提交反馈超时；保留
-`execution-browser-failed-timeout.log`，该文件和 deploy 控制器未改，单独复验通过，原因亦未确定。
+随后聚焦检查 98/98 通过，旧 connected-execution 浏览器本地与 PR 首轮均曾等待提交反馈超时；
+保留 `execution-browser-failed-timeout.log`、`ci-browser-failed.log`。经延迟第二次 preview 的
+确定性复现，旧成功 notice 仍可见但提交按钮尚 disabled，测试的原生双 click 被忽略；
+补充等待新提交按钮可用，再验证双击只 dispatch 一次。只修测试同步，不改产品权限或后端。
 
 ## UI-01：Neuro 设计系统迁移（2026-10-07，实现与本地验证完成）
 

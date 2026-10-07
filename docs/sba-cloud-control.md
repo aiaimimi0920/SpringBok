@@ -78,6 +78,18 @@ failure/cancelled/timed_out。该事实本身不证明未执行：DO 在串行�
 控制面的 GET/history 与页面只显示公开摘要，不输出 permitId、GitHub token 或应用秘密。
 此恢复不保证 Cloudflare 应用部署成功；短期 token 有效期、迁移和业务验收仍独立核实。
 
+### SBA-05-S05 安全失败诊断
+
+机器 API 拒绝仍为固定 JSON 403 / `SBA_PERMIT_DENIED`，只额外返回白名单的
+`x-sba-denied-phase`、`x-sba-denied-reason`，源码上游失败时可含整数 HTTP status
+及固定 MIME 类别。阶段区分 policy/request/oidc/body/pending/run/source/secrets/permit。
+OIDC 只给固定条件类别；`jwt` 仍包含 JWKS/签名/JOSE 内的时效或 audience 错误，
+`run` 仍不能进一步区别 GitHub 网络、身份或状态错误，不把类别当完整根因。
+
+runner 仅在失败时输出 `SBA_SOURCE_DIAGNOSTIC` 的固定枚举/数字投影，忽略任意诊断
+header 值，不读出正文、JWT、claims、cookie、密钥或源码。原 15 秒/8 MiB/单次 POST、
+无 redirect、精确 Git/OIDC/run/task、先消费许可等保护不变；诊断不是新执行或重试权限。
+
 证据目录：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-04-s02-b-20261006/`。
 
 - Linux 非 root 根测试：324 通过、3 跳过、0 失败；cloud suite：93/93。

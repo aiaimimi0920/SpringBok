@@ -433,3 +433,28 @@ executor SHA/tag。保留原 schema v1，恢复时追加 metadata v2 和有条�
 失败关闭回归通过；不冒称真实 Actions/恢复/业务验收。证据 `linshi/springbok-sba-05-s04-20261006/`。
 立即 scoped commit/push、精确 PR/main 验证；发布和原许可状态必须在实际 Access 会话下另核。
 短期 Cloudflare token 无法保证覆盖当前两次构建，不用本机 CLI 发布代替产品链。
+
+### SBA-05-S04 真实交付与 SBA-05-S05 诊断接续（2026-10-07）
+
+PR #60 已合并为 `53a658eb3baf2bbaf8fcd5ce08d15f18f8d4e7d8`；精确 head/main 的六
+workflows、15/13 checks 成功。真实控制面发布后，通过正常 Access 邮箱验证码会话
+确认原任务的许可未消费，恢复返回 `not-executed`，历史完整保留。新 protected executor
+tag/ruleset `24632236` active/bypass0，原规则保留；最终 Worker version
+`a208a83b-5196-4552-b62c-2cde099a70c9`，DO identities 和 secret binding 名称保持不变。
+[最终回执](https://github.com/aiaimimi0920/SpringBok/pull/60#issuecomment-6033327925)。
+
+云端 SpringBok 随后只提交一次新 task `sba-20261007-naccount-first-53a658e` / run
+`37582572486`，attempt1 在取得 OIDC 字符串后的 source 阶段失败，无结果制品。
+此前“仅合成验收”的历史段落保留，但不再当作真实发布/恢复尚未发生的当前状态。
+NAccount 首次发布、核心业务、有数据升级仍未完成；没有 rerun 或再次 dispatch。
+
+SBA-05-S05 由主 AI 领取，基线上述 main。只增加固定枚举阶段和有界 HTTP/MIME
+安全事实，保留全部授权、许可、超时和拒绝语义，不输出敏感原文。只读云指标未见执行
+错误，仓库 immutable OIDC profile 与既有支持一致，仍不足以确定真实请求的拒绝根因。
+先完成匹配回归/精确 PR/main，再真实 Access 新鲜读许可、受控恢复和唯一新任务。
+证据根 `linshi/springbok-sba-05-s05-20261007/`，不以诊断改动冒称修复或部署成功。
+
+S05 本地聚焦 39/39、workerd/SQLite/OIDC 43/43、固定校验 actionlint 通过（未额外
+ShellCheck/Pyflakes），包括恶意诊断字段、transport 分型及失败后零 permit/应用调用。
+新真实 Access 会话读取旧任务为 unknown/deadline、permitAt/result=null，历史保留。
+限定源码/本地验收完成，立即 scoped commit/push、精确 PR/main；根因仍待真实诊断。

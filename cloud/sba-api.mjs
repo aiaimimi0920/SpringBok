@@ -4,6 +4,7 @@ import { createSbaOidcVerifier } from './sba-oidc.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 import { githubSourcePack, SOURCE_CONTENT_TYPE } from '../src/sba/source.mjs';
+import { sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
 const verifyOidc = createSbaOidcVerifier();
 const reply = (value, status = 200) => Response.json(value, { status, headers: {
   'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
@@ -16,28 +17,38 @@ export function isSbaMachineRequest(request, env) {
 }
 
 export async function sbaMachineRequest(request, env, readBody) {
+  let phase = 'policy', reason = 'rejected', sourceFailure = {};
   try {
     const policy = sbaPolicy(env), url = new URL(request.url);
+    phase = 'request';
     requireSba(url.origin === policy.runnerOrigin && ['/sba/v2/permit', '/sba/v2/source'].includes(url.pathname) && !url.search &&
       request.method === 'POST' && !request.headers.has('cookie') && !request.headers.has('origin'));
     const authorization = request.headers.get('authorization');
     requireSba(typeof authorization === 'string' && authorization.startsWith('Bearer '));
-    const identity = await verifyOidc(authorization.slice(7), policy);
+    phase = 'oidc';
+    const identity = await verifyOidc(authorization.slice(7), policy, { onReject: value => { reason = value; } });
+    phase = 'body';
     const input = await readBody(request);
     exactSba(input, ['taskId', 'requestDigest']);
     requireSba(typeof input.taskId === 'string' && /^[a-z][a-z0-9-]{1,62}$/.test(input.taskId) &&
       typeof input.requestDigest === 'string' && /^[a-f0-9]{64}$/.test(input.requestDigest));
+    phase = 'pending';
     const stub = sbaStub(env, policy), job = await stub.pending(input.taskId, input.requestDigest);
     requireSba(job.permitId === null && ['dispatching', 'dispatched', 'dispatch-unknown'].includes(job.status) &&
       (job.runId === null || job.runId === identity.runId));
     const executor = createGithubExecutor(policy.github, { token: env.SBA_GITHUB_TOKEN });
     // OIDC 身份不包含 workflow inputs，必须另查 GitHub 的精确 task/digest run title。
+    phase = 'run';
     requireSba((await executor.inspectRun(identity.runId, job.request, job.manifest)).status === 'pending');
     if (url.pathname === '/sba/v2/source') {
-      const bytes = await githubSourcePack(job.request.repository, job.request.sourceSha, env.SBA_GITHUB_TOKEN);
+      phase = 'source';
+      const bytes = await githubSourcePack(job.request.repository, job.request.sourceSha, env.SBA_GITHUB_TOKEN, {
+        onFailure: value => { sourceFailure = value; reason = value.reason; },
+      });
       return new Response(bytes, { headers: { 'content-type': SOURCE_CONTENT_TYPE, 'cache-control': 'no-store',
         'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
     }
+    phase = 'secrets';
     const available = JSON.parse(env.SBA_APPLICATION_SECRETS ?? '{}'), secrets = {};
     requireSba(available && typeof available === 'object' && !Array.isArray(available));
     for (const name of policy.secretNames) {
@@ -45,9 +56,14 @@ export async function sbaMachineRequest(request, env, readBody) {
       secrets[name] = available[name];
     }
     // 先消费后响应；响应丢失也不允许再次发放秘密。秘密不写入 DO 或 dispatch inputs。
+    phase = 'permit';
     const permit = await stub.permit(input.taskId, input.requestDigest, identity.runId);
     return reply({ ...permit, secrets });
-  } catch { return reply({ error: 'SBA_PERMIT_DENIED' }, 403); }
+  } catch {
+    const response = reply({ error: 'SBA_PERMIT_DENIED' }, 403);
+    for (const [key, value] of Object.entries(sbaDiagnosticHeaders({ phase, reason, ...sourceFailure }))) response.headers.set(key, value);
+    return response;
+  }
 }
 
 export async function adminSbaRequest(request, env, session, readBody) {

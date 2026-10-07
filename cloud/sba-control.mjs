@@ -41,6 +41,29 @@ export function sbaExecutorTransition(env, policy, executorSha) {
   next.github.executorSha = executorSha; next.github.ref = `sba-executor-${executorSha}`;
   return sbaPolicy({ ...env, SBA_POLICY: JSON.stringify(next) });
 }
+export function sbaRecoveryApproval(value) {
+  exactSba(value, ['taskId', 'runId', 'requestDigest', 'resultDigest', 'oldPolicyDigest', 'executorSha', 'sourceSha', 'evidenceDigest', 'approvedAt', 'expiresAt']);
+  requireSba(typeof value.taskId === 'string' && /^[a-z][a-z0-9-]{1,62}$/.test(value.taskId) && Number.isSafeInteger(value.runId) && value.runId > 0);
+  for (const key of ['requestDigest', 'resultDigest', 'oldPolicyDigest', 'evidenceDigest']) requireSba(typeof value[key] === 'string' && /^[a-f0-9]{64}$/.test(value[key]));
+  for (const key of ['executorSha', 'sourceSha']) requireSba(typeof value[key] === 'string' && /^[a-f0-9]{40}$/.test(value[key]));
+  requireSba(Number.isSafeInteger(value.approvedAt) && value.approvedAt > 0 && Number.isSafeInteger(value.expiresAt) &&
+    value.expiresAt > value.approvedAt && value.expiresAt <= value.approvedAt + 3600000);
+  return value;
+}
+export function sbaRecoveryNextPolicy(env, policy, approval) {
+  sbaRecoveryApproval(approval);
+  requireSba(approval.executorSha !== policy.github.executorSha && approval.sourceSha !== policy.sourceSha);
+  const next = structuredClone(policy);
+  next.github.executorSha = approval.executorSha; next.github.ref = `sba-executor-${approval.executorSha}`;
+  next.sourceSha = approval.sourceSha;
+  return sbaPolicy({ ...env, SBA_POLICY: JSON.stringify(next) });
+}
+export async function sbaAuthorizedRecovery(env, policy) {
+  requireSba(typeof env.SBA_OPERATOR_RECOVERY === 'string' && env.SBA_OPERATOR_RECOVERY.length <= 4096);
+  const approval = sbaRecoveryApproval(JSON.parse(env.SBA_OPERATOR_RECOVERY));
+  requireSba(approval.approvedAt <= Date.now() && approval.expiresAt > Date.now() && approval.oldPolicyDigest === await sbaDigest(policy));
+  return { approval, nextPolicy: sbaRecoveryNextPolicy(env, policy, approval) };
+}
 export function sbaSummary(job) {
   if (!job) return { mode: 'sba-first-deployment', ready: true, job: null };
   const { request, status, runId, submittedAt, permitAt, result, errorCode } = job;

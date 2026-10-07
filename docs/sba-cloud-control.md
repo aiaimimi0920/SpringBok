@@ -37,6 +37,25 @@ SBA-05-S07 兼容当前普通 job 的 signed self-workflow 身份：`job_workflo
 只读诊断的 `matchesSelf` 是相对于已独立验签核验的诊断 run 身份的布尔事实，
 不输出原始字段，也不能代替执行 workflow 的 source/permit 验核或应用发布证据。
 
+### SBA-05-S09：管理员显式批准的 unknown 归档
+
+`recover-unstarted` 仍绝不接受已消费许可。独立 `POST /api/admin/sba/recover-authorized`
+只在用户另行批准后使用，默认无 `SBA_OPERATOR_RECOVERY` 即关闭。短期批准严格绑定
+原 task/run/request/result/旧 policy、操作者核验资源的 evidence digest，以及已审阅的新
+executor/application SHA；有效期最多一小时。Origin/CSRF、原 owner 和精确 GitHub
+终态/制品/envelope 必须重新验证，服务端不接受浏览器任意下一 policy。
+
+只改变 executor SHA/tag 和 application SHA，其余配置、资源、secret names 完全不变。
+SQLite 同事务保存完整旧 unknown、已消费许可、原 policy、批准和证据摘要，追加为
+`operator-authorized-retry` 后批准精确下一 policy；该标签不表示“未执行”或“已恢复数据”。
+原 legacy 未执行历史继续校验，混合历史沿用 count/head/digest 链；旧 ID 不得复用。
+旧 policy 在过渡期间失败关闭。操作本身不 dispatch，新独立 task 仍须 preview/submit。
+
+目标资源和实际副作用的核验由应用 owner 与获授权操作者负责，平台不推断数据库迁移，
+也不声称能够根据一个摘要独立证明无副作用。该批准是明确风险决定，不是自动重试机制；
+缺批准、缺可信结果、过期/不匹配、网络/制品错误或历史损坏均不解锁。切换成功后撤下
+批准变量，不把这次窄批准扩展为其他 unknown 的恢复授权。
+
 制品回收先核验 run/artifact 关联，下载跳转只接受受限 Azure Blob HTTPS 主机，绝不转发 GitHub bearer。ZIP 限 64 KiB、解压限 32 KiB，只接收一个 receipt.json，并验证 SHA-256、CRC、envelope 和应用结果。应用报告成功不等于用户业务验收。
 
 ## SBA-05-S03 私有源码通道

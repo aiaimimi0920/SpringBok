@@ -175,3 +175,18 @@ test('corrupt or rejected source cannot request permit or execute an application
     assert.deepEqual(calls, ['/oidc', '/sba/v2/source']); assert.equal(executions, 0);
   }
 });
+
+test('workflow passes only safe source diagnosis and never proceeds to permit after rejection', async t => {
+  const x = await nativeSource(t), calls = [], diagnostics = [];
+  let executions = 0;
+  await assert.rejects(runSbaWorkflow({ environment: x.environment, tempRoot: x.root,
+    onSourceFailure: value => diagnostics.push(value), fetchImpl: async url => {
+      calls.push(new URL(url).pathname);
+      if (calls.length === 1) return Response.json({ value: 'synthetic-oidc' });
+      return new Response('synthetic-private-body', { status: 403, headers: { 'content-type': 'application/json',
+        'x-sba-denied-phase': 'oidc', 'x-sba-denied-reason': 'context', 'set-cookie': 'synthetic-private-cookie' } });
+    }, execute: async () => { executions++; } }), /SBA_SOURCE_REJECTED/);
+  assert.deepEqual(calls, ['/oidc', '/sba/v2/source']); assert.equal(executions, 0);
+  assert.equal(diagnostics.length, 1); assert.equal(diagnostics[0].remoteReason, 'context');
+  assert.doesNotMatch(JSON.stringify(diagnostics), /synthetic|cookie/);
+});

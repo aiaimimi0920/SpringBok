@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { sourceWant, githubSourcePack, requestSource, decodeSourceResponse, SOURCE_CONTENT_TYPE, MAX_SOURCE_BYTES } from '../src/sba/source.mjs';
+import { sourceDiagnostic, sourceMedia, sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
 const sha = 'a'.repeat(40);
 const packet = input => { const b = Buffer.from(input); return Buffer.concat([Buffer.from((b.length + 4).toString(16).padStart(4, '0')), b]); };
 const packHead = Buffer.concat([Buffer.from('PACK'), Buffer.from([0, 0, 0, 2, 0, 0, 0, 1]), Buffer.from('synthetic-object')]);
@@ -51,4 +52,30 @@ test('source frames bind shallow SHA, pack checksum, terminal flush and bounded 
     Buffer.concat([wire(), Buffer.from('0000')]), wire().subarray(0, -1), Buffer.from('ffff'),
     wire(Buffer.concat([pack, Buffer.from('unexpected')])), new Uint8Array(MAX_SOURCE_BYTES + 1)])
     await assert.rejects(decodeSourceResponse(bytes, sha), /^Error: SBA_SOURCE_REJECTED$/);
+});
+
+test('source diagnostics distinguish transport failures using only fixed metadata and never body or arbitrary headers', async () => {
+  for (const [response, reason] of [[new Response('synthetic-private-body', { status: 403,
+    headers: { 'content-type': 'application/json', ...sbaDiagnosticHeaders({ phase: 'oidc', reason: 'executor' }) } }), 'http'],
+    [new Response('synthetic-private-body', { headers: { 'content-type': 'text/html' } }), 'media'],
+    [new Response(null, { headers: { 'content-type': SOURCE_CONTENT_TYPE } }), 'body-missing'],
+    [new Response('', { headers: { 'content-type': SOURCE_CONTENT_TYPE } }), 'body-empty'],
+    [new Response(new Uint8Array(MAX_SOURCE_BYTES + 1), { headers: { 'content-type': SOURCE_CONTENT_TYPE } }), 'body-size'],
+    [new Response(new ReadableStream({ start(c) { c.error(new Error('synthetic-private-error')); } }), { headers: { 'content-type': SOURCE_CONTENT_TYPE } }), 'body-read']]) {
+    let detail, calls = 0;
+    await assert.rejects(requestSource('https://runner.example.invalid/sba/v2/source', { headers: {}, body: '{}',
+      fetchImpl: async () => { calls++; return response; }, onFailure: value => { detail = value; } }), /^Error: SBA_SOURCE_REJECTED$/);
+    assert.equal(detail.reason, reason); assert.equal(calls, 1);
+    assert.doesNotMatch(JSON.stringify(detail), /synthetic-private/);
+    if (response.status === 403) assert.equal(detail.remotePhase, 'oidc');
+  }
+  const hostile = new Response('private', { status: 403, headers: { 'content-type': 'private/type',
+    'x-sba-denied-phase': 'private-secret', 'x-sba-denied-reason': 'private-error',
+    'x-sba-upstream-status': 'private-status', 'x-sba-upstream-media': 'private-media' } });
+  assert.doesNotMatch(JSON.stringify(sourceDiagnostic(hostile, 'private-reason')), /private/);
+  assert.equal(sourceMedia('__proto__'), 'other'); assert.equal(sourceMedia('constructor'), 'other');
+  let detail;
+  await assert.rejects(requestSource('https://runner.example.invalid', { fetchImpl: async () => { throw new Error('private-error'); },
+    onFailure: value => { detail = value; } }), /^Error: SBA_SOURCE_REJECTED$/);
+  assert.equal(detail.reason, 'network'); assert.equal(detail.httpStatus, null);
 });

@@ -57,7 +57,7 @@ async function checkoutApplication({ request, directory, environment, executorSh
   return inspectCheckout(checkout, request);
 }
 export async function runSbaWorkflow({ environment = process.env, fetchImpl = fetch, checkout = checkoutApplication,
-  execute = executeCheckout, tempRoot = environment.RUNNER_TEMP, onStage = () => {} } = {}) {
+  execute = executeCheckout, tempRoot = environment.RUNNER_TEMP, onStage = () => {}, onSourceFailure = () => {} } = {}) {
   onStage('input');
   const input = await workflowInput(environment);
   onStage('workspace');
@@ -78,7 +78,7 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
     const token = await getIdentity(); onStage('source');
     const bytes = await requestSource(new URL('/sba/v2/source', input.endpoint).href, {
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ taskId: input.request.taskId, requestDigest: environment.SBA_REQUEST_SHA256 }), fetchImpl,
+      body: JSON.stringify({ taskId: input.request.taskId, requestDigest: environment.SBA_REQUEST_SHA256 }), fetchImpl, onFailure: onSourceFailure,
     });
     onStage('checkout'); return bytes;
   };
@@ -108,7 +108,8 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   let stage = 'platform';
-  try { if (process.platform !== 'win32') reject(); await runSbaWorkflow({ onStage: value => { stage = value; } }); }
+  try { if (process.platform !== 'win32') reject(); await runSbaWorkflow({ onStage: value => { stage = value; },
+    onSourceFailure: value => console.error(`SBA_SOURCE_DIAGNOSTIC ${JSON.stringify(value)}`) }); }
   // 只输出代码内的固定阶段名，不输出异常、Git/应用日志、输入或环境。
   catch { console.error(`SBA_WORKFLOW_UNCONFIRMED stage=${stage}`); process.exitCode = 1; }
 }

@@ -1,3 +1,4 @@
+import { sourceDiagnostic } from './diagnostics.mjs';
 // 受控源码传输：只请求批准 SHA 的 depth=1 pack，不向 runner 暴露 GitHub token。
 export const SOURCE_CONTENT_TYPE = 'application/x-git-upload-pack-result';
 export const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
@@ -12,33 +13,35 @@ export function sourceWant(sha) {
 }
 
 // 请求和响应都不自动重试，不接受 redirect 或任意上游日志。
-export async function requestSource(url, { headers, body, fetchImpl = fetch }) {
+export async function requestSource(url, { headers, body, fetchImpl = fetch, onFailure = () => {} }) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
-  let response;
+  let response, reason = 'network';
   try {
     response = await fetchImpl(url, { method: 'POST', headers, body, redirect: 'manual', signal: controller.signal });
-    if (response.status !== 200 || response.headers.get('content-type')?.split(';')[0] !== SOURCE_CONTENT_TYPE || !response.body) reject();
+    reason = 'http'; if (response.status !== 200) reject();
+    reason = 'media'; if (response.headers.get('content-type')?.split(';')[0] !== SOURCE_CONTENT_TYPE) reject();
+    reason = 'body-missing'; if (!response.body) reject();
     const reader = response.body.getReader(), chunks = []; let size = 0;
     try {
       for (;;) {
-        const { value, done } = await reader.read(); if (done) break;
-        size += value.byteLength; if (size > MAX_SOURCE_BYTES) reject(); chunks.push(value);
+        reason = 'body-read'; const { value, done } = await reader.read(); if (done) break;
+        size += value.byteLength; reason = 'body-size'; if (size > MAX_SOURCE_BYTES) reject(); chunks.push(value);
       }
     } finally { await reader.cancel().catch(() => {}); }
-    if (!size) reject();
+    reason = 'body-empty'; if (!size) reject();
     const bytes = new Uint8Array(size); let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
     return bytes;
-  } catch { reject(); }
+  } catch { onFailure(sourceDiagnostic(response, reason)); reject(); }
   finally { clearTimeout(timer); controller.abort(); if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {}); }
 }
 
-export function githubSourcePack(repository, sha, token, { fetchImpl = fetch } = {}) {
+export function githubSourcePack(repository, sha, token, { fetchImpl = fetch, onFailure = () => {} } = {}) {
   if (typeof repository !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository) ||
       typeof token !== 'string' || !token || /[^\x21-\x7e]/.test(token)) reject();
   return requestSource(`https://github.com/${repository}.git/git-upload-pack`, {
     headers: { authorization: `Basic ${btoa(`x-access-token:${token}`)}`, 'content-type': 'application/x-git-upload-pack-request',
-      accept: SOURCE_CONTENT_TYPE, 'user-agent': 'SpringBok-SBA' }, body: sourceWant(sha), fetchImpl,
+      accept: SOURCE_CONTENT_TYPE, 'user-agent': 'SpringBok-SBA' }, body: sourceWant(sha), fetchImpl, onFailure,
   });
 }
 

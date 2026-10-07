@@ -58,3 +58,18 @@ test('accept immutable subject only when signed owner and repository identities 
     { sub: `repo:owner@789/executor@124:ref:${ref}` }])
     await assert.rejects(verifier()(await sign({ ...p, ...changed }), policy), /SBA_OIDC_REJECTED/);
 });
+
+test('OIDC rejection exposes only fixed categories, not the signed claims or original error', async () => {
+  const verify = verifier();
+  for (const [changed, expected] of [[{ sub: 'synthetic-private-subject' }, 'subject'],
+    [{ repository: 'synthetic-private-repo' }, 'repository'], [{ workflow_sha: 'b'.repeat(40) }, 'executor'],
+    [{ run_attempt: '2' }, 'context'], [{ run_id: 'synthetic-private-run' }, 'run-id'],
+    [{ exp: Math.floor(Date.now() / 1000) + 601 }, 'time']]) {
+    let reason;
+    await assert.rejects(verify(await sign({ ...claims(), ...changed }), policy, { onReject: value => { reason = value; } }), /SBA_OIDC_REJECTED/);
+    assert.equal(reason, expected); assert.doesNotMatch(reason, /synthetic-private/);
+  }
+  let reason;
+  await assert.rejects(verify('synthetic-private-invalid-token', policy, { onReject: value => { reason = value; } }), /SBA_OIDC_REJECTED/);
+  assert.equal(reason, 'jwt');
+});

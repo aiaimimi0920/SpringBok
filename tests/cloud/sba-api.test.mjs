@@ -134,3 +134,31 @@ test('recovery defaults off and administrators cannot choose an unapproved execu
   assert.equal((await y.post('recover-unstarted', { taskId: 'sba-test-task', executorSha: 'e'.repeat(40) })).status, 409);
   assert.equal((await y.f.call('/api/admin/sba/state')).json().job.permitAt, null);
 });
+
+test('machine rejection phases distinguish policy, OIDC, task, run and source without consuming permission', async t => {
+  const x = await setup(t); await x.post('submit', await x.preview());
+  const cases = [
+    ['request', () => x.source({ headers: { authorization: `Bearer ${x.token()}`, origin } })],
+    ['oidc', () => x.source({ headers: { authorization: `Bearer ${x.token({ workflow_sha: 'e'.repeat(40) })}` } })],
+    ['body', () => x.source({ body: '{}' })],
+    ['pending', () => x.source({ body: JSON.stringify({ taskId: 'different-task', requestDigest: x.state.requestDigest }) })],
+    ['run', async () => { x.state.badTitle = true; try { return await x.source(); } finally { x.state.badTitle = false; } }],
+    ['source', async () => { x.state.sourceStatus = 500; try { return await x.source(); } finally { x.state.sourceStatus = 200; } }],
+  ];
+  for (const [phase, call] of cases) {
+    const response = await call(); assert.equal(response.status, 403);
+    assert.equal(response.headers.get('x-sba-denied-phase'), phase);
+    if (phase === 'oidc') assert.equal(response.headers.get('x-sba-denied-reason'), 'executor');
+    if (phase === 'source') {
+      assert.equal(response.headers.get('x-sba-denied-reason'), 'http');
+      assert.equal(response.headers.get('x-sba-upstream-status'), '500');
+      assert.equal(response.headers.get('x-sba-upstream-media'), 'git');
+    }
+    const text = await response.text(); assert.equal(text, '{"error":"SBA_PERMIT_DENIED"}');
+    assert.doesNotMatch(JSON.stringify([...response.headers]), /synthetic|Bearer|token\.actions/);
+    assert.equal((await x.f.call('/api/admin/sba/state')).json().job.permitAt, null);
+  }
+  const disabled = await setup(t, { ENABLE_SBA: 'no' });
+  assert.equal((await disabled.source()).headers.get('x-sba-denied-phase'), 'policy');
+  assert.equal(x.state.dispatches, 1);
+});

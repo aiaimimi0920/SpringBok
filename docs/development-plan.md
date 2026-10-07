@@ -754,3 +754,25 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
 许可竞态、旧 v1 截止后 unknown、已消费拒绝、未批准 SHA、policy 漂移、历史损坏和旧 ID
 复用均有聚焦覆盖。仅源码/合成验收，不是真实恢复或 NAccount 部署；证据根
 `linshi/springbok-sba-05-s04-20261006/`。按 scoped commit/PR/main 立即交付，远程结果另核。
+
+### SBA-05-S05 真实源码请求失败的安全诊断（2026-10-07）
+
+- 负责人：主 AI；基线 `53a658eb3baf2bbaf8fcd5ce08d15f18f8d4e7d8`，分支
+  `fix/sba-05-s05-source-diagnostics`；领取时本地/远程 main 一致、工作区干净。
+- 前项 PR #60 已正常合并，精确 head 六 workflows/15 checks、main 六 workflows/13 checks
+  成功。真实发布及 Access 会话下的恢复已完成：旧 run `37567644481` 的许可未消费，
+  旧任务完整归档；新 policy 仅更换 executor，DO namespace 和 secret binding 名称保留。
+- 云端 SpringBok 唯一新任务 `sba-20261007-naccount-first-53a658e` / run `37582572486`
+  completed/failure、attempt=1；在 `stage=source` 失败，没有上传结果制品。现有日志只证明
+  取得 OIDC 字符串后、源码响应验完前失败，不证明是 403 或 OIDC/profile 根因。
+- 范围：机器 API、OIDC、源码 reader 和 workflow 的固定枚举诊断，以及匹配测试/文档。
+  不输出 JWT、完整 claims、密钥、私有源码或上游正文；不放宽校验、不自动重试、不消费
+  新许可。先独立交付精确 PR/main，再通过真实 Access 新鲜核验许可、受控恢复和新任务。
+- 只读云指标近 16 小时 398 次调用均为 success / errors=0；仓库 OIDC profile 为 default +
+  immutable，prefix 与已有支持一致。它们不能证明真实请求全部 claim 或源码上游通过。
+  证据根 `linshi/springbok-sba-05-s05-20261007/`；NAccount 首次发布/业务/升级仍开放。
+- 本地 Node.js 39/39、workerd/SQLite/OIDC 43/43 通过，无失败/跳过；fixed 枚举覆盖
+  各责任阶段、恶意 header、原始异常/正文不进入诊断、拒绝后零 permit/执行及旧恢复回归。
+  actionlint 1.7.12 归档 SHA-256 复核通过，未额外 ShellCheck/Pyflakes。只读独立审阅未见
+  确定阻断项，不计独立执行。真实 Access 新会话确认当前 task permitAt/result=null，旧历史
+  保留；没有 rerun/dispatch。精确提交、安全扫描、PR/main 及新任务结果另记最终回执。

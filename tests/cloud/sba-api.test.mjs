@@ -100,3 +100,37 @@ test('source stays closed for browser requests and upstream errors never consume
   assert.equal((await x.source()).status, 200); // 读取代码不需要部署秘密。
   assert.equal((await x.permit()).status, 403); assert.equal(x.state.dispatches, 1);
 });
+
+test('admin recovery is CSRF protected, exact terminal-run checked, and never redispatches', async t => {
+  const x = await setup(t); await x.post('submit', await x.preview());
+  const body = { taskId: 'sba-test-task', executorSha: 'f'.repeat(40) };
+  assert.equal((await x.post('recover-unstarted', body, { headers: {} })).status, 409);
+  assert.equal((await x.post('recover-unstarted', body)).status, 409); // 仍运行。
+  x.state.runStatus = 'completed';
+  assert.equal((await x.post('recover-unstarted', body)).status, 409); // success 无未开始证明。
+  x.state.conclusion = 'failure'; x.state.badTitle = true;
+  assert.equal((await x.post('recover-unstarted', body)).status, 409);
+  x.state.badTitle = false; x.state.networkDown = true;
+  assert.equal((await x.post('recover-unstarted', body)).status, 409);
+  x.state.networkDown = false;
+  const response = await x.post('recover-unstarted', body);
+  assert.equal(response.status, 200); assert.equal(response.json().outcome, 'not-executed');
+  assert.equal(response.json().policyTransitionPending, true);
+  assert.equal(x.state.dispatches, 1); assert.equal((await x.permit()).status, 403);
+  await x.f.restart(); assert.equal((await x.f.call('/api/admin/sba/state')).status, 409);
+});
+test('a consumed permit can never be recovered even if GitHub later fails', async t => {
+  const x = await setup(t); await x.post('submit', await x.preview()); assert.equal((await x.permit()).status, 200);
+  x.state.runStatus = 'completed'; x.state.conclusion = 'failure';
+  assert.equal((await x.post('recover-unstarted', { taskId: 'sba-test-task', executorSha: 'f'.repeat(40) })).status, 409);
+  assert.equal((await x.f.call('/api/admin/sba/state')).json().job.status, 'running');
+});
+test('recovery defaults off and administrators cannot choose an unapproved executor', async t => {
+  const x = await setup(t, { SBA_RECOVERY_EXECUTOR_SHA: '' }); await x.post('submit', await x.preview());
+  x.state.runStatus = 'completed'; x.state.conclusion = 'failure';
+  assert.equal((await x.post('recover-unstarted', { taskId: 'sba-test-task', executorSha: 'f'.repeat(40) })).status, 409);
+  const y = await setup(t); await y.post('submit', await y.preview());
+  y.state.runStatus = 'completed'; y.state.conclusion = 'failure';
+  assert.equal((await y.post('recover-unstarted', { taskId: 'sba-test-task', executorSha: 'e'.repeat(40) })).status, 409);
+  assert.equal((await y.f.call('/api/admin/sba/state')).json().job.permitAt, null);
+});

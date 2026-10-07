@@ -734,3 +734,23 @@ SBA-05-S03 接续实施与本地验收：
   已下载 JavaScript SARIF 并匹配 GitHub 制品 SHA-256，确认新测试 URL 正则未完整锚定。
   同任务追加修复为 Git remote URL 的精确相等断言，不修改 scanner 或忽略告警；修复后
   本地 workflow 回归 9/9，其他未变源码沿用指纹匹配证据，最新 head/main 检查另核回执。
+
+### SBA-05-S04 未开始任务的有证据恢复领取（2026-10-06）
+
+- 负责人：主 AI；基线 main `fdf80470c42a2f864fc5c6353ebb44a4014240f3`，工作树干净。
+- 联网重核旧 run `37567644481`：completed/failure、attempt=1、旧 executor SHA/tag
+  及 task/digest 一致；线上 NAccount Worker 和目标自定义域仍未创建。
+- 只允许管理员同源/CSRF 请求，并由 Worker 重核精确旧 run 的失败终态；DO 在事务中
+  再核许可从未消费，完整归档旧任务、旧 policy 和核验事实，然后原子批准仅 executor
+  SHA/tag 的过渡。历史 task ID 不得复用；已消费、运行中、身份不符、发送未知且无 run ID
+  均保持关闭。不清任务、不删除 DO、不手动重跑旧 Actions，不扩展应用升级/回滚。
+- 聚焦原生/workerd 回归、scoped commit/push、精确 PR/main 后，才准备真实控制面发布。
+  10 分钟 token 不能保证覆盖现有 server/admin 两次构建；凭据接入和业务验收另记事实。
+
+SBA-05-S04 本地验收：Windows Node.js 聚焦 24/24，workerd/SQLite/OIDC 41/41，
+Chrome/workerd synthetic 整链与恢复历史页面通过；固定校验的 actionlint 1.7.12 通过，
+未额外运行 ShellCheck/Pyflakes。只读交叉审阅发现多次恢复后历史缺行检测不足，已补
+metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 缺行回归，再验 41/41。
+许可竞态、旧 v1 截止后 unknown、已消费拒绝、未批准 SHA、policy 漂移、历史损坏和旧 ID
+复用均有聚焦覆盖。仅源码/合成验收，不是真实恢复或 NAccount 部署；证据根
+`linshi/springbok-sba-05-s04-20261006/`。按 scoped commit/PR/main 立即交付，远程结果另核。

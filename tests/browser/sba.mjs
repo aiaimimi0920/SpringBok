@@ -2,17 +2,18 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { sbaFixture, sha, sourceSha } from '../cloud/sba-fixture.mjs';
+import { sbaFixture, policy, sha, sourceSha } from '../cloud/sba-fixture.mjs';
 import { origin } from '../cloud/admin-fixture.mjs';
 import { zip } from '../sba-zip-fixture.mjs';
 const cleanup = [], x = await sbaFixture({ after: fn => cleanup.push(fn) });
+let active = x;
 let browser;
 try {
   browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' });
   const context = await browser.newContext({ viewport: { width: 1280, height: 950 } }), errors = [], paths = [];
   await context.route('**/*', async route => {
     const request = route.request(); assert.equal(new URL(request.url()).origin, origin); paths.push(new URL(request.url()).pathname);
-    const response = await x.f.mf.dispatchFetch(request.url(), { method: request.method(), headers: { ...request.headers(), 'cf-access-jwt-assertion': x.session },
+    const response = await active.f.mf.dispatchFetch(request.url(), { method: request.method(), headers: { ...request.headers(), 'cf-access-jwt-assertion': active.session },
       ...(request.postData() === null ? {} : { body: request.postData() }) });
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
   });
@@ -48,5 +49,16 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.deepEqual(errors, []); assert.equal(x.state.dispatches, 1);
   await page.screenshot({ path: join(directory, 'sba-synthetic-receipt-mobile.png'), fullPage: true });
+  const y = await sbaFixture({ after: fn => cleanup.push(fn) }); active = y;
+  await y.post('submit', await y.preview()); y.state.runStatus = 'completed'; y.state.conclusion = 'failure';
+  const recovered = await y.post('recover-unstarted', { taskId: y.state.request.taskId, executorSha: 'f'.repeat(40) });
+  assert.equal(recovered.status, 200);
+  y.f.bindings.SBA_POLICY = JSON.stringify({ ...policy, github: { ...policy.github, executorSha: 'f'.repeat(40), ref: `sba-executor-${'f'.repeat(40)}` } });
+  await y.f.restart(); await page.reload(); await page.getByText('已读取持久记录，没有触发部署或自动回收', { exact: true }).waitFor();
+  assert.equal(await start.isEnabled(), true); assert.match(await page.locator('#sba-record').textContent(), /已核实未执行的历史/);
+  assert.match(await page.locator('#sba-record').textContent(), /sba-test-task/);
+  assert.doesNotMatch(await page.locator('body').textContent(), /synthetic-deployment-secret|permitId|never-return/);
+  assert.equal(y.state.dispatches, 1); assert.deepEqual(errors, []);
+  await page.screenshot({ path: join(directory, 'sba-synthetic-recovery-history-mobile.png'), fullPage: true });
   console.log('PASS real Chrome + workerd: SBA preview/cancel/escape/back, single submit, reload, OIDC permit and verified receipt (synthetic GitHub, no deployment)');
 } finally { await browser?.close(); for (const fn of cleanup) await fn(); }

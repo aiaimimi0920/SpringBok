@@ -192,3 +192,22 @@ test('separate dispatch invocations are not an idempotency layer; durable claim 
   await executor.dispatch(request(), manifest()); await executor.dispatch(request(), manifest());
   assert.equal(calls.filter(c => c.options.method === 'POST').length, 2);
 });
+
+test('recovery proof requires an exact first-attempt terminal failed run, never artifact or dispatch', async () => {
+  for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
+    const responses = []; const { executor, calls } = client(responses);
+    const binding = await executor.prepare(request(), manifest());
+    responses.push(json({ ...run(binding.title), conclusion }));
+    const proof = await executor.inspectUnstartedRun(30, request(), manifest());
+    assert.equal(proof.runId, 30); assert.equal(proof.requestDigest, binding.requestDigest);
+    assert.equal(proof.executorSha, config().executorSha); assert.equal(proof.conclusion, conclusion);
+    assert.ok(proof.verifiedAt <= Date.now()); assert.equal(calls.length, 1); assert.equal(calls[0].options.method, 'GET');
+  }
+  for (const change of [r => { r.status = 'in_progress'; r.conclusion = null; }, r => { r.conclusion = 'success'; },
+    r => { r.run_attempt = 2; }, r => { r.head_sha = 'f'.repeat(40); }, r => { r.display_title = 'other'; }]) {
+    const responses = []; const { executor, calls } = client(responses);
+    const value = run((await executor.prepare(request(), manifest())).title); change(value); responses.push(json(value));
+    await assert.rejects(executor.inspectUnstartedRun(30, request(), manifest()), /SBA_GITHUB_RUN_/);
+    assert.equal(calls.length, 1);
+  }
+});

@@ -20,6 +20,7 @@ function render() {
   $('sba-start').disabled = busy || !snapshot?.ready;
   $('sba-reconcile').disabled = busy || snapshot?.job?.status !== 'running';
   $('sba-record').textContent = snapshot?.job ? `${labels[snapshot.job.status] ?? '未知状态'}\n${JSON.stringify(snapshot.job, null, 2)}` : '尚无首次部署任务';
+  if (snapshot?.history?.length) $('sba-record').textContent += `\n已核实未执行的历史（保留，不重放）：\n${JSON.stringify(snapshot.history, null, 2)}`;
 }
 export async function refreshSba(value) {
   clearSba(); if (!value?.sbaEnabled) return;

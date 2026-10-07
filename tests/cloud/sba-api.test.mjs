@@ -162,3 +162,15 @@ test('machine rejection phases distinguish policy, OIDC, task, run and source wi
   assert.equal((await disabled.source()).headers.get('x-sba-denied-phase'), 'policy');
   assert.equal(x.state.dispatches, 1);
 });
+
+test('current self-workflow claims reach source then exactly one permit; foreign job stays closed', async t => {
+  const x = await setup(t); await x.post('submit', await x.preview());
+  const self = { job_workflow_ref: `${policy.github.repository}/${policy.github.workflowPath}@refs/tags/${policy.github.ref}`,
+    job_workflow_sha: sha };
+  assert.equal((await x.source({ headers: { authorization: `Bearer ${x.token({ ...self, job_workflow_sha: 'f'.repeat(40) })}`, 'content-type': 'application/json' } })).status, 403);
+  assert.equal(x.state.sourceRequests, 0);
+  assert.equal((await x.source({ headers: { authorization: `Bearer ${x.token(self)}`, 'content-type': 'application/json' } })).status, 200);
+  assert.equal((await x.f.call('/api/admin/sba/state')).json().job.permitAt, null);
+  assert.equal((await x.permit(x.token(self))).status, 200);
+  assert.equal((await x.permit(x.token(self))).status, 403); assert.equal(x.state.dispatches, 1);
+});

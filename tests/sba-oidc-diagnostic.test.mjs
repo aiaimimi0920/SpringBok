@@ -14,6 +14,19 @@ test('OIDC context projection contains only fixed field names, types and boolean
   for (const field of Object.values(value)) for (const [key, entry] of Object.entries(field))
     assert.equal(typeof entry, key === 'type' ? 'string' : 'boolean');
 });
+test('self-workflow diagnostic compares only the independently checked exact identity and emits booleans', () => {
+  const self = { job_workflow_ref: 'synthetic-private-ref', job_workflow_sha: 'synthetic-private-sha' };
+  const exact = oidcContextProjection(self, self);
+  assert.equal(exact.job_workflow_ref.matchesSelf, true); assert.equal(exact.job_workflow_sha.matchesSelf, true);
+  for (const payload of [{}, { job_workflow_ref: null, job_workflow_sha: '' },
+    { job_workflow_ref: 'foreign-ref', job_workflow_sha: 'foreign-sha' }]) {
+    const value = oidcContextProjection(payload, self);
+    assert.equal(value.job_workflow_ref.matchesSelf, false); assert.equal(value.job_workflow_sha.matchesSelf, false);
+    assert.doesNotMatch(JSON.stringify(value), /synthetic|private|foreign/);
+  }
+  assert.equal(oidcContextProjection({}).job_workflow_ref.matchesSelf, false);
+  assert.doesNotMatch(JSON.stringify(exact), /synthetic|private/);
+});
 test('diagnostic CLI outside its exact hosted tag exits without network or raw environment output', () => {
   let result;
   try { execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/sba-oidc-diagnostic.mjs', import.meta.url))],

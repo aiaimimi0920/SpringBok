@@ -2,14 +2,17 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 const reject = () => { throw new Error('SBA_OIDC_DIAGNOSTIC_REJECTED'); };
 const fields = ['event_name', 'runner_environment', 'run_attempt', 'environment', 'job_workflow_ref', 'job_workflow_sha', 'head_ref', 'base_ref'];
-export function oidcContextProjection(payload) {
+export function oidcContextProjection(payload, self = {}) {
   const expected = { event_name: 'workflow_dispatch', runner_environment: 'github-hosted', run_attempt: '1' };
   return Object.fromEntries(fields.map(field => {
     const value = payload[field];
     return [field, { present: Object.hasOwn(payload, field), type: value === null ? 'null' :
       ['undefined', 'string', 'number', 'boolean'].includes(typeof value) ? typeof value : 'other',
       emptyString: value === '', matchesExpected: Object.hasOwn(expected, field) ? value === expected[field] :
-        value === undefined || (['head_ref', 'base_ref'].includes(field) && value === '') }];
+        value === undefined || (['head_ref', 'base_ref'].includes(field) && value === ''),
+      ...(['job_workflow_ref', 'job_workflow_sha'].includes(field) ? {
+        matchesSelf: typeof self[field] === 'string' && value === self[field],
+      } : {}) }];
   }));
 }
 export async function diagnoseOidc(environment = process.env) {
@@ -41,7 +44,8 @@ export async function diagnoseOidc(environment = process.env) {
       payload.sha !== sha || payload.workflow_sha !== sha || payload.ref !== ref ||
       payload.workflow_ref !== environment.GITHUB_WORKFLOW_REF || payload.run_id !== environment.GITHUB_RUN_ID) reject();
   // 此 run 只诊断自身 signed context；不访问 SpringBok、不读取应用、不领取许可或注入秘密。
-  return { signatureVerified: true, exactRunIdentityVerified: true, context: oidcContextProjection(payload) };
+  return { signatureVerified: true, exactRunIdentityVerified: true, context: oidcContextProjection(payload,
+    { job_workflow_ref: environment.GITHUB_WORKFLOW_REF, job_workflow_sha: sha }) };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try { console.log(`SBA_OIDC_CONTEXT_PROOF ${JSON.stringify(await diagnoseOidc())}`); }

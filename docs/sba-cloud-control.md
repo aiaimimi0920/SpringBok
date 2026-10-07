@@ -31,6 +31,12 @@
 
 permit 核验 GitHub issuer/JWKS、仓库数字 ID、workflow SHA/ref/tag、hosted runner、首次 attempt，再查精确 run title 绑定 task/digest。秘密齐全后才原子消费许可。许可响应丢失不重发，dispatch 未知不重发，超时/unknown 不解锁。管理 reconcile 是显式动作，临时网络失败保留 running，可信终态失败才转 unknown。
 
+SBA-05-S07 兼容当前普通 job 的 signed self-workflow 身份：`job_workflow_ref` 和
+`job_workflow_sha` 仅允许同时缺失，或同时精确匹配批准的 workflow ref 与 executor SHA。
+缺一、foreign/reusable 身份、错误 SHA、null 和空字符串仍失败关闭，不忽略这组字段。
+只读诊断的 `matchesSelf` 是相对于已独立验签核验的诊断 run 身份的布尔事实，
+不输出原始字段，也不能代替执行 workflow 的 source/permit 验核或应用发布证据。
+
 制品回收先核验 run/artifact 关联，下载跳转只接受受限 Azure Blob HTTPS 主机，绝不转发 GitHub bearer。ZIP 限 64 KiB、解压限 32 KiB，只接收一个 receipt.json，并验证 SHA-256、CRC、envelope 和应用结果。应用报告成功不等于用户业务验收。
 
 ## SBA-05-S03 私有源码通道

@@ -73,3 +73,12 @@ test('OIDC rejection exposes only fixed categories, not the signed claims or ori
   await assert.rejects(verify('synthetic-private-invalid-token', policy, { onReject: value => { reason = value; } }), /SBA_OIDC_REJECTED/);
   assert.equal(reason, 'jwt');
 });
+
+test('accept current signed self-workflow job identity but reject foreign, partial and inconsistent pairs', async () => {
+  const p = claims(), current = { ...p, job_workflow_ref: p.workflow_ref, job_workflow_sha: p.workflow_sha };
+  assert.equal((await verifier()(await sign(current), policy)).runId, 456);
+  for (const changed of [{ job_workflow_ref: 'other/workflow@refs/tags/foreign' },
+    { job_workflow_sha: 'b'.repeat(40) }, { job_workflow_ref: undefined }, { job_workflow_sha: undefined },
+    { job_workflow_ref: null, job_workflow_sha: null }, { job_workflow_ref: '', job_workflow_sha: '' }])
+    await assert.rejects(verifier()(await sign({ ...current, ...changed }), policy), /SBA_OIDC_REJECTED/);
+});

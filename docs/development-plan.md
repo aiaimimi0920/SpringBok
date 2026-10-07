@@ -793,3 +793,21 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
   ShellCheck/Pyflakes；只读独立审阅未见确定阻断项。首次契约拒绝新增 id-token job，现为
   明确命名的诊断 job 加窄例外及专用手动/只读/无部署能力断言，不放行其他 workflow。
   成功 signed 投影须由后续真实诊断 run 验证；此处不预报根因字段或应用发布结果。
+
+### SBA-05-S07 精确 self-workflow 身份兼容修复（2026-10-07）
+
+- 负责人主 AI；基线 main `967783adc4b5687a39aaaca6a28825ed697e4036`，分支
+  `fix/sba-05-s07-self-workflow-identity`，领取时工作树干净。S06 PR #62 精确 head/main
+  六 workflows、15/13 checks 成功；只读诊断 run `37594041712` attempt1 success，签名和
+  精确 run identity 验核成功，普通非复用 job 的 `job_workflow_ref/sha` 两字段非空。
+- 可复现机制：生产 verifier 的 context 条件拒绝任何已定义 job_workflow 字段，和当前
+  signed 普通 job 形状不兼容。只兼容两字段同时缺失或同时精确匹配已核定 self workflow
+  ref/SHA；其他复用/混合/缺一/错误 SHA 仍拒绝。再补安全投影的 self-match 布尔事实。
+- 范围：OIDC verifier、匹配 synthetic/workerd 先红后绿、诊断投影及专题/计划。先独立
+  Git/PR/main，再只读核验真实 self-match；通过后才批准恢复/新应用任务。保持原任务历史，
+  不 rerun、不清状态、不取消身份校验。证据 `linshi/springbok-sba-05-s07-20261007/`。
+- 本地先红后绿：OIDC self pair 原实现拒绝；修复后 Node 43/43、workerd/SQLite/OIDC
+  45/45，无失败或跳过。新增 workerd 回归首次遗漏 JSON content-type，已仅修夹具请求，
+  未放宽机器 API。fixed SHA-256 actionlint 1.7.12 通过（无额外 ShellCheck/Pyflakes）；
+  只读交叉审阅无确定阻断，不计独立执行。所有修改文本 UTF-8 无 BOM，代码/测试
+  指纹绑定验收；精确 Git/PR/main、安全扫描、真实 self-match 及部署结果另记回执。

@@ -46,8 +46,11 @@ export function createSbaOidcVerifier({ fetchImpl = fetch } = {}) {
       if (p.workflow_sha !== g.executorSha || p.sha !== g.executorSha || p.ref !== ref || p.ref_type !== 'tag' ||
           p.workflow_ref !== `${g.repository}/${g.workflowPath}@${ref}`) reject();
       reason = 'context';
+      const jobContextAbsent = p.job_workflow_ref === undefined && p.job_workflow_sha === undefined;
+      const jobContextSelf = p.job_workflow_ref === `${g.repository}/${g.workflowPath}@${ref}` &&
+        p.job_workflow_sha === g.executorSha;
       if (p.event_name !== 'workflow_dispatch' || p.runner_environment !== 'github-hosted' || p.run_attempt !== '1' ||
-          p.environment !== undefined || p.job_workflow_ref !== undefined || p.job_workflow_sha !== undefined ||
+          p.environment !== undefined || (!jobContextAbsent && !jobContextSelf) ||
           (p.head_ref !== undefined && p.head_ref !== '') || (p.base_ref !== undefined && p.base_ref !== '')) reject();
       reason = 'run-id';
       if (typeof p.run_id !== 'string' || !/^[1-9][0-9]*$/.test(p.run_id) || !Number.isSafeInteger(Number(p.run_id))) reject();

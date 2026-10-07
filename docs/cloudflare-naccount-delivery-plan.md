@@ -458,3 +458,17 @@ S05 本地聚焦 39/39、workerd/SQLite/OIDC 43/43、固定校验 actionlint 通
 ShellCheck/Pyflakes），包括恶意诊断字段、transport 分型及失败后零 permit/应用调用。
 新真实 Access 会话读取旧任务为 unknown/deadline、permitAt/result=null，历史保留。
 限定源码/本地验收完成，立即 scoped commit/push、精确 PR/main；根因仍待真实诊断。
+
+### SBA-05-S06 只读签名上下文字段核验（2026-10-07）
+
+S05 PR #61 已合并并实际发布，最后 Worker version `e435299a-154a-4617-bd09-5d4abc3a56ee`；
+[最终回执](https://github.com/aiaimimi0920/SpringBok/pull/61#issuecomment-6033924790)。
+两条未开始任务历史保留；唯一新 run `37591100533` 以 HTTP403/json、oidc/context 失败，
+尚未进入部署许可。context 中哪一字段不匹配仍未确定，不凭此放宽校验。
+
+主 AI 领取 S06：无应用输入、无 Cloudflare secrets、不请求机器许可的只读 hosted Actions；
+手动、首次 attempt、精确 diagnostic tag guard，正常获取 OIDC 后独立核验签名与精确
+run/repo/ref/SHA。只输出固定字段 presence/type/empty/expected 布尔投影，不输出原值或
+JWT；不把诊断的 identityVerified 标记当作生产 context 已全通过。匹配测试12/12、固定
+actionlint 通过，独立只读审阅无确定阻断；成功链须由真实 run 验核。先 scoped Git/PR/main
+交付，再受保护 tag 单次诊断；不重跑旧任务或本机 CLI 发布。证据 `linshi/springbok-sba-05-s06-20261007/`。

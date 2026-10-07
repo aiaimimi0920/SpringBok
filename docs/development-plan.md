@@ -776,3 +776,20 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
   actionlint 1.7.12 归档 SHA-256 复核通过，未额外 ShellCheck/Pyflakes。只读独立审阅未见
   确定阻断项，不计独立执行。真实 Access 新会话确认当前 task permitAt/result=null，旧历史
   保留；没有 rerun/dispatch。精确提交、安全扫描、PR/main 及新任务结果另记最终回执。
+
+### SBA-05-S06 OIDC context 的只读真实字段核验（2026-10-07）
+
+- 负责人主 AI；基线 main `a5c395cf8c789472d7a054292cd2480b9aa7ef36`，分支
+  `fix/sba-05-s06-oidc-context-proof`；工作树干净。S05 PR #61 精确 head 六 workflows/
+  15 checks、main 六 workflows/13 checks 成功，已实际发布；两条未执行历史保留。
+- S05 云端唯一新 task `sba-20261007-naccount-a5c395c` / run `37591100533`，attempt1
+  completed/failure；诊断为 HTTP403/json、remotePhase=oidc、remoteReason=context，
+  尚未进入 pending/source/permit。现有日志不区分该组中的八个字段。
+- 只增加无应用输入、无部署秘密、不调用机器 permit/source 的手动只读 Actions 诊断。
+  从正常 GitHub OIDC 取得 token，再独立验签；只输出固定字段的 presence/type/empty/
+  expected 布尔投影，不输出 token、原始 claims/URL/header。真实字段核实后才修许可 verifier。
+  不重跑旧 Actions、不清 DO、不把诊断当发布。证据 `linshi/springbok-sba-05-s06-20261007/`。
+- 本地投影/CLI/安全自动化契约 12/12，固定归档 SHA-256 校验 actionlint 通过，无额外
+  ShellCheck/Pyflakes；只读独立审阅未见确定阻断项。首次契约拒绝新增 id-token job，现为
+  明确命名的诊断 job 加窄例外及专用手动/只读/无部署能力断言，不放行其他 workflow。
+  成功 signed 投影须由后续真实诊断 run 验证；此处不预报根因字段或应用发布结果。

@@ -10,7 +10,7 @@ export async function connectionsFixture(overrides = {}) {
       if (state.reject) return Response.json({ error: fakeToken }, { status: 403 });
       if (state.resources && request.url.startsWith('https://api.cloudflare.com/client/v4/accounts/' + 'a'.repeat(32) + '/')) return Response.json(state.resources);
       if (request.url === 'https://api.cloudflare.com/client/v4/accounts/' + 'a'.repeat(32)) return Response.json({ success: true, result: { id: 'a'.repeat(32) } });
-      if (request.url === 'https://api.github.com/user') return Response.json({ id: 1 });
+      if (request.url === 'https://api.github.com/user') return Response.json(state.user ?? { id: 1, login: 'owner' });
       if (request.url === 'https://api.github.com/repos/owner/repo') return Response.json({ id: 2, full_name: 'owner/repo' });
       if (request.url === 'https://api.github.com/repos/owner/repo/actions/workflows?per_page=1') return Response.json({ total_count: 1, workflows: [{ id: 3 }] });
       if (state.provider) return state.provider(request,context);

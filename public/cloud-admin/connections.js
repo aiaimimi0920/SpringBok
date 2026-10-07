@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 let session = null, rows = [], generation = 0, controller = null, busy = false, pendingDisable = null;
 const states = { verified: '只读验证通过', failed: '验证失败，不可用', disabled: '已停用' };
-const checks = { 'account-read': 'Cloudflare 账号读取', 'repository-actions-read': 'GitHub 仓库及 Actions 读取', 'verification-failed': '凭据、权限或平台连接异常', 'credential-unavailable': '密钥存储不可用，请联系管理员' };
+const checks = { 'account-read': 'Cloudflare 账号读取', 'github-account-read':'GitHub 账户身份读取，仓库权限见云资源目录', 'repository-actions-read': 'GitHub 仓库及 Actions 读取', 'verification-failed': '凭据、权限或平台连接异常', 'credential-unavailable': '密钥存储不可用，请联系管理员' };
 function notice(text, tone = 'info') { $('connection-status').textContent = text; $('connection-status').dataset.tone = tone; }
 function controls() { $('connection-fields').disabled = busy || !session?.connectionsEnabled; $('connections-refresh').disabled = busy; }
 function clearSecret() { $('connection-token').value = ''; }

@@ -22,4 +22,5 @@ export function connectionInput(input) {
 }
 export const connectionMetadata = row => ({ id: row.id, name: row.name, provider: row.provider, target: row.target,
   revision: row.revision, state: row.state, check: row.check, checkedAt: row.checkedAt,
-  createdAt: row.createdAt, updatedAt: row.updatedAt, deploymentPermissionsVerified: false });
+  createdAt: row.createdAt, updatedAt: row.updatedAt, deploymentPermissionsVerified: false,
+  ...(row.accountName ? {accountName:row.accountName} : {}), ...(row.parentId ? {parentId:row.parentId,parentRevision:row.parentRevision} : {}) });

@@ -25,6 +25,19 @@
 .resource-types input:disabled + span { color: var(--neuro-text-muted); border-style: dashed; cursor: not-allowed; }
 #resource-config-help { border: 0; padding: 0; margin: 8px 0 20px; }
 #resource-dialog-notice { font-size: 13px; }
+.brand-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#resource-save:disabled { color: var(--neuro-text-muted); background: var(--neuro-surface); border-color: var(--neuro-line); }
+.account-target { color: var(--neuro-text-muted); font: 12px ui-monospace, Consolas, monospace; }
+#resource-accounts .section-heading { flex-wrap: wrap; }
+#resource-accounts .section-heading h2 { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+#resource-accounts .section-heading .index { overflow-wrap: anywhere; min-width: 0; }
+.inventory-group { border-top: 1px solid var(--neuro-line); padding-top: 18px; margin-top: 18px; }
+.inventory-status { font-size: 12px; color: var(--neuro-text-muted); }
+.inventory-status[data-tone=error] { color: var(--neuro-danger-text); }
+.inventory-group ul { list-style: none; padding: 0; margin: 0; max-height: 360px; overflow: auto; }
+.inventory-group li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; }
+.inventory-group li p { margin: 0; flex: 1 1 200px; }
+.inventory-group li button { margin-left: auto; flex-shrink: 0; }
 #resource-discovered li { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 #resource-discovered p { margin: 0; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 #resource-discovered button { flex-shrink: 0; }

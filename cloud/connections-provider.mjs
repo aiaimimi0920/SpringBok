@@ -36,6 +36,10 @@ export async function verifyConnection(row, token, transport = fetch, timeoutMs 
     if (row.provider !== 'github') throw new Error('unsupported provider');
     const user = await readJson('https://api.github.com/user', token, true, transport, timeoutMs);
     if (!Number.isSafeInteger(user.id) || user.id < 1) throw new Error('invalid PAT');
+    if (row.target.startsWith('@')) {
+      if (row.target !== '@' + user.login) throw new Error('account mismatch');
+      return { ok:true, code:'github-account-read' };
+    }
     const repo = await readJson(`https://api.github.com/repos/${row.target}`, token, true, transport, timeoutMs);
     if (repo.full_name?.toLowerCase() !== row.target.toLowerCase() || !Number.isSafeInteger(repo.id) || repo.id < 1 || repo.archived === true || repo.disabled === true) throw new Error('repository mismatch');
     const actions = await readJson(`https://api.github.com/repos/${row.target}/actions/workflows?per_page=1`, token, true, transport, timeoutMs);

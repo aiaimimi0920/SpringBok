@@ -835,3 +835,7 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
   缺行失败关闭。fixed SHA-256 actionlint 1.7.12 通过（无额外 ShellCheck/Pyflakes）。代码/
   测试 LF 指纹匹配，修改文本 UTF-8 无 BOM；Git/PR/main、安全扫描和真实恢复另记回执，
   本地通过不代表 NAccount 已部署或业务验收通过。
+- 首 head 的浏览器 CI 因仍断言旧“已核实未执行”标题失败；已仅更新为中性归档标题并保留
+  not-executed outcome 断言。真实 Chrome + workerd synthetic 整链本地通过，产品代码指纹
+  不变；新 head 将完整重核，不将旧失败忽略或视为通过。Gitleaks 首提交扫描 115 commits
+  无检出，最终提交另核。

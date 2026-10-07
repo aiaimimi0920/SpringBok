@@ -1,0 +1,25 @@
+name: SBA OIDC context diagnostic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  context:
+    runs-on: windows-2025
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Install locked public signature verifier without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix cloud
+      - name: Verify signed execution context without deployment credentials or permission requests
+        env:
+          SBA_RUNNER_ORIGIN: ${{ vars.SBA_RUNNER_ORIGIN }}
+        run: node scripts/sba-oidc-diagnostic.mjs

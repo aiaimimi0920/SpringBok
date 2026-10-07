@@ -15,11 +15,25 @@ test("security workflows keep least privilege and untrusted PR boundaries", () =
     assert.match(workflow, /persist-credentials: false/);
     assert.match(workflow, /timeout-minutes:/);
     assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|packages: write/);
-    if (name !== "sba-execute.yml") assert.doesNotMatch(workflow, /id-token:/);
+    if (!["sba-execute.yml", "sba-oidc-diagnostic.yml"].includes(name)) assert.doesNotMatch(workflow, /id-token:/);
     for (const [, ref] of workflow.matchAll(/uses:\s+([^\s]+) /g)) {
       assert.match(ref, /@[a-f0-9]{40}$/);
     }
   }
+});
+
+test("OIDC diagnostic is manual, exact-tag guarded and has no application or deployment capability", () => {
+  const workflow = read(".github/workflows/sba-oidc-diagnostic.yml");
+  assert.match(workflow, /^permissions:\n  contents: read\njobs:/m);
+  assert.match(workflow, /    permissions:\n      contents: read\n      id-token: write/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /pull_request|push:|secrets\.|CLOUDFLARE|SBA_REQUEST_JSON/);
+  assert.equal([...workflow.matchAll(/id-token: write/g)].length, 1);
+  const script = read("scripts/sba-oidc-diagnostic.mjs");
+  assert.match(script, /refs\/tags\/sba-oidc-diagnostic-/);
+  assert.match(script, /jwtVerify\(token/);
+  assert.doesNotMatch(script, /executeCheckout|requestSource|CLOUDFLARE|sbaStub|createGithubExecutor/);
+  assert.match(script, /SBA_OIDC_DIAGNOSTIC_UNCONFIRMED/);
 });
 
 test("secret and workflow scanners have exact verified releases and fail closed", () => {

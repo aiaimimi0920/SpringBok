@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deploymentDeclaration, deploymentConfiguration } from '../cloud/deployment-contract.mjs';
-export const declaration={schemaVersion:1,target:'cloudflare-workers',accountPath:['accountId'],defaults:{vars:{},server:{name:''}},fields:[{path:['server','name'],label:'Worker 名称',type:'text',required:true},{path:['vars'],label:'公开变量 JSON',type:'json',required:true}],resources:[{key:'database',label:'数据库',kind:'d1',idPath:['database','id'],namePath:['database','name']}]};
+export const declaration={schemaVersion:1,target:'cloudflare-workers',accountPath:['accountId'],defaults:{vars:{},server:{name:''}},fields:[{path:['server','name'],label:'Worker 名称',type:'text',required:true},{path:['vars'],label:'公开变量 JSON',type:'json',required:true}],targets:[{kind:'worker',path:['server','name']}],resources:[{key:'database',label:'数据库',kind:'d1',idPath:['database','id'],namePath:['database','name']}]};
 test('declaration strictly bounds paths, public values, types and overlapping destinations',()=>{
   assert.deepEqual(deploymentDeclaration(declaration),declaration);
   for(const patch of [{target:'ssh'},{accountPath:['__proto__']},{fields:[{...declaration.fields[0],path:['accountId']}]},{fields:[{...declaration.fields[0],type:'shell'}]},{defaults:{token:'secret'}},{defaults:{constructor:{}}}])assert.throws(()=>deploymentDeclaration({...declaration,...patch}));

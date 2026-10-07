@@ -6,5 +6,6 @@
 <section><h2>3. 应用公开配置</h2><div id="deploy-inputs"></div><p>配置随公开任务传给 GitHub Actions；不要填写密钥、密码或 Token。Cloudflare API Token 由服务端在一次性许可中单独交付。</p></section>
 <button id="deploy-preview" type="submit" disabled>审阅部署计划</button></fieldset></form>
 <section id="deploy-review" hidden><h2>4. 审阅与确认</h2><pre id="deploy-plan"></pre><p id="deploy-execution-note">此版本只生成计划，执行入口尚未启用。</p><button id="deploy-submit" type="button" disabled>确认部署</button><button id="deploy-cancel" type="button">取消审阅</button></section>
-<section id="deploy-result" hidden><h2>部署结果</h2><pre id="deploy-record"></pre><button id="deploy-reconcile" type="button">读取执行结果</button></section>
+<section><h2>部署任务</h2><button id="deploy-tasks-refresh" type="button">刷新任务列表</button><select id="deploy-tasks" aria-label="部署任务"></select><button id="deploy-task-open" type="button">打开任务</button></section>
+<section id="deploy-result" hidden><h2>部署结果</h2><pre id="deploy-record"></pre><a id="deploy-run" target="_blank" rel="noopener noreferrer" hidden>查看 GitHub Actions</a><button id="deploy-reconcile" type="button">读取执行结果</button></section>
 </main></body></html>

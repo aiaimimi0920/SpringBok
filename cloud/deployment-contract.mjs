@@ -13,13 +13,16 @@ function publicValue(value, depth=0) {
   else requireValue(value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.length <= 8192 && !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)));
 }
 export function deploymentDeclaration(value) {
-  exact(value,['schemaVersion','target','accountPath','defaults','fields','resources']);
+  exact(value,['schemaVersion','target','accountPath','defaults','fields','resources','targets']);
   requireValue(value.schemaVersion===1 && value.target==='cloudflare-workers' && object(value.defaults));publicValue(value.defaults);
   requireValue(Array.isArray(value.fields) && value.fields.length <= 32 && Array.isArray(value.resources) && value.resources.length <= 12);
   const paths=[value.accountPath];
   for(const field of value.fields){exact(field,['path','label','type','required']);requireValue(['text','json'].includes(field.type)&&typeof field.required==='boolean');label(field.label);paths.push(field.path);}
   for(const resource of value.resources){exact(resource,['key','label','kind','idPath','namePath']);requireValue(key(resource.key)&&['d1','kv','r2'].includes(resource.kind));label(resource.label);paths.push(resource.idPath);if(resource.namePath!==null)paths.push(resource.namePath);}
   requireValue(new Set(value.resources.map(r=>r.key)).size===value.resources.length);
+  requireValue(Array.isArray(value.targets)&&value.targets.length>0&&value.targets.length<=8);
+  for(const target of value.targets){exact(target,['kind','path']);path(target.path);requireValue(['worker','domain'].includes(target.kind)&&value.fields.some(f=>f.type==='text'&&f.required&&f.path.join('.')===target.path.join('.')));}
+  requireValue(new Set(value.targets.map(t=>t.path.join('.'))).size===value.targets.length);
   paths.forEach(path);const names=paths.map(p=>p.join('.'));
   requireValue(names.every((n,i)=>names.every((m,j)=>i===j || (n!==m&&!n.startsWith(m+'.')&&!m.startsWith(n+'.')))));
   requireValue(new TextEncoder().encode(canonicalSba(value)).length<=32768);return structuredClone(value);
@@ -39,5 +42,6 @@ export function deploymentConfiguration(declaration, values, resources, accountI
   set(configuration,d.accountPath,accountId);
   for(const field of d.fields){const value=values[field.path.join('.')];if(field.type==='text')requireValue(typeof value==='string'&&(!field.required||!!value.trim()));else requireValue(!field.required||value!==null);publicValue(value);set(configuration,field.path,value);}
   for(const field of d.resources){const row=resources[field.key];requireValue(row&&row.kind===field.kind&&row.accountId===accountId);set(configuration,field.idPath,row.remoteId);if(field.namePath)set(configuration,field.namePath,row.name);}
-  publicValue(configuration);requireValue(new TextEncoder().encode(canonicalSba(configuration)).length<=32768);return configuration;
+  publicValue(configuration);deploymentTargets(d,configuration);requireValue(new TextEncoder().encode(canonicalSba(configuration)).length<=32768);return configuration;
 }
+export function deploymentTargets(declaration,configuration){return declaration.targets.map(target=>{let value=configuration;for(const part of target.path)value=value?.[part];requireValue(typeof value==='string');if(target.kind==='worker')requireValue(/^[a-z][a-z0-9-]{1,62}$/.test(value));else{const url=new URL(value);requireValue(url.protocol==='https:'&&url.origin===value&&!url.username&&!url.password&&!url.port&&!url.hostname.endsWith('.workers.dev'));}return {kind:target.kind,value};});}

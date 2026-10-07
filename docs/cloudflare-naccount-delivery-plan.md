@@ -390,3 +390,31 @@ LF 正则不匹配（索引 LF，`core.autocrlf=true`）；未修改工作流或
 SBA-05-S02 本地验收：原生 Windows 新回归先以 Git Invalid argument 失败；修复后聚焦检查 33 通过/1 平台跳过（无失败），覆盖原生 Git/环境隔离及 CLI 固定阶段脱敏。actionlint 1.7.12 校验归档 SHA-256 后通过（未运行 ShellCheck/Pyflakes）。未修改控制面的任务/许可数据或执行真实重试。
 
 继续无凭据真实 preflight 发现第二个独立阻塞：NAccount 为 private，匿名 fetch 固定 SHA 返回 `fatal: could not read Username for 'https://github.com': terminal prompts disabled`；OIDC/应用执行仍为零。下一子项需实现不向执行器发放广权限 token 的受控源码读取，并单独实现保留旧记录、证明许可未消费后的安全恢复；不能通过改公开仓库、清任务、换环境或手动重跑绕过。当前只有启动修复进入 PR 交付，首次发布、业务验收和升级均未完成。
+
+### SBA-05-S03 私有源码受控读取领取（2026-10-06）
+
+- 负责人：主 AI；基线 main `ce7cb29dd2b8e6781d55dd1dc52dc85b46f1ed11`，工作树干净。S02 已通过精确 PR/main 六个 workflows 并合并为 PR #58；另有 Dependabot 自动更新 check failure，不宣称所有外部检查全绿。
+- 唯一边界：由已有 OIDC/task/run 身份链授权，只向 runner 返回 GitHub 上批准 SHA 的有界浅层 Git pack；GitHub token 留在 Worker，既不放入 workflow secrets，也不传给应用。执行端以原生 Git strict 导入并沿用干净 checkout/固定 SHA 校验，成功读取不消费部署许可。
+- 复用现有 Git smart-HTTP upload-pack，只生成固定 want SHA/depth=1，不开放通用 URL、任意 Git 命令或凭据代理。读取失败在消费许可前终止；只读可重复请求不变成部署重试。
+- 只读原型已从真实私有 NAccount 固定 SHA 获得 pack，并原生导入核对 clean/HEAD；下一步实现 Worker→workflow 接缝及合成 OIDC/workerd、原生 Git 回归。
+- 不创建新访问凭据，不改变仓库可见性，不改 NAccount。旧任务恢复、policy 升级、云端部署及业务验收不在本子项执行。
+
+SBA-05-S03 接续验收与交付边界：
+
+- 同一 `feat/sba-05-s03-private-source` 分支的未提交实现已接通 Worker→workflow，复用现有
+  OIDC/task/run 验核；GitHub token 不向 runner/应用发放，源码重读不消费部署许可。
+  framing/checksum、原生 Git strict、固定 SHA/干净 checkout 均先于 permit，见
+  [云端控制链的私有源码通道](sba-cloud-control.md#sba-05-s03-私有源码通道)。
+- Windows Node.js 22.22.2 聚焦 38 通过/1 平台跳过，workerd/SQLite/OIDC 33/33，均无失败；
+  真实 15 秒超时 abort 和 checksum 合法但 Git 对象非法的拒绝已覆盖。源码 LF 指纹在
+  测试前后匹配；固定 actionlint 归档 SHA-256 复核后通过，未额外 ShellCheck/Pyflakes。
+- 日志和指纹：`linshi/springbok-sba-05-s03-delivery-20261006/`。首次局部测试包装错列
+  store 文件名而只有 30 项，已保留日志、修正真实入口并取得 33 项，不把少测称完整覆盖。
+- 立即按 scoped commit/push、精确 PR head/CI、正常合并/main 复核交付；最终 SHA 与
+  Gitleaks/CI 结果写回执，不预报。无真实 Actions、Worker 发布、policy/tag 变更、NAccount
+  应用发布或业务验收；原失败任务及许可数据保留。下一子项只处理有证据的安全恢复，
+  不通过手动重跑或清空任务绕过未知状态。
+- PR #59 首 head `e62e824` 六个 workflow 执行成功，但 CodeQL finding check 的新 URL
+  正则告警阻止合并。已按 SHA-256 核验并读取 SARIF，改为 Git remote URL 精确相等断言；
+  本地 workflow 9/9 回归通过。保留首轮扫描证据，不 suppress、不绕过，修复后的精确
+  PR/main 结果仍须在最终回执独立核实。

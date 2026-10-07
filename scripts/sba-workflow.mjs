@@ -5,6 +5,7 @@ import { devNull } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { inspectCheckout, executeCheckout } from '../src/sba/runner.mjs';
 import { canonicalSba, sbaDigest } from '../cloud/sba-control.mjs';
+import { requestSource, decodeSourceResponse } from '../src/sba/source.mjs';
 const reject = () => { throw new Error('SBA_WORKFLOW_REJECTED'); };
 
 export async function workflowInput(env) {
@@ -37,20 +38,22 @@ async function readJson(url, options, fetchImpl) {
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
   } finally { clearTimeout(timer); controller.abort(); }
 }
-function git(args, cwd, environment) {
+function git(args, cwd, environment, input) {
   const env = { PATH: environment.PATH ?? environment.Path, SYSTEMROOT: environment.SYSTEMROOT ?? environment.SystemRoot,
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : devNull, GIT_TERMINAL_PROMPT: '0' };
   return execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.fsmonitor=false', ...args], {
-    cwd, env, encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd, env, input, encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
   }).trim();
 }
-async function checkoutApplication({ request, directory, environment, executorSha }) {
+async function checkoutApplication({ request, directory, environment, executorSha, authorizeSource }) {
   if (git(['rev-parse', 'HEAD'], environment.GITHUB_WORKSPACE, environment) !== executorSha) reject();
+  const source = await decodeSourceResponse(await authorizeSource(), request.sourceSha);
   const checkout = join(directory, 'application'); await mkdir(checkout);
   git(['init', '--quiet'], checkout, environment);
   git(['remote', 'add', 'origin', `https://github.com/${request.repository}.git`], checkout, environment);
-  git(['fetch', '--quiet', '--depth=1', 'origin', request.sourceSha], checkout, environment);
-  git(['checkout', '--quiet', '--detach', 'FETCH_HEAD'], checkout, environment);
+  await writeFile(join(checkout, '.git', 'shallow'), `${source.shallow}\n`, { encoding: 'utf8', flag: 'wx' });
+  git(['unpack-objects', '--strict'], checkout, environment, source.pack);
+  git(['checkout', '--quiet', '--detach', request.sourceSha], checkout, environment);
   return inspectCheckout(checkout, request);
 }
 export async function runSbaWorkflow({ environment = process.env, fetchImpl = fetch, checkout = checkoutApplication,
@@ -59,19 +62,33 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
   const input = await workflowInput(environment);
   onStage('workspace');
   const temporary = await realpath(tempRoot), directory = await mkdtemp(join(temporary, 'sba-workflow-'));
+  let identity;
+  const getIdentity = async () => {
+    if (identity) return identity;
+    onStage('oidc');
+    const oidcUrl = new URL(environment.ACTIONS_ID_TOKEN_REQUEST_URL);
+    if (oidcUrl.protocol !== 'https:' || oidcUrl.username || oidcUrl.password || oidcUrl.port ||
+        !oidcUrl.hostname.endsWith('.actions.githubusercontent.com') || !environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN) reject();
+    oidcUrl.searchParams.set('audience', input.endpoint);
+    const response = await readJson(oidcUrl.href, { headers: { authorization: `Bearer ${environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } }, fetchImpl);
+    if (typeof response.value !== 'string' || !response.value || response.value.length > 16384) reject();
+    identity = response.value; return identity;
+  };
+  const authorizeSource = async () => {
+    const token = await getIdentity(); onStage('source');
+    const bytes = await requestSource(new URL('/sba/v2/source', input.endpoint).href, {
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ taskId: input.request.taskId, requestDigest: environment.SBA_REQUEST_SHA256 }), fetchImpl,
+    });
+    onStage('checkout'); return bytes;
+  };
   onStage('checkout');
-  const checked = await checkout({ ...input, directory, environment });
+  const checked = await checkout({ ...input, directory, environment, authorizeSource });
   if (canonicalSba(checked.input) !== canonicalSba(input.request)) reject();
-  onStage('oidc');
-  const oidcUrl = new URL(environment.ACTIONS_ID_TOKEN_REQUEST_URL);
-  if (oidcUrl.protocol !== 'https:' || oidcUrl.username || oidcUrl.password || oidcUrl.port ||
-      !oidcUrl.hostname.endsWith('.actions.githubusercontent.com') || !environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN) reject();
-  oidcUrl.searchParams.set('audience', input.endpoint);
-  const identity = await readJson(oidcUrl.href, { headers: { authorization: `Bearer ${environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } }, fetchImpl);
-  if (typeof identity.value !== 'string' || !identity.value || identity.value.length > 16384) reject();
+  const token = await getIdentity();
   onStage('permit');
   // 不重试：POST 的任何丢响应都可能已经消费许可。
-  const permit = await readJson(input.endpoint, { method: 'POST', headers: { authorization: `Bearer ${identity.value}`, 'content-type': 'application/json' },
+  const permit = await readJson(input.endpoint, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ taskId: input.request.taskId, requestDigest: environment.SBA_REQUEST_SHA256 }) }, fetchImpl);
   if (!/^[a-f0-9]{64}$/.test(permit.permitId) || permit.requestDigest !== environment.SBA_REQUEST_SHA256 ||
       canonicalSba(permit.request) !== canonicalSba(input.request) || canonicalSba(permit.manifest) !== canonicalSba(checked.manifest) ||

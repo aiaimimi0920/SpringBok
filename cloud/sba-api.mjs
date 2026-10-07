@@ -3,6 +3,7 @@ import { sbaPolicy, sbaStub, sbaRequest, sbaDigest, canonicalSba, exactSba, requ
 import { createSbaOidcVerifier } from './sba-oidc.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
+import { githubSourcePack, SOURCE_CONTENT_TYPE } from '../src/sba/source.mjs';
 const verifyOidc = createSbaOidcVerifier();
 const reply = (value, status = 200) => Response.json(value, { status, headers: {
   'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
@@ -14,10 +15,10 @@ export function isSbaMachineRequest(request, env) {
   try { return url.origin === JSON.parse(env.SBA_POLICY).runnerOrigin; } catch { return false; }
 }
 
-export async function sbaPermitRequest(request, env, readBody) {
+export async function sbaMachineRequest(request, env, readBody) {
   try {
     const policy = sbaPolicy(env), url = new URL(request.url);
-    requireSba(url.origin === policy.runnerOrigin && url.pathname === '/sba/v2/permit' && !url.search &&
+    requireSba(url.origin === policy.runnerOrigin && ['/sba/v2/permit', '/sba/v2/source'].includes(url.pathname) && !url.search &&
       request.method === 'POST' && !request.headers.has('cookie') && !request.headers.has('origin'));
     const authorization = request.headers.get('authorization');
     requireSba(typeof authorization === 'string' && authorization.startsWith('Bearer '));
@@ -32,6 +33,11 @@ export async function sbaPermitRequest(request, env, readBody) {
     const executor = createGithubExecutor(policy.github, { token: env.SBA_GITHUB_TOKEN });
     // OIDC 身份不包含 workflow inputs，必须另查 GitHub 的精确 task/digest run title。
     requireSba((await executor.inspectRun(identity.runId, job.request, job.manifest)).status === 'pending');
+    if (url.pathname === '/sba/v2/source') {
+      const bytes = await githubSourcePack(job.request.repository, job.request.sourceSha, env.SBA_GITHUB_TOKEN);
+      return new Response(bytes, { headers: { 'content-type': SOURCE_CONTENT_TYPE, 'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
+    }
     const available = JSON.parse(env.SBA_APPLICATION_SECRETS ?? '{}'), secrets = {};
     requireSba(available && typeof available === 'object' && !Array.isArray(available));
     for (const name of policy.secretNames) {

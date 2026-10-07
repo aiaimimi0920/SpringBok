@@ -20,7 +20,7 @@
 - `SBA_POLICY`：JSON 字符串，精确包含 `github, sourceSha, environment, configuration, secretNames, runnerOrigin`。`configuration` 仅公开配置；`sourceSha` 为应用完整 40 位 SHA。
 - `github` 精确包含 `repository, repositoryId, applicationRepository, workflowId, workflowPath, ref, executorSha`；repository 为 owner/name，repositoryId/workflowId 使用真实 GitHub 身份；workflowPath 固定 `.github/workflows/sba-execute.yml`；ref 必须为 `sba-executor-<executorSha>`，executorSha 为已审阅完整 SHA。
 - 部署前创建并保护该不可移动 executor tag，核查其精确 workflow SHA；OIDC 核验不能取代仓库权限和 ref 保护。
-- `runnerOrigin` 为独立 HTTPS origin，不能等于 `ADMIN_ORIGIN`。该 origin 仅允许 `POST /sba/v2/permit`，拒绝 cookie、Origin、query；不可为此放宽管理 Access。
+- `runnerOrigin` 为独立 HTTPS origin，不能等于 `ADMIN_ORIGIN`。该 origin 仅允许 `POST /sba/v2/source` 和 `POST /sba/v2/permit`，拒绝 cookie、Origin、query；不可为此放宽管理 Access。
 - 执行仓库公开 variable `SBA_RUNNER_ORIGIN` 与 policy 一致。workflow 仅手动 dispatch，使用 windows-2025、PowerShell 5.1、Python 3.12、Node 22；固定 Actions，只有执行 job 获得 id-token:write。
 
 准确验证规则以 `cloud/sba-control.mjs`、`src/sba/github.mjs` 和 `.github/workflows/sba-execute.yml` 为准。
@@ -32,6 +32,24 @@
 permit 核验 GitHub issuer/JWKS、仓库数字 ID、workflow SHA/ref/tag、hosted runner、首次 attempt，再查精确 run title 绑定 task/digest。秘密齐全后才原子消费许可。许可响应丢失不重发，dispatch 未知不重发，超时/unknown 不解锁。管理 reconcile 是显式动作，临时网络失败保留 running，可信终态失败才转 unknown。
 
 制品回收先核验 run/artifact 关联，下载跳转只接受受限 Azure Blob HTTPS 主机，绝不转发 GitHub bearer。ZIP 限 64 KiB、解压限 32 KiB，只接收一个 receipt.json，并验证 SHA-256、CRC、envelope 和应用结果。应用报告成功不等于用户业务验收。
+
+## SBA-05-S03 私有源码通道
+
+执行端先核对自身固定 executor SHA，再以同一 OIDC/task/digest/run 身份请求 `/sba/v2/source`。
+Worker 复用既有任务与 GitHub run 核验，只向 policy 批准的应用仓库发送固定 SHA、
+`depth=1` 的 Git smart-HTTP upload-pack 请求。GitHub token 留在 Worker；不进入执行器、
+应用环境、Git 配置、dispatch inputs 或制品。该接口不是任意 URL、命令或凭据代理。
+
+源码请求不消费部署许可、不发放应用秘密；许可未消费且任务/run 仍有效时，可以重新
+读取相同源码。一次调用内无自动重试、拒绝跳转，响应最多 8 MiB、网络超时 15 秒。
+执行器校验 shallow SHA、pkt-line/sideband、pack header 与 SHA-1 checksum，随后在新目录
+由原生 Git `unpack-objects --strict` 导入、检出固定 SHA，并复用干净 checkout/manifest
+边界检查。只有全部通过后才申请一次部署许可；读取、framing 或 Git 对象失败均不能
+进入应用执行。Git 命令沿用 120 秒超时；网络限额不是解压后源码大小的硬上限。
+
+本项只交付源码读取实现与无凭据回归，不修改 SQLite schema、旧任务、policy、executor tag
+或已部署 Worker，不触发真实 Actions 或 NAccount 发布。旧任务恢复必须另行证明许可未消费，
+保留原记录后受控处理；不能通过重新运行 workflow、清空 DO 或替换任务逃避未知语义。
 
 ## 验收与仍开放的边界
 

@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { adminRequest } from './admin.mjs';
-import { isSbaMachineRequest, sbaPermitRequest } from './sba-api.mjs';
+import { isSbaMachineRequest, sbaMachineRequest } from './sba-api.mjs';
 export { SbaDeployment } from './sba-store.mjs';
 import { NODE, ledger, transition } from './protocol.mjs';
 import { nodeEnrollmentRequest } from './enrollment-api.mjs';
@@ -35,7 +35,7 @@ async function body(request, maximum = 2048) {
 }
 export default {
   async fetch(request, env) {
-    if (isSbaMachineRequest(request, env)) return sbaPermitRequest(request, env, body);
+    if (isSbaMachineRequest(request, env)) return sbaMachineRequest(request, env, body);
     if (new URL(request.url).pathname.startsWith('/node/v2/join/')) return nodeEnrollmentRequest(request, env, body);
     if (new URL(request.url).pathname.startsWith('/node/v2/identity/')) return nodeCredentialRequest(request, env, body);
     if (new URL(request.url).pathname.startsWith('/node/v2/channel/')) return nodeChannelRequest(request, env, body);

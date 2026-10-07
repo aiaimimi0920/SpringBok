@@ -56,3 +56,47 @@ test('missing deployment secret rejects before permit consumption and disabled m
   assert.equal((await y.post('preview', { taskId: 'sba-test-task' })).status, 409);
   assert.equal((await y.permit()).status, 403); assert.equal(y.state.dispatches, 0);
 });
+
+
+test('source requires exact OIDC/task/run and can be reread without consuming the permit', async t => {
+  const x = await setup(t);
+  assert.equal((await x.source()).status, 403);
+  await x.post('submit', await x.preview());
+  for (const changes of [{ workflow_sha: 'e'.repeat(40) }, { run_attempt: '2' }, { run_id: '457' }]) {
+    assert.equal((await x.source({ headers: { authorization: `Bearer ${x.token(changes)}`, 'content-type': 'application/json' } })).status, 403);
+  }
+  x.state.badTitle = true; assert.equal((await x.source()).status, 403); x.state.badTitle = false;
+  for (const body of [{ taskId: 'different-task', requestDigest: x.state.requestDigest },
+    { taskId: x.state.request.taskId, requestDigest: 'e'.repeat(64) },
+    { taskId: x.state.request.taskId, requestDigest: x.state.requestDigest, repository: 'other/private' }])
+    assert.equal((await x.source({ body: JSON.stringify(body) })).status, 403);
+  assert.equal(x.state.sourceRequests, 0);
+  for (let i = 0; i < 2; i++) {
+    const response = await x.source(); assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(response.headers.get('content-type'), 'application/x-git-upload-pack-result');
+    assert.equal(await response.text(), 'synthetic-source-bytes');
+    assert.equal((await x.f.call('/api/admin/sba/state')).json().job.permitAt, null);
+    await x.f.restart();
+  }
+  assert.equal(x.state.sourceRequests, 2); assert.equal(x.state.dispatches, 1);
+  assert.equal((await x.permit()).status, 200);
+  assert.equal((await x.source()).status, 403); assert.equal(x.state.sourceRequests, 2);
+});
+
+test('source stays closed for browser requests and upstream errors never consume a permit', async t => {
+  const x = await setup(t, { SBA_APPLICATION_SECRETS: '{}' }); await x.post('submit', await x.preview());
+  for (const [name, value] of [['cookie', 'private'], ['origin', origin]])
+    assert.equal((await x.source({ headers: { authorization: `Bearer ${x.token()}`, 'content-type': 'application/json', [name]: value } })).status, 403);
+  for (const path of [origin + '/sba/v2/source', policy.runnerOrigin + '/sba/v2/source?other=1'])
+    assert.equal((await x.f.mf.dispatchFetch(path, { method: 'POST', body: '{}' })).status, 403);
+  assert.equal(x.state.sourceRequests, 0);
+  for (const status of [302, 500]) {
+    x.state.sourceStatus = status;
+    assert.equal((await x.source()).status, 403);
+    assert.equal((await x.f.call('/api/admin/sba/state')).json().job.permitAt, null);
+  }
+  x.state.sourceStatus = 200;
+  assert.equal((await x.source()).status, 200); // 读取代码不需要部署秘密。
+  assert.equal((await x.permit()).status, 403); assert.equal(x.state.dispatches, 1);
+});

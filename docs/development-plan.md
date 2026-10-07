@@ -699,3 +699,38 @@ git ls-remote origin refs/heads/<本子任务分支>
 SBA-05-S02 本地验收：原生 Windows 新回归先以 Git Invalid argument 失败；修复后聚焦检查 33 通过/1 平台跳过（无失败），覆盖原生 Git/环境隔离及 CLI 固定阶段脱敏。actionlint 1.7.12 校验归档 SHA-256 后通过（未运行 ShellCheck/Pyflakes）。未修改控制面的任务/许可数据或执行真实重试。
 
 继续无凭据真实 preflight 发现第二个独立阻塞：NAccount 为 private，匿名 fetch 固定 SHA 返回 `fatal: could not read Username for 'https://github.com': terminal prompts disabled`；OIDC/应用执行仍为零。下一子项需实现不向执行器发放广权限 token 的受控源码读取，并单独实现保留旧记录、证明许可未消费后的安全恢复；不能通过改公开仓库、清任务、换环境或手动重跑绕过。当前只有启动修复进入 PR 交付，首次发布、业务验收和升级均未完成。
+
+### SBA-05-S03 私有源码受控读取领取（2026-10-06）
+
+- 负责人：主 AI；基线 main `ce7cb29dd2b8e6781d55dd1dc52dc85b46f1ed11`，工作树干净。S02 已通过精确 PR/main 六个 workflows 并合并为 PR #58；另有 Dependabot 自动更新 check failure，不宣称所有外部检查全绿。
+- 唯一边界：由已有 OIDC/task/run 身份链授权，只向 runner 返回 GitHub 上批准 SHA 的有界浅层 Git pack；GitHub token 留在 Worker，既不放入 workflow secrets，也不传给应用。执行端以原生 Git strict 导入并沿用干净 checkout/固定 SHA 校验，成功读取不消费部署许可。
+- 复用现有 Git smart-HTTP upload-pack，只生成固定 want SHA/depth=1，不开放通用 URL、任意 Git 命令或凭据代理。读取失败在消费许可前终止；只读可重复请求不变成部署重试。
+- 只读原型已从真实私有 NAccount 固定 SHA 获得 pack，并原生导入核对 clean/HEAD；下一步实现 Worker→workflow 接缝及合成 OIDC/workerd、原生 Git 回归。
+- 不创建新访问凭据，不改变仓库可见性，不改 NAccount。旧任务恢复、policy 升级、云端部署及业务验收不在本子项执行。
+
+SBA-05-S03 接续实施与本地验收：
+
+- 接续 Session `01a1149e-763e-7a80-9b2f-2c6b880600e3` 的同一未提交分支，已确认原 turn
+  interrupted、没有所属后台测试。负责人仍为主 AI，不重做 S02、不撤销原稿。
+- Worker 的 `/sba/v2/source` 复用 OIDC/task/run 权威核验，token 不出 Worker；请求仅固定
+  repository/SHA/depth=1，网络最多 15 秒、响应最多 8 MiB、无自动重试或跳转。
+  执行器先校验 framing/checksum，再以 Git strict 导入和检查固定干净 checkout，最后才
+  申请部署许可。源码重读不消费许可，损坏源码与拒绝响应均不申请许可、不执行应用。
+- 源码指纹在测试前后完全一致：Windows Node.js 22.22.2 聚焦 **38 通过/1 平台跳过**，
+  workerd/SQLite/OIDC **33/33**，均无失败/取消。补入真实 15 秒 abort 和合法 checksum
+  但非法 Git 对象的拒绝回归；合成 Git/OIDC 不能冒称真实 Actions/业务部署验收。
+- actionlint 1.7.12 的固定 Windows 归档 SHA-256 重核后通过全部 workflow，未额外运行
+  ShellCheck/Pyflakes。局部包装首次错列不存在的 store 测试名，输出只有 30 项；已保留
+  原日志并核实实际文件，用正确三文件入口重新取得 33 项，包装增加文件存在性检查。
+- 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-05-s03-delivery-20261006/`；
+  `local-proof.json`、`focused.log`、`cloud-final.log` 和 `actionlint.log`。主 AI 亲读实际
+  源码/调用点及 scoped diff；先前子代理未启动，不计独立审阅。
+- 本项源码/本地验收闭环后立即 scoped commit/push、精确 head 检查、正常 PR 合并与 main
+  复核；最终 SHA/CI/Gitleaks 以交付回执为准，不循环 amend、不提前宣称已交付。
+  下一独立子项为旧任务安全恢复：先核实原 run 终态、permit 未消费、policy 绑定及历史保留，
+  再设计和验证恢复。没有重跑 run `37567644481`、修改线上 policy、发布应用或清除 DO。
+- 首提交 `e62e824a1110e8a970065d889aa09187c04dab13` 已推送，PR #59。六个 workflow 执行
+  成功，但 CodeQL 独立 finding check 报新增 `js/regex/missing-regexp-anchor`，因此未合并。
+  已下载 JavaScript SARIF 并匹配 GitHub 制品 SHA-256，确认新测试 URL 正则未完整锚定。
+  同任务追加修复为 Git remote URL 的精确相等断言，不修改 scanner 或忽略告警；修复后
+  本地 workflow 回归 9/9，其他未变源码沿用指纹匹配证据，最新 head/main 检查另核回执。

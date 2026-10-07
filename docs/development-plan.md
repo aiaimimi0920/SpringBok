@@ -1,6 +1,6 @@
 # SpringBok 产品开发计划与逐功能进度
 
-更新日期：2026-10-06（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
+更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
 > **2026-10-06 当前优先路线：** 用户要求先把 SpringBok 部署到 Cloudflare，再由云端
@@ -876,3 +876,36 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
 - 新 workerd 用例先以 `403 !== 200` 复现，修复后聚焦 workerd 55/55、Node 边界/契约
   12/12、Chrome/workerd synthetic 整链通过，无失败或跳过。覆盖转发 Cookie、无 assertion、
   错误 service identity、越权路由、跨域、缺 CSRF 和零 dispatch；线上成功仍待发布后核验。
+
+### SBA-05-S12 就绪探针修复与真实部署读回（2026-10-07）
+
+- 负责人主 AI；接续 Session `01a1160d-4408-7533-96a1-a7c553206000`，本轮基线
+  SpringBok `e7ac963864171e0b8e08d14f957ea77ab30a9f29`。本仓库只同步证据与下一停点，
+  产品修复归 NAccount `.sba/`；不改平台鉴权、DO schema 或旧任务。
+- S11 PR #66 已正常合并，精确 main 六 workflows/13 checks 成功，线上 Service Token
+  允许/拒绝测试通过，原 policy、五个 DO 和 secret 名称保留。此前“线上仍待验证”已由
+  `linshi/springbok-sba-05-s11-20261007/final-receipt.json` 闭环，不重建 token。
+- 原 `sba-20261007-naccount-36bca24` 经显式批准恢复，完整 unknown/许可/结果保存在
+  第四条 `operator-authorized-retry` 历史；前三条未变。短期恢复批准已撤下，额外一次恢复
+  许可已消费，不能延伸到新任务。NAccount PR #3 的 CI 例外获用户明确批准并正常合并。
+- 云端新任务 `sba-20261007-naccount-e7ac963` / run `37617881272` attempt 1 使用
+  NAccount `6964b64cdbc04ada6d896f85ba24298ac6c0b8c0`。精确制品 `11481083029` 的归档
+  SHA-256、run/executor/request/结果结构经现有验核器通过，DO 已接受原回执；应用结果是
+  `unknown / NACCOUNT_READINESS_FAILED`，不是 application success。没有 rerun。
+- 新鲜只读检查：`naccount-auth`、`naccount-admin` 已发布，固定 D1 有 46 条迁移记录，
+  固定 KV 有 3 个初始化键。三个探针默认 Python-urllib 均返回 HTTP 403/Cloudflare 1010；
+  诚实标识 `NAccount-SBA/2.0` 均返回 200，issuer 匹配且 JWKS 有 1 个公钥。
+- NAccount PR [#4](https://github.com/aiaimimi0920/NAccount/pull/4) 仅修 readiness GET
+  的 User-Agent 并补四项回归；本地 51/51、真实只读三项、actionlint/Gitleaks 通过。
+  head `7cca71201549b9dbca9e81113ee652dee16b435d` 已审阅、推送并正常合并为
+  `f0bba49482ee4b7243130da5b92645b6b503dc0d`。head/main hosted CI 均未执行（无 runner、
+  steps=0），用户单独批准仅 PR #4 的例外；不写成 CI 通过，不继承给未来 PR。
+- 不重新发布应用、不覆盖当前 unknown、许可或四条历史。`cloud/sba-control.mjs` 当前
+  管理入口只构造 deploy；`SbaDeployment.settle` 拒绝覆盖已有不同结果。协议声明 verify
+  不等于云端已有独立只读复验入口，本机探针通过不能替换原精确回执。
+- 已用用户指定邮箱通过真实注册 API 创建首个待验证用户，未授予管理员权限。浏览器
+  当前无可连接 surface；API 验收不冒称 UI 验收。邮件送达/验证、登录/退出、后台权限和
+  有数据升级仍开放；等待用户邮箱验证信息，不从 KV 取码伪造邮件送达。
+- 证据：`linshi/naccount-sba-05-s12-20261007/`、`linshi/naccount-sba-05-business-20261007/`。
+  下一停点：完成指定用户业务验收；另立小任务增加保留原回执的云端只读验证记录，再按
+  SBA-06/07/08 推进真实更新，禁止为解除 unknown 重跑完整首次部署。

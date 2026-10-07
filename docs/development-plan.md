@@ -903,9 +903,10 @@ metadata v2、条数/链头、连续 sequence/policy/digest 链和真实 SQLite 
 - 不重新发布应用、不覆盖当前 unknown、许可或四条历史。`cloud/sba-control.mjs` 当前
   管理入口只构造 deploy；`SbaDeployment.settle` 拒绝覆盖已有不同结果。协议声明 verify
   不等于云端已有独立只读复验入口，本机探针通过不能替换原精确回执。
-- 已用用户指定邮箱通过真实注册 API 创建首个待验证用户，未授予管理员权限。浏览器
-  当前无可连接 surface；API 验收不冒称 UI 验收。邮件送达/验证、登录/退出、后台权限和
-  有数据升级仍开放；等待用户邮箱验证信息，不从 KV 取码伪造邮件送达。
+- 已用用户指定邮箱通过真实注册 API 创建首个用户；用户提供收到的验证码后，真实
+  verify-email API 返回 200/success，数据库 emailVerified=1，未从 KV 取码或直接改验证位。
+  密码登录已进入正常 MFA 注册步骤，尚未发放 token 或授予管理员权限；等待用户选择
+  MFA。当前无可连接浏览器，API 验收不冒称 UI 验收；登录/退出、后台权限和升级仍开放。
 - 证据：`linshi/naccount-sba-05-s12-20261007/`、`linshi/naccount-sba-05-business-20261007/`。
   下一停点：完成指定用户业务验收；另立小任务增加保留原回执的云端只读验证记录，再按
   SBA-06/07/08 推进真实更新，禁止为解除 unknown 重跑完整首次部署。

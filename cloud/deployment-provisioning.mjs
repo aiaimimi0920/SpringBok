@@ -4,6 +4,7 @@ import { openToken } from './connections-crypto.mjs';
 import { readJson } from './connections-provider.mjs';
 import { connectedStub } from './connected-store.mjs';
 import { serviceSummary } from './service-instance.mjs';
+import { finalizePreview } from './service-preview.mjs';
 
 export async function automaticDraft(vault,owner,input,application){
   const declaration=application.declaration,accounts={},connections={github:input.github,cloudflare:input.cloudflare},credentials={},facts={};
@@ -81,7 +82,7 @@ export async function provisionDeployment(vault,owner,taskId,plan){
     }
     const declaration=plan.application.declaration,values=Object.fromEntries(declaration.fields.map(f=>[f.path.join('.'),f.path.reduce((v,k)=>v[k],plan.configuration)]));
     const configuration=automaticConfiguration(declaration,values,resources,plan.accounts,plan.policy.environment);
-    const finalized={...plan,resources,configuration,policy:{...plan.policy,configuration}};
+    const finalized=finalizePreview({...plan,resources,configuration,policy:{...plan.policy,configuration}});
     vault.ctx.storage.transactionSync(()=>{const record=read();requireSba(record.preparation.phase==='creating');record.preparation.phase='ready';record.preparation.plan=finalized;record.service=serviceSummary(taskId,finalized);
       for(const row of Object.values(resources))sql.exec('INSERT INTO resources VALUES(?,?,?,?,?)',row.id,row.connectionId,row.kind,row.remoteId,JSON.stringify(row));write(record);});
     return finalized;

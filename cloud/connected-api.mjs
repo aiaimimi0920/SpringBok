@@ -7,6 +7,7 @@ import { createSbaOidcVerifier } from './sba-oidc.mjs';
 import { sbaMachineRequest } from './sba-api.mjs';
 import { signSession, sameProof } from './access.mjs';
 import { deploymentTargets } from './deployment-contract.mjs';
+import { continuesInstance, createsResources } from './service-preview.mjs';
 export const connectedEnabled=env=>env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!!env.CONNECTED_TASKS&&!!env.DEPLOYMENT_LOCKS;
 const vaultFor=(env,owner)=>env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const reply=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
@@ -26,7 +27,7 @@ export async function submitConnected(env,session,input){
     if(race){requireSba(race.digest===input.plan.digest);return connectedState(env,session.actor,input.taskId);}
     throw error;
   }
-  requireSba(input.draft.action==='preview'&&canonicalSba(plan)===canonicalSba(input.plan));
+  requireSba(['preview','rehearse','destroy-preview'].includes(input.draft.action)&&canonicalSba(plan)===canonicalSba(input.plan));
   const accountId=plan.accounts?.runtime.accountId??plan.resources[Object.keys(plan.resources)[0]]?.accountId??(await vault.snapshot(session.actor)).connections.find(r=>r.id===plan.connections.cloudflare.id)?.target;
   requireSba(/^[a-f0-9]{32}$/.test(accountId));
   // 检查最终公开配置，而非只查资源声明；这是配置冲突保护，不是对应用代码的沙箱。
@@ -38,9 +39,9 @@ export async function submitConnected(env,session,input){
   for(const id of accountIds){
     const resources=Object.values(plan.resources).filter(row=>row.accountId===id);
     const keys=[...new Set([...resources.flatMap(row=>plan.accounts?[row.name]:[row.remoteId,row.name]),...targets.filter(t=>!t.accountId||t.accountId===id).map(t=>t.value)].map(value=>'identity:'+value))];
-    await accountStub(env,id).claim(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,plan.operation?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null);
+    await accountStub(env,id).claim(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuesInstance(plan)?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null);
   }
-  if(plan.accounts&&!plan.operation)plan=await vault.provisionDeployment(session.actor,input.taskId,plan);
+  if(createsResources(plan))plan=await vault.provisionDeployment(session.actor,input.taskId,plan);
   // Bind generated IDs as well as names before the runner can receive credentials.
   if(plan.accounts)for(const id of accountIds)await accountStub(env,id).bindCreated(session.actor,input.taskId,plan.digest,Object.values(plan.resources).filter(row=>row.accountId===id).map(row=>'identity:'+row.remoteId),plan.operation?.instanceId??input.taskId);
   const request=sbaRequest(plan.policy,input.taskId,plan.application.manifest,plan.operation??null);

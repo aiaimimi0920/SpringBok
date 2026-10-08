@@ -32,7 +32,7 @@ try{
   await page.locator('#service-submit').click();await page.waitForFunction(()=>!document.getElementById('service-dialog').open);
   assert.equal(creates,1);assert.equal(state.dispatches,1);assert.equal(state.request.configuration.database.id,'87654321-1234-1234-1234-123456789abc');
   receipt(await(await machine()).json());await ready(page);await page.getByText('部署成功',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'切换版本',exact:true}).click();
+  await page.getByRole('button',{name:'升级',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#service-version option[value="'+'c'.repeat(40)+'"]'));
   await page.locator('#service-version').selectOption('c'.repeat(40));await reviewService(page);
   await page.locator('#service-submit').click();await page.waitForFunction(()=>!document.getElementById('service-dialog').open);

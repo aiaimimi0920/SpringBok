@@ -28,6 +28,11 @@ export async function serviceState(env, vault, owner, input) {
   const history = entries.map(entry => ({ taskId: entry.taskId, createdAt: entry.createdAt, action: entry.service?.action ?? 'deploy', application: entry.service?.application ?? null }));
   if (record.status === 'preparation-unconfirmed') return { ...record, instance: latest.service ?? { id: input.instanceId }, history, canUpdate: false };
   const { plan } = await connectedStub(env, latest.taskId).bootstrap(owner);
+  const terminal = ['succeeded', 'deployed-unverified'].includes(record.job?.status), previewInstance = !!plan.previewOf;
   return { ...record, instance: serviceSummary(latest.taskId, plan), history, configuration: plan.configuration, declaration: plan.application.declaration,
-    canUpdate: connectedEnabled(env) && ['succeeded', 'deployed-unverified'].includes(record.job?.status) };
+    canUpdate: connectedEnabled(env) && terminal && !previewInstance,
+    canPreview: connectedEnabled(env) && terminal && !previewInstance,
+    canDeletePreview: connectedEnabled(env) && terminal && plan.operation?.action === 'preview',
+    testUrls: plan.operation?.action === 'preview' && terminal ? record.job.result.lifecycle?.urls ?? [] : [],
+    ...(plan.operation?.action === 'destroy-preview' && record.job?.status === 'succeeded' ? { status: 'deleted' } : {}) };
 }

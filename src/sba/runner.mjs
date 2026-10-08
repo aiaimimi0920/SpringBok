@@ -133,7 +133,7 @@ export function invokePowerShell({ root, entrypoint, requestPath, resultPath, en
 }
 
 const unknown = (request, errorCode) => ({
-  schemaVersion: 2, taskId: request.taskId, action: request.action,
+  schemaVersion: request.schemaVersion, taskId: request.taskId, action: request.action,
   sourceSha: request.sourceSha, applicationVersion: request.applicationVersion,
   status: 'unknown', checks: [], errorCode,
 });

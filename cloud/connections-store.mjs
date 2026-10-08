@@ -12,6 +12,7 @@ import { connectBrand, inventory, useRepository } from './brand-resources.mjs';
 import { usageOperation, saveResourceBudget } from './resource-budgets.mjs';
 import { importInput, importedId, inspectImported, sameImport } from './service-import.mjs';
 import { automaticDraft, provisionDeployment } from './deployment-provisioning.mjs';
+import { servicePreviewDraft, continuesInstance, createsResources } from './service-preview.mjs';
 
 export class ConnectionVault extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
@@ -133,6 +134,10 @@ export class ConnectionVault extends DurableObject {
     });
   }
   async deploymentDraft(owner, raw) {
+    if (['rehearse', 'destroy-preview'].includes(raw?.action)) {
+      this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
+      return servicePreviewDraft(this, owner, raw);
+    }
     const input=deploymentInput(raw);this.ctx.storage.transactionSync(()=>this.resourceGuard(owner));
     const {row:github,sealed}=this.activeConnection(input.github.id,input.github.revision);requireSba(github.provider==='github');
     const base=sbaPolicy(this.env), repository=applicationRepository(github,input.repository);
@@ -172,11 +177,11 @@ export class ConnectionVault extends DurableObject {
       // 声明路径可能嵌套；账号身份以已核验的 Cloudflare 连接为准。
       const cloudflare=this.row(plan.connections.cloudflare.id);requireSba(cloudflare);record.accountId=JSON.parse(cloudflare.metadata).target;
       if(prior){const old=JSON.parse(prior.record);requireSba(old.digest===record.digest);return {...old,alreadyReserved:true};}
-      if(plan.operation){const entries=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),plan.operation.instanceId);requireSba(entries.length&&entries[0].taskId===plan.operation.previousTaskId);}
+      if(plan.operation){const source=plan.operation.action==='preview'?plan.operation.context.source:{instanceId:plan.operation.instanceId,taskId:plan.operation.previousTaskId};const entries=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),source.instanceId);requireSba(entries.length&&entries[0].taskId===source.taskId);}
       for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
-      for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&Date.now()-row.checkedAt<=300000);}
+      for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&(continuesInstance(plan)||Date.now()-row.checkedAt<=300000));}
       if(plan.accounts){record.accountIds=[...new Set(Object.values(plan.accounts).map(a=>a.accountId))].sort();record.credentials=plan.credentials;}
-      if(plan.accounts&&!plan.operation){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
+      if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
       requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
     });
   }

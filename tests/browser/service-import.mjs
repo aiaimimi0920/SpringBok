@@ -42,7 +42,7 @@ try {
   await page.locator('#service-submit').click(); await page.locator('#service-dialog').waitFor({ state: 'hidden' });
   await page.waitForFunction(() => document.querySelector('.service-status')?.textContent === '已导入');
   assert.match(await page.locator('#service-list').textContent(), /版本未知/);
-  assert.equal(await page.getByRole('button', { name: '切换版本' }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: '升级', exact: true }).isDisabled(), true);
   await page.getByRole('button', { name: '详情', exact: true }).click();
   assert.match(await page.locator('.service-details').textContent(), /test-database/);
   assert.match(await page.locator('.service-details').textContent(), /test-worker \/ DB/);

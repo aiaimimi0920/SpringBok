@@ -28,10 +28,10 @@ export function sbaEnabled(env) { try { sbaPolicy(env); return true; } catch { r
 export function sbaRequest(policy, taskId, manifest, operation = null) {
   const app = validateManifest(manifest);
   requireSba(canonicalSba(app.secrets) === canonicalSba(policy.secretNames));
-  if (operation !== null) requireSba(operation.action === 'update');
-  return validateRequest({ schemaVersion: 2, taskId, action: operation?.action ?? 'deploy', repository: policy.github.applicationRepository,
+  if (operation !== null) requireSba(['update', 'preview', 'destroy-preview'].includes(operation.action));
+  return validateRequest({ schemaVersion: app.schemaVersion, taskId, action: operation?.action ?? 'deploy', repository: policy.github.applicationRepository,
     sourceSha: policy.sourceSha, applicationId: app.id, applicationVersion: app.version, environment: policy.environment,
-    configuration: policy.configuration, previous: operation?.previous ?? null }, app);
+    configuration: policy.configuration, previous: operation?.previous ?? null, ...(operation?.context ? { context: operation.context } : {}) }, app);
 }
 export const sbaObjectName = p => `sba/v1/${p.github.applicationRepository}/${p.environment}`;
 export const sbaStub = (env, p) => env.SBA_TASKS.get(env.SBA_TASKS.idFromName(sbaObjectName(p)));

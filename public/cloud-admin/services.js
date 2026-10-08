@@ -13,6 +13,7 @@ let instances = new Map(), states = new Map(), usage = new Map(), historyRecords
 let registeredResources = [];
 let selected = null, application = null, updateTarget = null, preview = null, busy = false, selectionBusy = false, submitting = false;
 let importing = false;
+let rehearsing = false, deletingPreview = false, testEnvironment = null;
 let returnFocus = null, pollTimer = null, listBusy = false, selectedResources = new Map();
 const expanded = new Set(), statistics = new Set(), usagePending = new Set();
 const notice = (text, tone = 'info') => { $('service-notice').textContent = text; $('service-notice').dataset.tone = tone; };
@@ -23,11 +24,12 @@ const current = version => version === generation;
 const currentDialog = (version, pageVersion) => version === dialogGeneration && current(pageVersion) && $('service-dialog').open;
 
 function controls() {
-  $('service-fields').disabled = !session || busy || selectionBusy || submitting;
-  const versionReady = !updateTarget || newerVersion(application?.manifest?.version, updateTarget.instance.application.version);
+  $('service-fields').disabled = !session || busy || selectionBusy || submitting || deletingPreview;
+  const versionReady = deletingPreview || (!updateTarget || newerVersion(application?.manifest?.version, updateTarget.instance.application.version)) && (!rehearsing || application?.manifest?.schemaVersion === 3 && application?.declaration?.schemaVersion === 2);
   $('service-submit').disabled = !session || busy || selectionBusy || submitting || !application || application.status !== 'ready' || !versionReady || (!preview && !selectedResources.ready) || (preview && !importing && !preview.executionEnabled);
-  $('service-submit').textContent = importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认更新' : '确认部署') : (updateTarget ? '更新部署' : '部署');
-  $('service-back').hidden = !preview; $('service-back').disabled = busy || submitting;
+  $('service-submit').textContent = deletingPreview ? '确认删除测试环境' : rehearsing ? (preview ? '确认预升级测试' : '预升级测试') : importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认升级' : '确认部署') : (updateTarget ? '升级' : '部署');
+  $('service-submit').classList.toggle('danger', deletingPreview); $('service-submit').classList.toggle('primary', !deletingPreview);
+  $('service-back').hidden = !preview || deletingPreview; $('service-back').disabled = busy || submitting;
   $('service-edit').hidden = !!preview || application?.status !== 'ready'; $('service-review').hidden = !preview;
   for (const tab of $('service-tabs').children) tab.disabled = busy || submitting;
 }
@@ -80,11 +82,13 @@ function renderInstances() {
     const li = element('li'); li.dataset.instanceId = id;
     const row = element('div', undefined, 'service-row');
     const title = element('div', undefined, 'service-title'); title.append(element('h2', app?.name ?? '部署任务'), element('p', app?.repository ?? entry.taskId, 'muted'));
+    if (instance?.previewOf) title.append(element('small', '预升级测试 · ' + instance.previewOf.environment));
     const version = element('div', undefined, 'service-version');
     version.append(element('span', confirmed ? 'v' + confirmed.version : instance?.action === 'import' ? '版本未知' : app ? '目标 v' + app.version : '—'));
     if (instance?.action === 'update' && !['succeeded', 'deployed-unverified'].includes(status)) version.append(element('small', ' → v' + app.version));
     const target = element('div'); target.append(element('span', instance?.environment ?? '—'), element('small', connections.find(row => row.id === instance?.connections?.cloudflare.id)?.accountName ?? instance?.accountId ?? '—'));
-    const badge = element('span', statusText(status), 'service-status'); badge.dataset.tone = statusTone(status);
+    const label = instance?.action === 'destroy-preview' ? ({ running: '正在清理', failed: '清理失败', unknown: '清理结果未确认' })[status] : null;
+    const badge = element('span', label ?? statusText(status), 'service-status'); badge.dataset.tone = statusTone(status);
     const resource = element('div', resourceCountText(instance), 'service-bindings');
     if (instance?.connections) {
       const bound = boundResources(instance), values = bound.slice(0, 2).map(item => `${item.name} ${resourceMetrics(instance, item, usage)[0].text}`);
@@ -94,8 +98,17 @@ function renderInstances() {
     const detail = focusKey(element('button', expanded.has(id) ? '收起' : '详情'), id + '/detail'); detail.type = 'button';
     detail.setAttribute('aria-expanded', String(expanded.has(id))); detail.setAttribute('aria-controls', 'details-' + id);
     detail.addEventListener('click', () => { expanded.has(id) ? expanded.delete(id) : expanded.add(id); renderInstances(); });
-    const update = focusKey(element('button', '切换版本'), id + '/update'); update.type = 'button'; update.disabled = !state?.canUpdate || !session;
-    update.addEventListener('click', () => void openDialog(state, update)); actions.append(detail, update);
+    actions.append(detail);
+    if (instance?.previewOf) {
+      for (const url of state?.testUrls ?? []) { const link = element('a', '测试地址'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; actions.append(link); }
+      const remove = focusKey(element('button', '删除测试环境', 'danger'), id + '/delete-preview'); remove.type = 'button'; remove.disabled = !state?.canDeletePreview || !session;
+      remove.addEventListener('click', () => void openDeletePreview(state, remove)); actions.append(remove);
+    } else {
+      const update = focusKey(element('button', '升级'), id + '/update'); update.type = 'button'; update.disabled = !state?.canUpdate || !session;
+      update.addEventListener('click', () => void openDialog(state, update));
+      const test = focusKey(element('button', '预升级测试'), id + '/preview'); test.type = 'button'; test.disabled = !state?.canPreview || !session;
+      test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
+    }
     row.append(title, version, target, badge, resource, actions); li.append(row);
     const detailPanel = element('div', undefined, 'service-details'); detailPanel.id = 'details-' + id; detailPanel.hidden = !expanded.has(id);
     if (instance) {
@@ -115,7 +128,7 @@ function renderInstances() {
       const records = element('div');
       for (const item of state?.history ?? []) {
         const itemRow = element('div', undefined, 'service-history-row');
-        const button = focusKey(element('button', `${item.action === 'update' ? '更新' : '部署'} · ${item.application ? 'v' + item.application.version : item.taskId} · ${new Date(item.createdAt).toLocaleString()}`), id + '/task/' + item.taskId); button.type = 'button';
+        const button = focusKey(element('button', `${({ update: '升级', preview: '预升级测试', 'destroy-preview': '删除测试环境' })[item.action] ?? '部署'} · ${item.application ? 'v' + item.application.version : item.taskId} · ${new Date(item.createdAt).toLocaleString()}`), id + '/task/' + item.taskId); button.type = 'button';
         const output = element('pre'), cached = historyRecords.get(item.taskId); if (cached) output.textContent = JSON.stringify(cached.job ?? cached, null, 2);
         button.addEventListener('click', async () => {
           if (historyRecords.has(item.taskId)) { historyRecords.delete(item.taskId); renderInstances(); return; }
@@ -163,7 +176,7 @@ async function refreshInstances() {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
         if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
-      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false }); notice(error.message, 'error'); renderInstances(); } }
+      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canPreview: false, canDeletePreview: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
     });
   } catch (error) { if (current(version)) notice(error.message, 'error'); }
   finally {
@@ -258,7 +271,7 @@ function buildFields(data) {
   const platform = element('output', 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
   const config = updateTarget?.configuration ?? data.declaration.defaults;
   const automatic = data.declaration.schemaVersion === 2;
-  for (const [index, field] of (importing || automatic ? [] : data.declaration.fields).entries()) {
+  for (const [index, field] of (importing || automatic || rehearsing ? [] : data.declaration.fields).entries()) {
     const input = element(field.type === 'json' ? 'textarea' : 'input'), initial = valueAt(config, field.path);
     input.required = field.required; input.value = field.type === 'json' ? JSON.stringify(initial ?? {}, null, 2) : String(initial ?? '');
     if (field.type === 'json') input.rows = 3; else input.maxLength = 8192;
@@ -268,7 +281,7 @@ function buildFields(data) {
   const hash = new URLSearchParams(location.hash.slice(1));
   $('service-cloudflare').value = updateTarget?.instance.connections.cloudflare.id ?? hash.get('cloudflare') ?? ($('service-cloudflare').options.length === 2 ? $('service-cloudflare').options[1].value : '');
   $('service-cloudflare').disabled = !!updateTarget; $('service-environment').disabled = !!updateTarget || importing;
-  $('service-environment').value = updateTarget?.instance.environment ?? (automatic ? 'app-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : '');
+  $('service-environment').value = rehearsing ? testEnvironment : updateTarget?.instance.environment ?? (automatic ? 'app-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : '');
   $('service-environment').closest('.field').hidden = importing; $('service-config-heading').hidden = importing || automatic;
   $('service-version-label').textContent = importing ? '声明版本' : '版本';
   if (importing) { importFields(data); return; }
@@ -281,7 +294,7 @@ function buildFields(data) {
     }
     for (const field of data.declaration.resources) {
       const output = element('output'); output.dataset.resourceTemplate = field.nameTemplate;
-      output.value = updateTarget?.instance.resources[field.key]?.name ?? field.nameTemplate.replaceAll('{instance}', $('service-environment').value);
+      output.value = (rehearsing ? null : updateTarget?.instance.resources[field.key]?.name) ?? field.nameTemplate.replaceAll('{instance}', $('service-environment').value);
       addField($('service-resources'), 'service-resource-' + field.key, field.label + ' · ' + resourceLabels[field.kind], output);
     }
     return;
@@ -294,7 +307,7 @@ function buildFields(data) {
 async function loadResources(version, pageVersion) {
   selectedResources = new Map(); selectionBusy = false; const data = application, connectionId = $('service-cloudflare').value;
   if (!connectionId || data?.status !== 'ready') { controls(); return; }
-  if (!importing && data.declaration.schemaVersion === 2) { selectedResources.ready = true; controls(); return; }
+  if (rehearsing || !importing && data.declaration.schemaVersion === 2) { selectedResources.ready = true; controls(); return; }
   selectionBusy = true; controls();
   try {
     const reference = ref(connectionId), kinds = importing ? ['worker'] : [...new Set(data.declaration.resources.map(row => row.kind))];
@@ -362,14 +375,17 @@ async function changeVersion() {
     void loadVersions(row, version, pageVersion);
     await loadResources(version, pageVersion);
     if (currentDialog(version,pageVersion) && updateTarget && !newerVersion(data.manifest.version,updateTarget.instance.application.version)) dialogNotice('版本必须高于 v' + updateTarget.instance.application.version,'warning');
+    else if (currentDialog(version,pageVersion) && rehearsing && (data.manifest.schemaVersion !== 3 || data.declaration.schemaVersion !== 2)) dialogNotice('此版本未声明预升级测试与清理能力', 'warning');
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
   finally { if (currentDialog(version, pageVersion)) { selectionBusy = false; controls(); } }
 }
 async function openDialog(state = null, trigger = $('service-add'), mode = 'deploy') {
   if (busy || submitting) return;
   importing = mode === 'import';
+  rehearsing = mode === 'rehearse'; deletingPreview = false;
+  testEnvironment = rehearsing ? 'test-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : null;
   updateTarget = state; returnFocus = trigger; selected = null; application = null; selectedResources = new Map(); dialogGeneration++; clearPreview();
-  $('service-dialog-title').textContent = state ? '切换版本 · ' + state.instance.application.name : importing ? '导入服务' : '部署服务';
+  $('service-dialog-title').textContent = state ? (rehearsing ? '预升级测试 · ' : '升级 · ') + state.instance.application.name : importing ? '导入服务' : '部署服务';
   $('service-selection').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); dialogNotice(session ? '' : '身份尚未就绪');
   $('service-dialog').showModal(); $('service-close').focus(); renderTabs();
   if (!session) return;
@@ -399,6 +415,14 @@ async function prepare(event) {
   const version = dialogGeneration, pageVersion = generation, data = application;
   busy = true; controls(); dialogNotice('正在校验部署计划…');
   try {
+    if (rehearsing) {
+      const result = await request(api + 'plan', { action: 'rehearse', instanceId: updateTarget.instance.id, previousTaskId: updateTarget.taskId, sourceSha: data.sourceSha, environment: testEnvironment });
+      if (!currentDialog(version, pageVersion)) return;
+      preview = result; const details = element('dl');
+      for (const [label, value] of [['源环境', updateTarget.instance.environment], ['当前版本', 'v' + updateTarget.instance.application.version], ['目标版本', `v${data.manifest.version} · ${data.sourceSha}`], ['测试环境', result.plan.policy.environment], ['测试地址', result.plan.operation.context.urls.join('、')], ['独立资源', Object.values(result.plan.resources).map(row => row.name).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
+      const risk = element('p', '将复制当前数据到独立测试资源并执行迁移，可能产生云资源费用。线上服务不切换。'); risk.dataset.tone = 'warning';
+      $('service-review').replaceChildren(details, risk); dialogNotice(''); return;
+    }
     if (importing) {
       dialogNotice('正在读取服务…');
       const result = await request(api + 'import-preview', importDraft(data, ref($('service-cloudflare').value)));
@@ -441,7 +465,7 @@ async function prepare(event) {
       for (const account of data.declaration.accounts.slice(1)) details.append(element('dt', account.label), element('dd', plan.accounts[account.key].accountId));
       for (const field of data.declaration.fields) { const value = valueAt(plan.configuration, field.path); details.append(element('dt', field.label), element('dd', typeof value === 'string' ? value : JSON.stringify(value))); }
     }
-    const risk = element('p', result.executionEnabled ? updateTarget ? '将更新此服务并运行该版本的迁移。' : '将运行所选代码并修改目标云资源。' : '部署执行未启用'); risk.dataset.tone = 'warning';
+    const risk = element('p', result.executionEnabled ? updateTarget ? '将保留原资源，对当前线上数据执行该版本的备份和迁移，不使用测试数据覆盖。' : '将运行所选代码并修改目标云资源。' : '部署执行未启用'); risk.dataset.tone = 'warning';
     $('service-review').replaceChildren(details, risk); dialogNotice('');
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error instanceof SyntaxError ? 'JSON 配置格式不正确' : error.message, 'error'); }
   finally { if (currentDialog(version, pageVersion)) { busy = false; controls(); if (preview) $('service-back').focus(); } }
@@ -449,12 +473,12 @@ async function prepare(event) {
 async function submit() {
   if (importing) { await submitImport(); return; }
   if (!preview?.executionEnabled || submitting) return;
-  const saved = preview, version = generation, instanceId = updateTarget?.instance.id ?? saved.taskId;
+  const saved = preview, version = generation, instanceId = saved.plan.operation?.instanceId ?? saved.taskId;
   preview = null; submitting = true; controls(); dialogNotice('正在提交…');
   const plan = saved.plan;
   const summary = { id: instanceId, action: plan.operation?.action ?? 'deploy', previous: plan.operation?.previous ?? null,
     application: { id: plan.application.manifest.id, name: plan.application.manifest.name, version: plan.application.manifest.version, repository: plan.application.repository, sourceSha: plan.application.sourceSha },
-    environment: plan.policy.environment, connections: plan.connections, resources: plan.resources, targets: [], accountId: connections.find(row => row.id === plan.connections.cloudflare.id)?.target };
+    environment: plan.policy.environment, connections: plan.connections, resources: plan.resources, targets: [], accountId: connections.find(row => row.id === plan.connections.cloudflare.id)?.target, ...(plan.previewOf ? { previewOf: plan.previewOf } : {}) };
   instances.set(instanceId, { id: instanceId, taskId: saved.taskId, createdAt: Date.now(), summary });
   states.set(instanceId, { instance: summary, status: 'submitting', canUpdate: false }); renderInstances();
   try {
@@ -480,6 +504,25 @@ async function submitImport() {
   } catch (error) {
     if (current(version)) { dialogNotice(error.message, 'error'); void refreshInstances(); }
   } finally { if (current(version)) { submitting = false; controls(); } }
+}
+
+async function openDeletePreview(state, trigger) {
+  if (busy || submitting || !session || !state.canDeletePreview) return;
+  importing = false; rehearsing = false; deletingPreview = true; updateTarget = state; returnFocus = trigger;
+  application = { status: 'ready' }; selected = null; preview = null; selectedResources = new Map(); selectedResources.ready = true;
+  const version = ++dialogGeneration, pageVersion = generation; busy = true;
+  $('service-dialog-title').textContent = '删除测试环境 · ' + state.instance.environment;
+  $('service-tabs').replaceChildren(); $('service-catalog-status').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); $('service-review').replaceChildren();
+  $('service-dialog').showModal(); controls(); $('service-close').focus(); dialogNotice('正在核对资源归属…');
+  try {
+    const result = await request(api + 'plan', { action: 'destroy-preview', instanceId: state.instance.id, previousTaskId: state.taskId });
+    if (!currentDialog(version, pageVersion)) return;
+    preview = result; const list = element('ul');
+    for (const row of result.plan.operation.context.resources) list.append(element('li', `${row.kind} · ${row.name} · ${row.accountId}`));
+    const risk = element('p', '将永久删除以上测试资源及其中的数据，不删除原线上环境。'); risk.dataset.tone = 'warning';
+    $('service-review').replaceChildren(list, risk); dialogNotice('');
+  } catch (error) { if (currentDialog(version, pageVersion)) { application = null; dialogNotice(error.message, 'error'); } }
+  finally { if (currentDialog(version, pageVersion)) { busy = false; controls(); $('service-close').focus(); } }
 }
 
 $('service-add').addEventListener('click', () => void openDialog());

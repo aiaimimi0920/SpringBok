@@ -4,7 +4,7 @@ export const statusText = status => ({
   loading: '正在读取', submitting: '正在提交', dispatching: '正在派发', dispatched: '等待执行',
   'dispatch-unknown': '派发未确认', running: '部署中', succeeded: '部署成功',
   'deployed-unverified': '已部署，待验证', failed: '部署失败', unknown: '结果未确认',
-  'preparation-unconfirmed': '准备未确认', unavailable: '读取失败', imported: '已导入',
+  'preparation-unconfirmed': '准备未确认', unavailable: '读取失败', imported: '已导入', deleted: '已删除',
 }[status] ?? '状态未知');
 export const statusTone = status => status === 'succeeded' ? 'success' : status === 'failed' || status === 'unavailable' ? 'error' :
   ['unknown', 'dispatch-unknown', 'deployed-unverified', 'preparation-unconfirmed'].includes(status) ? 'warning' : 'info';

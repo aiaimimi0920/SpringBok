@@ -12,7 +12,7 @@ export function serviceSummary(taskId, plan) {
     application: { id: plan.application.manifest.id, name: plan.application.manifest.name, version: plan.application.manifest.version,
       repository: plan.application.repository, sourceSha: plan.application.sourceSha },
     environment: plan.policy.environment, accountId: plan.application.declaration.accountPath.reduce((value,key)=>value[key],plan.configuration), connections: plan.connections, resources: plan.resources,
-    targets: deploymentTargets(plan.application.declaration, plan.configuration), ...(plan.accounts?{accounts:plan.accounts}:{}) };
+    targets: deploymentTargets(plan.application.declaration, plan.configuration), ...(plan.accounts?{accounts:plan.accounts}:{}), ...(plan.previewOf?{previewOf:plan.previewOf}:{}) };
 }
 
 export async function updateOperation(vault, owner, instance, plan) {
@@ -22,6 +22,7 @@ export async function updateOperation(vault, owner, instance, plan) {
   const stub = connectedStub(vault.env, instance.previousTaskId), bootstrap = await stub.bootstrap(owner), job = await stub.inspect(owner);
   requireSba(job && ['succeeded', 'deployed-unverified'].includes(job.status) && job.result?.status === job.status);
   const old = bootstrap.plan;
+  requireSba(!old.previewOf);
   requireSba((old.operation?.instanceId ?? instance.previousTaskId) === instance.id &&
     plan.application.repository.toLowerCase() === old.application.repository.toLowerCase() &&
     plan.application.manifest.id === old.application.manifest.id && plan.policy.environment === old.policy.environment &&

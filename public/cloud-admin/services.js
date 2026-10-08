@@ -1,5 +1,6 @@
 import { boundResources, confirmedVersion, newerVersion, resourceCountText, resourceMetrics, statusText, statusTone, valueAt } from './service-model.mjs';
 import { resourceLabels } from './resource-model.mjs';
+import { importFields, importWorkerOptions, importDraft, importReview, importedDetails } from './service-import.js';
 
 const $ = id => document.getElementById(id);
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
@@ -11,6 +12,7 @@ let scanProgress = null;
 let instances = new Map(), states = new Map(), usage = new Map(), historyRecords = new Map();
 let registeredResources = [];
 let selected = null, application = null, updateTarget = null, preview = null, busy = false, selectionBusy = false, submitting = false;
+let importing = false;
 let returnFocus = null, pollTimer = null, listBusy = false, selectedResources = new Map();
 const expanded = new Set(), statistics = new Set(), usagePending = new Set();
 const notice = (text, tone = 'info') => { $('service-notice').textContent = text; $('service-notice').dataset.tone = tone; };
@@ -23,8 +25,8 @@ const currentDialog = (version, pageVersion) => version === dialogGeneration && 
 function controls() {
   $('service-fields').disabled = !session || busy || selectionBusy || submitting;
   const versionReady = !updateTarget || newerVersion(application?.manifest?.version, updateTarget.instance.application.version);
-  $('service-submit').disabled = !session || busy || selectionBusy || submitting || !application || application.status !== 'ready' || !versionReady || (!preview && !selectedResources.ready) || (preview && !preview.executionEnabled);
-  $('service-submit').textContent = preview ? (updateTarget ? '确认更新' : '确认部署') : (updateTarget ? '更新部署' : '部署');
+  $('service-submit').disabled = !session || busy || selectionBusy || submitting || !application || application.status !== 'ready' || !versionReady || (!preview && !selectedResources.ready) || (preview && !importing && !preview.executionEnabled);
+  $('service-submit').textContent = importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认更新' : '确认部署') : (updateTarget ? '更新部署' : '部署');
   $('service-back').hidden = !preview; $('service-back').disabled = busy || submitting;
   $('service-edit').hidden = !!preview || application?.status !== 'ready'; $('service-review').hidden = !preview;
   for (const tab of $('service-tabs').children) tab.disabled = busy || submitting;
@@ -79,7 +81,7 @@ function renderInstances() {
     const row = element('div', undefined, 'service-row');
     const title = element('div', undefined, 'service-title'); title.append(element('h2', app?.name ?? '部署任务'), element('p', app?.repository ?? entry.taskId, 'muted'));
     const version = element('div', undefined, 'service-version');
-    version.append(element('span', confirmed ? 'v' + confirmed.version : app ? '目标 v' + app.version : '—'));
+    version.append(element('span', confirmed ? 'v' + confirmed.version : instance?.action === 'import' ? '版本未知' : app ? '目标 v' + app.version : '—'));
     if (instance?.action === 'update' && !['succeeded', 'deployed-unverified'].includes(status)) version.append(element('small', ' → v' + app.version));
     const target = element('div'); target.append(element('span', instance?.environment ?? '—'), element('small', connections.find(row => row.id === instance?.connections?.cloudflare.id)?.accountName ?? instance?.accountId ?? '—'));
     const badge = element('span', statusText(status), 'service-status'); badge.dataset.tone = statusTone(status);
@@ -98,8 +100,9 @@ function renderInstances() {
     const detailPanel = element('div', undefined, 'service-details'); detailPanel.id = 'details-' + id; detailPanel.hidden = !expanded.has(id);
     if (instance) {
       const info = element('dl');
-      for (const [name, value] of [['实例', id], ['任务', state?.taskId ?? entry.taskId], ['目标版本', app ? `v${app.version} · ${app.sourceSha}` : '—'], ['最近提交', new Date(entry.createdAt).toLocaleString()], ['错误代码', state?.job?.errorCode ?? state?.errorCode ?? '—']]) info.append(element('dt', name), element('dd', value));
+      for (const [name, value] of [['实例', id], ['任务', state?.taskId ?? entry.taskId ?? '—'], ['目标版本', app?.version ? `v${app.version} · ${app.sourceSha}` : '—'], ['最近提交', new Date(entry.createdAt).toLocaleString()], ['错误代码', state?.job?.errorCode ?? state?.errorCode ?? '—']]) info.append(element('dt', name), element('dd', value));
       detailPanel.append(info);
+      if (state?.status === 'imported') detailPanel.append(importedDetails(state));
       for (const bound of boundResources(instance)) {
         const metrics = element('dl');
         for (const metric of resourceMetrics(instance, bound, usage)) metrics.append(element('dt', metric.label + ' · ' + metric.periodLabel), element('dd', metric.text));
@@ -123,9 +126,9 @@ function renderInstances() {
         });
         itemRow.append(button, output); records.append(itemRow);
       }
-      detailPanel.append(fold(id + '/history', '执行记录 · ' + (state?.history?.length ?? 0), records));
-      const result = element('pre', JSON.stringify(state?.job?.result ?? { status, errorCode: state?.errorCode ?? state?.job?.errorCode ?? null }, null, 2));
-      detailPanel.append(fold(id + '/receipt', '最近回执', result));
+      if (state?.status !== 'imported') detailPanel.append(fold(id + '/history', '执行记录 · ' + (state?.history?.length ?? 0), records));
+      const result = element('pre', JSON.stringify(state?.status === 'imported' ? state.provenance : state?.job?.result ?? { status, errorCode: state?.errorCode ?? state?.job?.errorCode ?? null }, null, 2));
+      detailPanel.append(fold(id + '/receipt', state?.status === 'imported' ? '导入来源' : '最近回执', result));
       if (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[0-9]+$/.test(state?.runUrl ?? '')) {
         const link = element('a', 'GitHub Actions'); link.href = state.runUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; detailPanel.append(link);
       }
@@ -253,7 +256,7 @@ function buildFields(data) {
   $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
   if (data.status !== 'ready') return;
   const config = updateTarget?.configuration ?? data.declaration.defaults;
-  for (const [index, field] of data.declaration.fields.entries()) {
+  for (const [index, field] of (importing ? [] : data.declaration.fields).entries()) {
     const input = element(field.type === 'json' ? 'textarea' : 'input'), initial = valueAt(config, field.path);
     input.required = field.required; input.value = field.type === 'json' ? JSON.stringify(initial ?? {}, null, 2) : String(initial ?? '');
     if (field.type === 'json') input.rows = 3; else input.maxLength = 8192;
@@ -261,9 +264,12 @@ function buildFields(data) {
   }
   fillOptions($('service-cloudflare'), connections.filter(row => row.provider === 'cloudflare' && row.state === 'verified').map(row => [row.id, `${row.name} · ${row.accountName || row.target}`]), '请选择账户');
   const hash = new URLSearchParams(location.hash.slice(1));
-  $('service-cloudflare').value = updateTarget?.instance.connections.cloudflare.id ?? hash.get('cloudflare') ?? '';
-  $('service-cloudflare').disabled = !!updateTarget; $('service-environment').disabled = !!updateTarget;
+  $('service-cloudflare').value = updateTarget?.instance.connections.cloudflare.id ?? hash.get('cloudflare') ?? ($('service-cloudflare').options.length === 2 ? $('service-cloudflare').options[1].value : '');
+  $('service-cloudflare').disabled = !!updateTarget; $('service-environment').disabled = !!updateTarget || importing;
   $('service-environment').value = updateTarget?.instance.environment ?? '';
+  $('service-environment').closest('.field').hidden = importing; $('service-config-heading').hidden = importing;
+  $('service-version-label').textContent = importing ? '声明版本' : '版本';
+  if (importing) { importFields(data); return; }
   for (const field of data.declaration.resources) {
     const select = element('select'); select.required = true; select.disabled = !!updateTarget;
     fillOptions(select, [], '请选择资源'); addField($('service-resources'), 'service-resource-' + field.key, `${field.label} · ${resourceLabels[field.kind]}`, select);
@@ -274,7 +280,7 @@ async function loadResources(version, pageVersion) {
   if (!connectionId || data?.status !== 'ready') { controls(); return; }
   selectionBusy = true; controls();
   try {
-    const reference = ref(connectionId), kinds = [...new Set(data.declaration.resources.map(row => row.kind))];
+    const reference = ref(connectionId), kinds = importing ? ['worker'] : [...new Set(data.declaration.resources.map(row => row.kind))];
     const resources = new Map();
     for (const kind of kinds) {
       let cursor = ''; const items = [], seen = new Set();
@@ -290,6 +296,7 @@ async function loadResources(version, pageVersion) {
     }
     if (!currentDialog(version, pageVersion)) return;
     selectedResources = resources; selectedResources.ready = true;
+    if (importing) { importWorkerOptions(data, resources.get('worker')); return; }
     for (const field of data.declaration.resources) {
       const select = $('service-resource-' + field.key), rows = resources.get(field.kind);
       fillOptions(select, rows.map(row => [row.id, `${row.name} · ${row.id}`]), rows.length ? '请选择资源' : '无可用资源');
@@ -341,10 +348,11 @@ async function changeVersion() {
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
   finally { if (currentDialog(version, pageVersion)) { selectionBusy = false; controls(); } }
 }
-async function openDialog(state = null, trigger = $('service-add')) {
+async function openDialog(state = null, trigger = $('service-add'), mode = 'deploy') {
   if (busy || submitting) return;
+  importing = mode === 'import';
   updateTarget = state; returnFocus = trigger; selected = null; application = null; selectedResources = new Map(); dialogGeneration++; clearPreview();
-  $('service-dialog-title').textContent = state ? '切换版本 · ' + state.instance.application.name : '部署服务';
+  $('service-dialog-title').textContent = state ? '切换版本 · ' + state.instance.application.name : importing ? '导入服务' : '部署服务';
   $('service-selection').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); dialogNotice(session ? '' : '身份尚未就绪');
   $('service-dialog').showModal(); $('service-close').focus(); renderTabs();
   if (!session) return;
@@ -363,7 +371,9 @@ async function openDialog(state = null, trigger = $('service-add')) {
     const hash = new URLSearchParams(location.hash.slice(1)), preferred = connections.find(row => row.id === hash.get('github'));
     const first = [...catalog.values()].find(row => row.github.id === preferred?.id || row.repository === preferred?.target) ?? catalog.values().next().value;
     if (first) await selectService(first);
-    if (!scanning && stale) void discoverServices();
+    // Selecting a default account can await inventory while a scan finishes.
+    // Recheck freshness after that await; the earlier stale snapshot is obsolete.
+    if ($('service-dialog').open && !scanning && (!scannedAt || Date.now() - scannedAt > 60000)) void discoverServices();
   }
 }
 async function prepare(event) {
@@ -372,6 +382,12 @@ async function prepare(event) {
   const version = dialogGeneration, pageVersion = generation, data = application;
   busy = true; controls(); dialogNotice('正在校验部署计划…');
   try {
+    if (importing) {
+      dialogNotice('正在读取服务…');
+      const result = await request(api + 'import-preview', importDraft(data, ref($('service-cloudflare').value)));
+      if (!currentDialog(version, pageVersion)) return;
+      preview = result; $('service-review').replaceChildren(...importReview(result.candidate)); dialogNotice(''); return;
+    }
     const values = {}, selections = {}, cloudflare = ref($('service-cloudflare').value);
     for (const [index, field] of data.declaration.fields.entries()) {
       const raw = $('service-field-' + index).value; values[field.path.join('.')] = field.type === 'json' ? JSON.parse(raw) : raw;
@@ -407,6 +423,7 @@ async function prepare(event) {
   finally { if (currentDialog(version, pageVersion)) { busy = false; controls(); if (preview) $('service-back').focus(); } }
 }
 async function submit() {
+  if (importing) { await submitImport(); return; }
   if (!preview?.executionEnabled || submitting) return;
   const saved = preview, version = generation, instanceId = updateTarget?.instance.id ?? saved.taskId;
   preview = null; submitting = true; controls(); dialogNotice('正在提交…');
@@ -429,8 +446,20 @@ async function submit() {
     }
   } finally { if (current(version)) { submitting = false; application = null; renderInstances(); controls(); } }
 }
+async function submitImport() {
+  if (!preview || submitting) return;
+  const saved = preview, version = generation;
+  preview = null; submitting = true; controls(); dialogNotice('正在导入…');
+  try {
+    await request(api + 'import-submit', saved); if (!current(version)) return;
+    submitting = false; $('service-dialog').close(); notice(''); await refreshInstances();
+  } catch (error) {
+    if (current(version)) { dialogNotice(error.message, 'error'); void refreshInstances(); }
+  } finally { if (current(version)) { submitting = false; controls(); } }
+}
 
 $('service-add').addEventListener('click', () => void openDialog());
+$('service-import').addEventListener('click', () => void openDialog(null, $('service-import'), 'import'));
 $('service-close').addEventListener('click', () => $('service-dialog').close());
 $('service-dialog').addEventListener('close', () => { dialogGeneration++; busy = false; selectionBusy = false; preview = null; application = null; selected = null; controls(); restoreFocus(); });
 $('service-form').addEventListener('submit', event => void prepare(event));

@@ -31,7 +31,7 @@
 .service-form-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 4px; }
 #service-selection { color: var(--neuro-text-muted); font: 12px/1.6 ui-monospace, Consolas, monospace; margin: 6px 0 16px; }
 #service-dialog .field { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 12px; margin-bottom: 12px; }
-#service-dialog label { margin: 0; font-size: 13px; }
+#service-dialog label { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #service-dialog input, #service-dialog select, #service-dialog textarea { font-size: 13px; padding: 9px; min-height: 38px; }
 #service-dialog h3 { font-size: 13px; color: var(--neuro-text-muted); margin: 18px 0 12px; }
 .service-dialog-footer { display: flex; flex: 0 0 70px; align-items: center; gap: 10px; padding-top: 12px; }

@@ -4,7 +4,7 @@ export const statusText = status => ({
   loading: '正在读取', submitting: '正在提交', dispatching: '正在派发', dispatched: '等待执行',
   'dispatch-unknown': '派发未确认', running: '部署中', succeeded: '部署成功',
   'deployed-unverified': '已部署，待验证', failed: '部署失败', unknown: '结果未确认',
-  'preparation-unconfirmed': '准备未确认', unavailable: '读取失败',
+  'preparation-unconfirmed': '准备未确认', unavailable: '读取失败', imported: '已导入',
 }[status] ?? '状态未知');
 export const statusTone = status => status === 'succeeded' ? 'success' : status === 'failed' || status === 'unavailable' ? 'error' :
   ['unknown', 'dispatch-unknown', 'deployed-unverified', 'preparation-unconfirmed'].includes(status) ? 'warning' : 'info';
@@ -22,7 +22,7 @@ export function boundResources(instance) {
   return [...new Map(resources.map(row => [row.kind + '/' + row.id, row])).values()];
 }
 export function resourceMetrics(instance, resource, usage) {
-  const source = usage.get(instance.connections.cloudflare.id + '/' + resource.kind);
+  const source = instance.connections?.cloudflare ? usage.get(instance.connections.cloudflare.id + '/' + resource.kind) : null;
   const fallback = { id: resource.kind === 'worker' ? 'requests' : 'storage', label: resource.kind === 'worker' ? '请求' : '存储', unit: resource.kind === 'worker' ? 'requests' : 'bytes', periodLabel: '时间未知' };
   return (source?.metrics?.length ? source.metrics : [fallback]).map(metric => {
     const sample = source?.samples?.[resource.id]?.[metric.id];

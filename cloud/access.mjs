@@ -13,7 +13,7 @@ export async function signSession(session, purpose, value) {
 }
 export function automationRoute(method, pathname) {
   return (method === 'GET' && ['/api/admin/sba/session', '/api/admin/sba/state'].includes(pathname)) ||
-    (method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized'].includes(pathname));
+    (method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized', '/api/admin/sba/import-preview', '/api/admin/sba/import-submit'].includes(pathname));
 }
 export async function accessSession(request, env) {
   const origin = env.ADMIN_ORIGIN, issuer = env.ACCESS_ISSUER, audience = env.ACCESS_AUD;

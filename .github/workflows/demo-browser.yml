@@ -62,6 +62,8 @@ jobs:
         run: node tests/browser/service-lifecycle.mjs
       - name: Check bounded service discovery across slow repositories and pages
         run: node tests/browser/service-discovery.mjs
+      - name: Check read-only service import and persistent imported instances
+        run: node tests/browser/service-import.mjs
       - name: Check Neuro shell, colors, responsive layouts and keyboard states
         run: node tests/browser/neuro-ui.mjs
       - name: Check catalog, enrollment and telemetry UI on Linux

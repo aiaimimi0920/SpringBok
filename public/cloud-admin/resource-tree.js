@@ -40,7 +40,7 @@ function metricsBlock(metrics, compact = false) {
   return block;
 }
 export function createResourceTree(host, handlers) {
-  const opened = new Map(); let view = 'account';
+  const opened = new Map(), statsOpened = new Map(); let view = 'account';
   function node(key, title, metrics, { level = 0, count = 0, symbol, open = false, status = '', className = '' } = {}) {
     const details = document.createElement('details'), summary = document.createElement('summary');
     details.className = 'resource-node ' + className; details.dataset.nodeKey = key;
@@ -51,7 +51,26 @@ export function createResourceTree(host, handlers) {
     if (symbol) heading.dataset.icon = symbol;
     label.append(heading, textNode('span', count + ' 项', 'tree-count'));
     if (status) label.append(textNode('span', status, 'inventory-status'));
-    summary.append(label, metricsBlock(metrics, level < 2));
+    summary.append(label);
+    if (metrics.length) {
+      const stats = metricsBlock(metrics, level < 2), toggle = textNode('button', '', 'resource-stats-toggle');
+      const stateKey = view + '/' + key;
+      stats.id = 'usage-' + encodeURIComponent(stateKey); stats.hidden = !statsOpened.get(stateKey);
+      toggle.type = 'button'; toggle.dataset.stats = 'true'; toggle.setAttribute('aria-controls', stats.id);
+      const update = () => {
+        toggle.textContent = stats.hidden ? '展开统计' : '收起统计';
+        toggle.setAttribute('aria-expanded', String(!stats.hidden));
+        toggle.setAttribute('aria-label', title + ' · ' + toggle.textContent);
+      };
+      update();
+      toggle.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        stats.hidden = !stats.hidden; statsOpened.set(stateKey, !stats.hidden); update();
+      });
+      // Reading or selecting metric text must not toggle the resource branch.
+      stats.addEventListener('click', event => event.preventDefault());
+      summary.append(toggle, stats);
+    }
     const children = document.createElement('div'); children.className = 'resource-children';
     details.append(summary, children); return { details, children };
   }
@@ -94,12 +113,12 @@ export function createResourceTree(host, handlers) {
     return details;
   }
   return {
-    clear() { opened.clear(); host.replaceChildren(); },
+    clear() { opened.clear(); statsOpened.clear(); host.replaceChildren(); },
     render(accounts, currentView) {
       const focused = document.activeElement;
       const focusNode = host.contains(focused) ? focused.closest('details[data-node-key]') : null;
       const focusKey = focusNode?.dataset.nodeKey, focusItem = focused?.closest('li')?.dataset.id;
-      const focusRole = focused?.tagName === 'SUMMARY' ? 'summary' : focused?.hasAttribute('data-detail') ? 'detail' :
+      const focusRole = focused?.tagName === 'SUMMARY' ? 'summary' : focused?.hasAttribute('data-stats') ? 'stats' : focused?.hasAttribute('data-detail') ? 'detail' :
         focused?.hasAttribute('data-use') ? 'use' : focused?.hasAttribute('data-budget') ? 'budget' : null;
       view = currentView;
       // Capture native open state before replacing nodes; queued toggle events are not authoritative.
@@ -138,7 +157,7 @@ export function createResourceTree(host, handlers) {
       host.replaceChildren(fragment); host.dataset.view = view; decorateIcons(host);
       if (focusKey && focusRole) {
         const node = host.querySelector(`[data-node-key="${CSS.escape(focusKey)}"]`);
-        const target = focusRole === 'summary' ? node?.querySelector(':scope > summary') : focusItem ?
+        const target = focusRole === 'summary' ? node?.querySelector(':scope > summary') : focusRole === 'stats' ? node?.querySelector(':scope > summary [data-stats]') : focusItem ?
           node?.querySelector(`li[data-id="${CSS.escape(focusItem)}"] [data-${focusRole}]`) : node?.querySelector('[data-budget]');
         target?.focus({ preventScroll: true });
       }

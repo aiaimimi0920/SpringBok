@@ -58,6 +58,8 @@ jobs:
         run: node tests/browser/deployment-plan.mjs
       - name: Check connected deployment execution with synthetic GitHub and actual workerd
         run: node tests/browser/connected-execution.mjs
+      - name: Check service discovery, independent statistics and same-instance version updates
+        run: node tests/browser/service-lifecycle.mjs
       - name: Check Neuro shell, colors, responsive layouts and keyboard states
         run: node tests/browser/neuro-ui.mjs
       - name: Check catalog, enrollment and telemetry UI on Linux

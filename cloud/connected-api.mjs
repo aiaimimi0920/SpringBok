@@ -16,17 +16,26 @@ function legacyIdentities(value){if(!value||typeof value!=='object')return [];re
 export async function submitConnected(env,session,input){
   requireSba(connectedEnabled(env));exactSba(input,['taskId','draft','plan','expiresAt','confirmation']);connectedTaskId(input.taskId);
   requireSba(Number.isSafeInteger(input.expiresAt)&&input.expiresAt>Date.now()&&input.expiresAt<=Date.now()+120000&&sameProof(input.confirmation,await signSession(session,'deployment-confirm',[input.taskId,input.draft,input.plan.digest,input.expiresAt])));
-  const vault=vaultFor(env,session.actor),plan=await vault.deploymentDraft(session.actor,input.draft);
+  const vault=vaultFor(env,session.actor),existing=(await vault.deploymentIndex(session.actor)).find(row=>row.taskId===input.taskId);
+  if(existing){requireSba(existing.digest===input.plan.digest);return connectedState(env,session.actor,input.taskId);}
+  let plan;
+  try{plan=await vault.deploymentDraft(session.actor,input.draft);}catch(error){
+    // A concurrent identical submit can reserve this task while source/parent
+    // validation is awaiting I/O. It may only read the already accepted task.
+    const race=(await vault.deploymentIndex(session.actor)).find(row=>row.taskId===input.taskId);
+    if(race){requireSba(race.digest===input.plan.digest);return connectedState(env,session.actor,input.taskId);}
+    throw error;
+  }
   requireSba(input.draft.action==='preview'&&canonicalSba(plan)===canonicalSba(input.plan));
   const accountId=plan.resources[Object.keys(plan.resources)[0]]?.accountId??(await vault.snapshot(session.actor)).connections.find(r=>r.id===plan.connections.cloudflare.id)?.target;
   requireSba(/^[a-f0-9]{32}$/.test(accountId));
   // 检查最终公开配置，而非只查资源声明；这是配置冲突保护，不是对应用代码的沙箱。
   const legacy=legacyIdentities(sbaPolicy(env).configuration),observed=[...new Set(strings(plan.configuration).filter(s=>s.length<=256))];
   requireSba(observed.length<=256&&observed.every(value=>!legacy.includes(value)));
-  const request=sbaRequest(plan.policy,input.taskId,plan.application.manifest);
+  const request=sbaRequest(plan.policy,input.taskId,plan.application.manifest,plan.operation??null);
   await vault.reserveDeployment(session.actor,input.taskId,plan);
   const lock=accountStub(env,accountId),keys=[...new Set([...Object.values(plan.resources).flatMap(r=>[r.remoteId,r.name]),...deploymentTargets(plan.application.declaration,plan.configuration).map(t=>t.value)].map(value=>'identity:'+value))];
-  await lock.claim(session.actor,input.taskId,accountId,`${request.repository}/${request.environment}`,keys,plan.digest,observed);
+  await lock.claim(session.actor,input.taskId,accountId,`${request.repository}/${request.environment}`,keys,plan.digest,observed,plan.operation?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null);
   const stub=connectedStub(env,input.taskId);await stub.initialize(session.actor,input.taskId,plan);
   const claim=await stub.begin(session.actor,{request,manifest:plan.application.manifest});
   if(!claim.dispatch)return {...claim.snapshot,taskId:input.taskId};

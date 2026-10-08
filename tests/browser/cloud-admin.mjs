@@ -21,7 +21,7 @@ try {
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) }).catch(() => {});
   });
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
-  await page.goto(origin); await page.getByText('已验证管理员：owner@example.invalid', { exact: true }).waitFor();
+  await page.goto(origin + '/history'); await page.getByText('已验证管理员：owner@example.invalid', { exact: true }).waitFor();
   const start = page.getByRole('button', { name: '检查并确认测试计划', exact: true });
   await start.click(); await page.getByRole('dialog', { name: '确认固定测试计划' }).waitFor(); await page.getByRole('button', { name: '取消', exact: true }).click(); assert.equal(await page.locator('#confirm').isVisible(), false);
   await start.click(); await page.getByRole('dialog', { name: '确认固定测试计划' }).waitFor(); await page.keyboard.press('Escape'); assert.equal(await page.locator('#confirm').isVisible(), false);

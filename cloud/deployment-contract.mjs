@@ -30,8 +30,12 @@ export function deploymentDeclaration(value) {
 function label(value){requireValue(typeof value==='string'&&value.trim().length>0&&value.length<=100&&!/[\x00-\x1f]/.test(value));}
 export function connectionReference(value) {exact(value,['id','revision']);connectionId(value.id);requireValue(Number.isSafeInteger(value.revision)&&value.revision>0);return value;}
 export function deploymentInput(input) {
-  exact(input,input.action==='application'?['action','github','sourceSha']:['action','github','sourceSha','cloudflare','environment','values','resources']);
+  const keys=input.action==='application'?['action','github','sourceSha']:['action','github','sourceSha','cloudflare','environment','values','resources'];
+  if(Object.hasOwn(input,'repository'))keys.push('repository');
+  if(input.action==='preview'&&Object.hasOwn(input,'instance')){keys.push('instance');exact(input.instance,['id','previousTaskId']);for(const value of Object.values(input.instance))requireValue(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));}
+  exact(input,keys);
   requireValue(['application','preview'].includes(input.action));connectionReference(input.github);requireValue(typeof input.sourceSha==='string'&&/^[a-f0-9]{40}$/.test(input.sourceSha));
+  if(Object.hasOwn(input,'repository'))requireValue(typeof input.repository==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(input.repository));
   if(input.action==='preview'){connectionReference(input.cloudflare);requireValue(typeof input.environment==='string'&&/^[a-z][a-z0-9-]{1,62}$/.test(input.environment)&&object(input.values)&&object(input.resources));}
   return input;
 }

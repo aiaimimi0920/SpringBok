@@ -14,6 +14,11 @@ test('UI-05: production UI does not restore explanatory copy or helper panels', 
   const resources = await readFile(new URL('resources.js', root), 'utf8');
   assert.match(resources, /lastRead=Date\.now\(\);notice\(''\)/);
   const deploy = await readFile(new URL('deploy.html', root), 'utf8');
-  assert.match(deploy, /公开配置（勿填密钥）/);
-  assert.match(deploy, /id="deploy-submit"[^>]*disabled/);
+  assert.match(deploy, /公开配置 · 勿填密钥/);
+  assert.match(deploy, /id="service-submit"[^>]*disabled/);
+  for(const name of ['deploy.html','index.html','resources.html','settings.html']) {
+    const html=await readFile(new URL(name,root),'utf8');
+    assert.doesNotMatch(html.match(/<nav[\s\S]*?<\/nav>/)?.[0]??'', /历史部署|新建部署/);
+    assert.match(html, /href="\/services"/);
+  }
 });

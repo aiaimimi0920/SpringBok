@@ -30,7 +30,7 @@ try {
   const posts = () => requests.filter(r => r.path === '/api/admin/servers' && r.method === 'POST').length;
   const waitReady = () => page.getByText(/目录版本 \d+/).waitFor();
   const waitSaved = () => page.getByText(/目录已保存（版本 \d+）/).waitFor();
-  await page.goto(origin); await waitReady();
+  await page.goto(origin + '/history'); await waitReady();
   assert.equal(await page.locator('#start').isEnabled(), false);
   await page.getByLabel('新服务器名称', { exact: true }).fill('<img src=x onerror=alert(1)>');
   await page.locator('#server-add').evaluate(button => { button.click(); button.click(); }); await waitSaved();

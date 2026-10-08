@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SbaDeployment } from './sba-store.mjs';
 import { ownerId } from './connections-contract.mjs';
-import { sbaPolicy, sbaDigest, canonicalSba, requireSba, exactSba } from './sba-control.mjs';
+import { sbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba } from './sba-control.mjs';
 export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));return value; };
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
 export const accountStub = (env,accountId) => {requireSba(/^[a-f0-9]{32}$/.test(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
@@ -28,23 +28,30 @@ export class ConnectedDeployment extends SbaDeployment {
     requireSba((actor===null||actor===record.owner)&&await sbaDigest(record)===rows[0].digest&&this.ctx.id.toString()===this.env.CONNECTED_TASKS.idFromName(`connected/v1/${record.taskId}`).toString());return record;
   }
   async policyFor(actor){const record=await this.bootstrap(actor);return sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(record.plan.policy)});}
+  async requestFor(policy,taskId,manifest){const record=await this.bootstrap();requireSba(record.taskId===taskId);return sbaRequest(policy,taskId,manifest,record.plan.operation??null);}
   async begin(actor,input){const record=await this.bootstrap(actor);requireSba(input.request.taskId===record.taskId);return super.begin(actor,input);}
   recoverUnstarted(){throw new Error('connected recovery not authorized');}
   recoverAuthorized(){throw new Error('connected recovery not authorized');}
 }
 export class DeploymentLocks extends DurableObject {
-  claim(owner,taskId,accountId,scope,resourceKeys,digest,observed=[]){
+  claim(owner,taskId,accountId,scope,resourceKeys,digest,observed=[],update=null){
     ownerId(owner);connectedTaskId(taskId);requireSba(/^[a-f0-9]{64}$/.test(digest)&&typeof scope==='string'&&scope.length<=300&&Array.isArray(resourceKeys)&&resourceKeys.length<=32&&Array.isArray(observed)&&observed.length<=256);
     requireSba(this.ctx.id.toString()===this.env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`).toString());
-    const identity=canonicalSba({owner,taskId,scope,resourceKeys:[...new Set(resourceKeys)].sort(),digest});
+    if(update){exactSba(update,['instanceId','previousTaskId']);connectedTaskId(update.instanceId);connectedTaskId(update.previousTaskId);requireSba(taskId!==update.previousTaskId&&taskId!==update.instanceId);}
+    const keys=[...new Set(resourceKeys)].sort(),identity=canonicalSba({owner,taskId,scope,resourceKeys:keys,digest,...(update??{})});
     return this.ctx.storage.transactionSync(()=>{
       const sql=this.ctx.storage.sql,tables=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('deployment_claims','deployment_keys','deployment_lane')").toArray();
       if(!tables.length){sql.exec('CREATE TABLE deployment_claims (task TEXT PRIMARY KEY,identity TEXT NOT NULL)');sql.exec('CREATE TABLE deployment_keys (key TEXT PRIMARY KEY,task TEXT NOT NULL)');sql.exec('CREATE TABLE deployment_lane (id INTEGER PRIMARY KEY CHECK(id=1),task TEXT)');sql.exec('INSERT INTO deployment_lane VALUES(1,NULL)');}
       requireSba(tables.length===0||tables.length===3);const lane=sql.exec('SELECT * FROM deployment_lane').toArray();requireSba(lane.length===1&&lane[0].id===1);
       const prior=sql.exec('SELECT identity FROM deployment_claims WHERE task=?',taskId).toArray()[0];if(prior){requireSba(prior.identity===identity);return {claimed:true};}
       requireSba(lane[0].task===null&&sql.exec('SELECT COUNT(*) AS n FROM deployment_claims').one().n<128);
-      for(const value of observed){requireSba(typeof value==='string'&&value.length<=256);requireSba(!sql.exec('SELECT task FROM deployment_keys WHERE key=?','identity:'+value).toArray().length);}
-      for(const key of ['environment:'+scope,...resourceKeys]){requireSba(typeof key==='string'&&key.length<=350);sql.exec('INSERT INTO deployment_keys VALUES(?,?)',key,taskId);}
+      if(update){
+        const claims=sql.exec('SELECT identity FROM deployment_claims ORDER BY rowid').toArray().map(r=>JSON.parse(r.identity));
+        const chain=claims.filter(r=>(r.instanceId??r.taskId)===update.instanceId),head=chain.at(-1),root=chain[0];
+        requireSba(root?.taskId===update.instanceId&&head?.taskId===update.previousTaskId&&root.owner===owner&&head.owner===owner&&root.scope===scope&&head.scope===scope&&canonicalSba(root.resourceKeys)===canonicalSba(keys)&&canonicalSba(head.resourceKeys)===canonicalSba(keys));
+      }
+      for(const value of observed){requireSba(typeof value==='string'&&value.length<=256);const held=sql.exec('SELECT task FROM deployment_keys WHERE key=?','identity:'+value).toArray()[0];requireSba(!held||update&&held.task===update.instanceId);}
+      for(const key of ['environment:'+scope,...keys]){requireSba(typeof key==='string'&&key.length<=350);if(update)requireSba(sql.exec('SELECT task FROM deployment_keys WHERE key=?',key).toArray()[0]?.task===update.instanceId);else sql.exec('INSERT INTO deployment_keys VALUES(?,?)',key,taskId);}
       sql.exec('INSERT INTO deployment_claims VALUES(?,?)',taskId,identity);sql.exec('UPDATE deployment_lane SET task=? WHERE id=1',taskId);return {claimed:true};
     });
   }

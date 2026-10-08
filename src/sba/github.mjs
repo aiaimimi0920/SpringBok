@@ -56,33 +56,49 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     return { request: accepted, requestJson, requestDigest,
       title: `sba:${accepted.taskId}:${requestDigest}`, artifactName: `sba-result-${accepted.taskId}-${requestDigest}` };
   }
-  async function readFile(sourceSha, filename) {
+  async function readFiles(sourceSha, filenames, optional = false) {
     if (typeof sourceSha !== 'string' || !shaPattern.test(sourceSha)) fail('SBA_GITHUB_REQUEST_INVALID');
     const source = `https://api.github.com/repos/${c.applicationRepository}/git`;
     const commit = await api(`${source}/commits/${sourceSha}`);
     if (commit.sha !== sourceSha || !shaPattern.test(commit.tree?.sha)) fail('SBA_GITHUB_MANIFEST_INVALID');
-    async function entry(treeSha, name, type, mode) {
+    async function treeEntries(treeSha) {
       const tree = await api(`${source}/trees/${treeSha}`);
       if (tree.sha !== treeSha || tree.truncated !== false || !Array.isArray(tree.tree)) fail('SBA_GITHUB_MANIFEST_INVALID');
-      const matches = tree.tree.filter(item => item?.path === name);
+      return tree.tree;
+    }
+    function entry(entries, name, type, mode) {
+      const matches = entries.filter(item => item?.path === name);
       if (matches.length !== 1 || matches[0].type !== type || matches[0].mode !== mode || !shaPattern.test(matches[0].sha))
         fail('SBA_GITHUB_MANIFEST_INVALID');
       return matches[0].sha;
     }
     // Contents API 可能解引用仓库内 symlink，必须先核对 Git tree mode。
-    const directorySha = await entry(commit.tree.sha, '.sba', 'tree', '040000');
-    const blobSha = await entry(directorySha, filename, 'blob', '100644');
-    const file = await api(`${source}/blobs/${blobSha}`);
-    try {
-      if (file.sha !== blobSha || file.encoding !== 'base64' ||
-          !Number.isSafeInteger(file.size) || file.size < 1 || file.size > 65536 || typeof file.content !== 'string') throw new Error();
-      const raw = atob(file.content.replace(/\n/g, ''));
-      if (raw.length !== file.size) throw new Error();
-      return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(raw, ch => ch.charCodeAt(0))));
-    } catch { fail('SBA_GITHUB_MANIFEST_INVALID'); }
+    const root = await treeEntries(commit.tree.sha);
+    if (optional && !root.some(item => item?.path === '.sba')) return null;
+    const directory = await treeEntries(entry(root, '.sba', 'tree', '040000'));
+    const files = {};
+    for (const filename of filenames) {
+      const blobSha = entry(directory, filename, 'blob', '100644');
+      const file = await api(`${source}/blobs/${blobSha}`);
+      try {
+        if (file.sha !== blobSha || file.encoding !== 'base64' ||
+            !Number.isSafeInteger(file.size) || file.size < 1 || file.size > 65536 || typeof file.content !== 'string') throw new Error();
+        const raw = atob(file.content.replace(/\n/g, ''));
+        if (raw.length !== file.size) throw new Error();
+        files[filename] = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(raw, ch => ch.charCodeAt(0))));
+      } catch { fail('SBA_GITHUB_MANIFEST_INVALID'); }
+    }
+    return files;
   }
+  async function readFile(sourceSha, filename) { return (await readFiles(sourceSha, [filename]))[filename]; }
   async function readManifest(sourceSha) { try { return validateManifest(await readFile(sourceSha, 'manifest.json')); } catch(error) { if(error instanceof SbaGithubError)throw error; fail('SBA_GITHUB_MANIFEST_INVALID'); } }
   async function readDeclaration(sourceSha) { return readFile(sourceSha, 'deployment.json'); }
+  async function readApplication(sourceSha, optional = false) {
+    const files = await readFiles(sourceSha, ['manifest.json', 'deployment.json'], optional);
+    if (files === null) return null;
+    try { return { manifest: validateManifest(files['manifest.json']), declaration: files['deployment.json'] }; }
+    catch { fail('SBA_GITHUB_MANIFEST_INVALID'); }
+  }
   async function dispatch(request, manifest) {
     const binding = await prepare(request, manifest);
     // 一次调用只有一次 POST。任何发送后错误均可能已触发，绝不降级成可重试。
@@ -136,5 +152,5 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     return { status: 'receipt-available', runId, requestDigest: binding.requestDigest,
       artifact: { id: artifact.id, name: artifact.name, size: artifact.size_in_bytes, digest: artifact.digest } };
   }
-  return Object.freeze({ prepare, readManifest, readDeclaration, dispatch, inspectRun, inspectUnstartedRun });
+  return Object.freeze({ prepare, readManifest, readDeclaration, readApplication, dispatch, inspectRun, inspectUnstartedRun });
 }

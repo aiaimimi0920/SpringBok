@@ -46,7 +46,7 @@ try {
   async function waitHeld() {
     const until = Date.now() + 10000; while (!release && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(release, 'held response must arrive');
   }
-  await page.goto(origin); await waitReady(); const a = await create('一次性加入节点 A');
+  await page.goto(origin + '/history'); await waitReady(); const a = await create('一次性加入节点 A');
   // 准备、勾选和取消均不写；尚未下载材料时不能授权。
   await a.getByRole('button', { name: '准备一次性加入', exact: true }).evaluate(button => { button.click(); button.click(); });
   await page.locator('#enrollment-dialog').waitFor(); await page.locator('#enrollment-confirm-saved').check();

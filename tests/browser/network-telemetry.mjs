@@ -31,7 +31,7 @@ try {
   const panel = n => page.locator(`[data-server-id="${n.context.nodeId}"] [data-telemetry]`);
   const ready = () => page.getByText(/目录版本 \d+/).waitFor();
   const refresh = async change => { mutate = change; await page.locator('#catalog-refresh').click(); await ready(); };
-  await page.goto(origin); await ready();
+  await page.goto(origin + '/history'); await ready();
   await panel(a).getByText(/接口 eth0；接收 0.00 bytes\/s；发送 0.00 bytes\/s；窗口接收 0 bytes；窗口发送 0 bytes.*最近已接收/).waitFor();
   await panel(b).getByText(/接口 eth0；接收 0.03 bytes\/s；发送 10.00 bytes\/s；窗口接收 1 bytes.*陈旧/).waitFor();
   await panel(legacy).getByText(/网络未上报.*旧客户端/).waitFor();

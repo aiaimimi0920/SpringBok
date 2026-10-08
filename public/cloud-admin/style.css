@@ -97,7 +97,7 @@ body:has(dialog[open]) main { overflow: hidden; }
   body { height: auto; min-height: 100dvh; display: block; overflow: auto; }
   .rail { border-right: 0; border-bottom: 1px solid var(--neuro-line); }
   .brand { height: 54px; padding: 0 18px; }
-  .rail nav { flex-direction: row; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px; gap: 4px; overflow: visible; }
+  .rail nav { flex-direction: row; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 8px; gap: 4px; overflow: visible; }
   .rail nav a { min-width: 0; padding: 8px 2px; font-size: 12px; justify-content: center; flex-direction: column; gap: 5px; }
   .rail nav .nav-settings { margin: 0; }
   .topbar { display: none; }

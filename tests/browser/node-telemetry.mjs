@@ -34,7 +34,7 @@ try {
   });
   const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message)); await page.clock.install();
   const row = n => page.locator(`[data-server-id="${n.context.nodeId}"]`), panel = n => row(n).locator('[data-telemetry]'), ready = () => page.getByText(/目录版本 \d+/).waitFor();
-  await page.goto(origin); await ready();
+  await page.goto(origin + '/history'); await ready();
   await panel(a).getByText(/CPU：0.00%.*最近已接收/).waitFor(); await panel(b).getByText(/CPU：12.00%.*陈旧/).waitFor();
   await panel(a).getByText(/内存：0.00%.*最近已接收.*已用 0.00 GiB（0 bytes）/).waitFor(); await panel(b).getByText(/内存：0.00%.*陈旧.*已用 0.00 GiB（1 bytes）/).waitFor();
   await panel(legacy).getByText(/内存未上报.*旧 CPU-only/).waitFor(); await panel(failed).getByText(/内存：采集不可用.*memavailable-missing/).waitFor();

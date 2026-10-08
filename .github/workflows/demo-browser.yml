@@ -60,6 +60,8 @@ jobs:
         run: node tests/browser/connected-execution.mjs
       - name: Check service discovery, independent statistics and same-instance version updates
         run: node tests/browser/service-lifecycle.mjs
+      - name: Check bounded service discovery across slow repositories and pages
+        run: node tests/browser/service-discovery.mjs
       - name: Check Neuro shell, colors, responsive layouts and keyboard states
         run: node tests/browser/neuro-ui.mjs
       - name: Check catalog, enrollment and telemetry UI on Linux

@@ -91,6 +91,15 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     return files;
   }
   async function readFile(sourceSha, filename) { return (await readFiles(sourceSha, [filename]))[filename]; }
+  async function hasApplication(branch) {
+    if (typeof branch !== 'string' || !branch || branch.length > 256 || /[\x00-\x20\x7f?#]/.test(branch) ||
+        !branch.split('/').every(part => part && !['.', '..'].includes(part))) fail('SBA_GITHUB_REQUEST_INVALID');
+    // A floating ref is only an absence preflight. Candidates still go through
+    // readApplication with an independently resolved immutable commit and modes.
+    const tree = await api(`https://api.github.com/repos/${c.applicationRepository}/git/trees/${encodeURIComponent(branch)}`);
+    if (!shaPattern.test(tree.sha) || tree.truncated !== false || !Array.isArray(tree.tree)) fail('SBA_GITHUB_MANIFEST_INVALID');
+    return tree.tree.some(item => item?.path === '.sba');
+  }
   async function readManifest(sourceSha) { try { return validateManifest(await readFile(sourceSha, 'manifest.json')); } catch(error) { if(error instanceof SbaGithubError)throw error; fail('SBA_GITHUB_MANIFEST_INVALID'); } }
   async function readDeclaration(sourceSha) { return readFile(sourceSha, 'deployment.json'); }
   async function readApplication(sourceSha, optional = false) {
@@ -152,5 +161,5 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     return { status: 'receipt-available', runId, requestDigest: binding.requestDigest,
       artifact: { id: artifact.id, name: artifact.name, size: artifact.size_in_bytes, digest: artifact.digest } };
   }
-  return Object.freeze({ prepare, readManifest, readDeclaration, readApplication, dispatch, inspectRun, inspectUnstartedRun });
+  return Object.freeze({ prepare, readManifest, readDeclaration, readApplication, hasApplication, dispatch, inspectRun, inspectUnstartedRun });
 }

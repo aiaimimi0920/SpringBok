@@ -6,6 +6,8 @@ const element = (tag, text, className) => { const node = document.createElement(
 const api = '/api/admin/deployments/';
 let session = null, connections = [], generation = 0, dialogGeneration = 0, loadingCount = 0;
 let catalog = new Map(), scanning = false, scannedAt = 0, scanErrors = new Map();
+let catalogOrder = new Map();
+let scanProgress = null;
 let instances = new Map(), states = new Map(), usage = new Map(), historyRecords = new Map();
 let registeredResources = [];
 let selected = null, application = null, updateTarget = null, preview = null, busy = false, selectionBusy = false, submitting = false;
@@ -35,22 +37,26 @@ function restoreFocus() {
 }
 function invalidate() {
   generation++; dialogGeneration++; session = null; clearTimeout(pollTimer); loadingCount = 0; loading(0);
-  catalog.clear(); instances.clear(); states.clear(); usage.clear(); historyRecords.clear(); usagePending.clear();
+  catalog.clear(); catalogOrder.clear(); instances.clear(); states.clear(); usage.clear(); historyRecords.clear(); usagePending.clear();
   registeredResources = [];
   application = null; preview = null; selectedResources = new Map(); busy = false; selectionBusy = false; submitting = false;
   $('service-list').replaceChildren(); $('service-tabs').replaceChildren(); $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); $('service-review').replaceChildren();
   $('service-dialog').close(); controls();
 }
-async function request(path, body) {
+async function request(path, body, timeoutMs = 0) {
   const version = generation;
+  const controller = timeoutMs ? new AbortController() : null, timer = controller && setTimeout(() => controller.abort(), timeoutMs);
+  try {
   const response = await fetch(path, { method: body ? 'POST' : 'GET', credentials: 'same-origin', redirect: 'error',
+    ...(controller ? { signal: controller.signal } : {}),
     headers: body ? { 'content-type': 'application/json', 'x-csrf-token': session?.csrf ?? '' } : {}, ...(body ? { body: JSON.stringify(body) } : {}) });
   if (response.status === 403) {
     if (current(version)) { invalidate(); notice('身份验证失败，请重新登录', 'error'); }
     throw new Error('身份验证失败，请重新登录');
   }
   if (!response.ok) throw new Error(path.endsWith('/plan') ? '计划校验失败：检查版本兼容性、连接、资源与公开配置' : '读取或操作未确认，请检查连接权限与平台状态');
-  return response.json();
+  return await response.json();
+  } finally { if (timer) clearTimeout(timer); }
 }
 async function pool(items, callback, count = 2) {
   let next = 0;
@@ -168,6 +174,7 @@ async function refreshInstances() {
 function renderTabs() {
   const focus = document.activeElement?.dataset.repository;
   const entries = updateTarget ? [...catalog.values()].filter(row => row.repository.toLowerCase() === updateTarget.instance.application.repository.toLowerCase()) : [...catalog.values()];
+  entries.sort((left, right) => (catalogOrder.get(left.repository.toLowerCase()) ?? Infinity) - (catalogOrder.get(right.repository.toLowerCase()) ?? Infinity));
   const tabs = entries.map((row, index) => {
     const button = element('button', row.manifest?.name ?? row.repository.split('/').at(-1)); button.type = 'button'; button.role = 'tab'; button.setAttribute('aria-label', (row.manifest?.name ?? row.repository.split('/').at(-1)) + ' · ' + row.repository);
     button.id = 'service-tab-' + index; button.dataset.repository = row.repository; button.tabIndex = selected?.repository === row.repository ? 0 : -1;
@@ -179,12 +186,14 @@ function renderTabs() {
   if (selectedTab) $('service-edit').setAttribute('aria-labelledby', selectedTab.id); else $('service-edit').removeAttribute('aria-labelledby');
   if (!selected && tabs[0]) tabs[0].tabIndex = 0;
   if (focus) $('service-tabs').querySelector(`[data-repository="${CSS.escape(focus)}"]`)?.focus();
-  $('service-catalog-status').textContent = scanning ? `正在查找服务 · ${catalog.size}` : scanErrors.size ? `部分仓库读取失败 · ${[...scanErrors.keys()].join('、')}` : catalog.size ? '' : '未找到含 .sba 的服务';
+  $('service-catalog-status').textContent = scanning ? (scanProgress ? `正在查找服务 · 已检查 ${scanProgress.done}/${scanProgress.total} · 找到 ${catalog.size}${scanErrors.size ? ` · 读取失败 ${scanErrors.size}` : ''}` : '正在读取仓库列表…') : scanErrors.size ? `部分仓库读取失败 · ${[...scanErrors.keys()].join('、')}` : catalog.size ? '' : '未找到含 .sba 的服务';
   controls();
 }
 async function discoverServices() {
   if (scanning || !session) return;
-  const version = generation; scanning = true; scanErrors.clear(); loading(1); renderTabs();
+  const version = generation; scanning = true; scanProgress = null; scanErrors.clear(); loading(1); renderTabs();
+  const repositories = new Map();
+  try {
   for (const row of connections) if (row.provider === 'github' && (row.state !== 'verified' || row.deploymentAvailable === false)) scanErrors.set(row.name + ' · 连接不可用', true);
   await pool(connections.filter(row => row.provider === 'github' && row.state === 'verified' && row.deploymentAvailable !== false), async row => {
     const github = { id: row.id, revision: row.revision }; let cursor = ''; const seen = new Set();
@@ -192,24 +201,45 @@ async function discoverServices() {
       do {
         if (!current(version)) return;
         if (seen.has(cursor) || seen.size >= 250) throw new Error('仓库分页未完成'); seen.add(cursor);
-        const page = await request(api + 'catalog', { github, cursor }); if (!current(version)) return;
+        const page = await request(api + 'catalog', { github, cursor }, 15000); if (!current(version)) return;
         for (const item of page.items) {
           if (!current(version)) return; if (!item.available) continue;
-          const key = item.repository.toLowerCase(); if (catalog.get(key)?.status === 'ready') continue;
-          try {
-            const data = await request(api + 'application', { github, repository: item.repository, sourceSha: null }); if (!current(version)) return;
-            scanErrors.delete(item.repository);
-            if (data.status !== 'absent') {
-              catalog.set(key, data); renderTabs();
-              if (!selected && $('service-dialog').open && !updateTarget) void selectService(data);
-            }
-          } catch { if (current(version) && catalog.get(key)?.status !== 'ready') scanErrors.set(item.repository, true); }
+          const key = item.repository.toLowerCase();
+          if (!repositories.has(key)) repositories.set(key, []);
+          const choices = repositories.get(key);
+          if (!choices.some(choice => choice.github.id === github.id)) choices.push({ ...item, github });
         }
         cursor = page.next ?? '';
       } while (cursor);
     } catch { if (current(version)) scanErrors.set(row.name + ' · ' + row.target, true); }
   });
-  if (current(version)) { scanning = false; scannedAt = Date.now(); loading(-1); renderTabs(); }
+  if (!current(version)) return;
+  catalogOrder = new Map([...repositories.keys()].map((key, index) => [key, index]));
+  scanProgress = { done: 0, total: repositories.size }; renderTabs();
+  // One queue across accounts and pages: a slow earlier repository cannot hide
+  // a later service, and duplicate credentials do not multiply concurrent reads.
+  await pool([...repositories], async ([key, choices]) => {
+    if (!current(version)) return;
+    let read = false;
+    try {
+      for (const item of choices) {
+        if (!current(version)) return;
+        try {
+          const data = await request(api + 'application', { github: item.github, repository: item.repository, sourceSha: null,
+            ...(item.defaultBranch ? { defaultBranch: item.defaultBranch } : {}) }, 45000);
+          if (!current(version)) return;
+          read = true;
+          if (data.status !== 'absent') {
+            catalog.set(key, data); renderTabs();
+            if (!selected && $('service-dialog').open && !updateTarget) void selectService(data);
+          }
+          if (data.status !== 'invalid') break;
+        } catch { if (!current(version)) return; }
+      }
+      if (!read) scanErrors.set(choices[0].repository, true);
+    } finally { if (current(version)) { scanProgress.done++; renderTabs(); } }
+  }, 4);
+  } finally { if (current(version)) { scanning = false; scannedAt = Date.now(); loading(-1); renderTabs(); } }
 }
 function addField(container, id, labelText, control) {
   const field = element('div', undefined, 'field'), label = element('label', labelText); label.htmlFor = id; control.id = id;

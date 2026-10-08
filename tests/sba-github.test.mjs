@@ -70,6 +70,21 @@ test('fixed SHA manifest traverses Git tree modes, never contents symlink or dow
   assert.ok(calls[0].options.signal instanceof AbortSignal);
 });
 
+test('directory preflight uses one bounded tree read and is never a deployment proof', async () => {
+  const response = { sha: 'a'.repeat(40), truncated: false, tree: [] };
+  const absent = client([json(response)]);
+  assert.equal(await absent.executor.hasApplication('release/main'), false);
+  assert.equal(absent.calls.length, 1);
+  assert.equal(absent.calls[0].url, 'https://api.github.com/repos/example/sample/git/trees/release%2Fmain');
+  assert.equal(absent.calls[0].options.redirect, 'manual');
+  for (const mode of ['040000', '120000']) {
+    const candidate = client([json({ ...response, tree: [{ path: '.sba', mode }] })]);
+    assert.equal(await candidate.executor.hasApplication('main'), true, 'candidate still requires immutable mode and declaration validation');
+  }
+  await assert.rejects(client([json({ ...response, truncated: true })]).executor.hasApplication('main'), /SBA_GITHUB_MANIFEST_INVALID/);
+  for (const ref of ['../main', 'main?token=x', '', 'a\nb']) await assert.rejects(client([]).executor.hasApplication(ref), /SBA_GITHUB_REQUEST_INVALID/);
+});
+
 test('manifest rejects symlinks, gitlinks, truncated trees, invalid encoding and legacy contracts', async () => {
   for (const change of [r => { r[0].sha = '9'.repeat(40); }, r => { r[1].truncated = true; },
     r => { r[1].tree[0].mode = '120000'; }, r => { r[1].tree[0].type = 'commit'; },

@@ -20,6 +20,8 @@ export async function serviceFixture() {
       if (suffix === '') return Response.json(metadata(repository));
       if (suffix === '/git/ref/heads/main') return Response.json({ ref: 'refs/heads/main', object: { type: 'commit', sha: state.headSha } });
       if (suffix === '/tags') return Response.json(state.tagPages[Number(url.searchParams.get('page')) - 1] ?? []);
+      if (suffix === '/git/trees/main') return Response.json({ sha: '1'.repeat(40), truncated: false,
+        tree: state.missingSba.has(repository) ? [] : [{ path: '.sba', type: 'tree', mode: '040000', sha: '2'.repeat(40) }] });
       if (suffix.startsWith('/git/')) {
         const requested = suffix.split('/').at(-1), updated = requested === updatedSha || ['5', '6', '7', '8'].some(char => requested === char.repeat(40));
         const root = (updated ? '5' : '1').repeat(40), directory = (updated ? '6' : '2').repeat(40), manifestBlob = (updated ? '7' : '3').repeat(40), declarationBlob = (updated ? '8' : '4').repeat(40);

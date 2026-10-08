@@ -17,7 +17,10 @@ export function importInput(value) {
 }
 const at = (value, path) => path.reduce((current, key) => current?.[key], value);
 export function importComponents(application) {
-  return deploymentDeclaration(application.declaration).targets.filter(target => target.kind === 'worker')
+  const declaration=deploymentDeclaration(application.declaration);
+  // Import currently verifies one provider account, never infer other accounts.
+  requireSba(declaration.schemaVersion===1||declaration.accountMode==='single');
+  return declaration.targets.filter(target => target.kind === 'worker')
     .map(target => ({ key: target.path.join('.'), label: target.path.slice(0, -1).join('.') || target.path[0] }));
 }
 async function cloud(accountId, token, path, jurisdiction = '') {

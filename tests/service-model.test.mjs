@@ -13,3 +13,9 @@ test('failed update keeps last confirmed version; unverified is never labeled bu
   assert.equal(confirmedVersion({ job: { status: 'running' } }), null); assert.equal(statusText('deployed-unverified'), '已部署，待验证'); assert.equal(statusText('unknown'), '结果未确认');
   assert.equal(newerVersion('1.10.0','1.2.0'),true); for(const version of ['1.2.0','1.1.9','1.3.0-beta','01.3.0'])assert.equal(newerVersion(version,'1.2.0'),false);
 });
+test('identical resource names and IDs in different accounts use separate usage sources', () => {
+  const instance={connections:{cloudflare:{id:'runtime'}},resources:{a:{kind:'r2',remoteId:'same',name:'same',accountId:'a',connectionId:'runtime'},b:{kind:'r2',remoteId:'same',name:'same',accountId:'b',connectionId:'storage'}}};
+  const bound=boundResources(instance);assert.equal(bound.length,2);
+  const usage=new Map([['storage/r2',{metrics:[{id:'storage',unit:'bytes'}],samples:{same:{storage:{value:2000000,complete:true}}}}]]);
+  assert.equal(resourceMetrics(instance,bound[0],usage)[0].text,'—');assert.equal(resourceMetrics(instance,bound[1],usage)[0].text,'2 MB');
+});

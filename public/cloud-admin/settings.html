@@ -15,10 +15,10 @@
 <form id="connection-form"><fieldset id="connection-fields" disabled><div class="form-grid">
 <div class="field"><label for="connection-provider">平台</label><select id="connection-provider"><option value="cloudflare">Cloudflare</option><option value="github">GitHub</option></select></div>
 <div class="field"><label for="connection-name">连接名称</label><input id="connection-name" maxlength="64" required placeholder="例如：生产 Cloudflare" autocomplete="off"></div>
-<div class="field span-all"><label id="connection-target-label" for="connection-target">Cloudflare Account ID</label><input id="connection-target" maxlength="140" required autocomplete="off" spellcheck="false" aria-describedby="connection-help"><p id="connection-help">需要指定账号的 Account Settings Read 权限。此处不检查部署写权限。</p></div>
-<div class="field span-all"><label for="connection-token">API Token / GitHub PAT</label><input id="connection-token" type="password" minlength="20" maxlength="512" required autocomplete="new-password" spellcheck="false" aria-describedby="connection-secret-help"><p id="connection-secret-help">密钥仅加密保存在服务端，保存后不再显示。不接受 Cloudflare Global API Key。</p></div>
+<div class="field span-all"><label id="connection-target-label" for="connection-target">Cloudflare Account ID</label><input id="connection-target" maxlength="140" required autocomplete="off" spellcheck="false"></div>
+<div class="field span-all"><label id="connection-token-label" for="connection-token">API Token</label><input id="connection-token" type="password" minlength="20" maxlength="512" required autocomplete="new-password" spellcheck="false"></div>
 </div><div class="actions"><button id="connection-save" type="submit">验证并保存</button><button id="connection-clear" type="button">清空输入</button></div></fieldset></form></section>
-<section aria-labelledby="list-heading"><div class="section-heading"><h2 id="list-heading">已添加连接</h2><span class="index">02 / MANAGE</span></div><ul id="connections-list"></ul><p class="section-note">只读验证不代表部署写权限。保存后到云资源页登记资源，再新建部署；现有部署不会自动切换连接。</p></section></div>
-<dialog id="connection-disable-dialog" aria-labelledby="disable-heading"><h2 id="disable-heading">停用连接</h2><p id="connection-disable-target"></p><p>仅停用 SpringBok 中的连接，不撤销平台 Token，不停止或删除已部署服务。</p><div class="actions"><button id="connection-disable-cancel" type="button" autofocus>取消</button><button id="connection-disable-confirm" type="button">确认停用</button></div></dialog>
+<section aria-labelledby="list-heading"><div class="section-heading"><h2 id="list-heading">已添加连接</h2><span class="index">02 / MANAGE</span></div><ul id="connections-list"></ul></section></div>
+<dialog id="connection-disable-dialog" aria-labelledby="disable-heading"><h2 id="disable-heading">停用连接</h2><p id="connection-disable-target"></p><div class="actions"><button id="connection-disable-cancel" type="button" autofocus>取消</button><button id="connection-disable-confirm" type="button">确认停用</button></div></dialog>
 </main>
 </body></html>

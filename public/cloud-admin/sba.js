@@ -20,13 +20,13 @@ function render() {
   $('sba-start').disabled = busy || !snapshot?.ready;
   $('sba-reconcile').disabled = busy || snapshot?.job?.status !== 'running';
   $('sba-record').textContent = snapshot?.job ? `${labels[snapshot.job.status] ?? '未知状态'}\n${JSON.stringify(snapshot.job, null, 2)}` : '尚无首次部署任务';
-  if (snapshot?.history?.length) $('sba-record').textContent += `\n归档历史（保留原 outcome，不重放旧任务）：\n${JSON.stringify(snapshot.history, null, 2)}`;
+  if (snapshot?.history?.length) $('sba-record').textContent += `\n归档历史：\n${JSON.stringify(snapshot.history, null, 2)}`;
 }
 export async function refreshSba(value) {
   clearSba(); if (!value?.sbaEnabled) return;
   session = value; $('sba-panel').hidden = false; const version = generation;
   notice('读取 SBA 持久记录…');
-  try { const next = await request('state'); if (version !== generation) return; snapshot = next; render(); notice('已读取持久记录，没有触发部署或自动回收'); }
+  try { const next = await request('state'); if (version !== generation) return; snapshot = next; render(); notice('已读取持久记录'); }
   catch (error) { if (version === generation) notice(error.message); }
 }
 $('sba-start').addEventListener('click', async () => {
@@ -35,25 +35,25 @@ $('sba-start').addEventListener('click', async () => {
   try {
     const value = await request('preview', { taskId: `sba-${crypto.randomUUID()}` }); if (version !== generation) return;
     preview = value; $('sba-plan').textContent = JSON.stringify(value.plan.request, null, 2);
-    $('sba-submit').disabled = false; $('sba-confirm').showModal(); notice('请核对固定源码 SHA、环境和公开配置；取消不会部署');
+    $('sba-submit').disabled = false; $('sba-confirm').showModal(); notice('');
     timer = setTimeout(() => { closePreview(); notice('确认已过期，请重新预览'); }, Math.max(0, value.expiresAt - Date.now()));
   } catch (error) { if (version === generation) notice(error.message); }
   finally { busy = false; if (version === generation) render(); }
 });
-function cancel() { if (busy) return; generation++; closePreview(); notice('已取消，没有提交部署'); }
+function cancel() { if (busy) return; generation++; closePreview(); notice('已取消'); }
 $('sba-cancel').addEventListener('click', cancel);
 $('sba-confirm').addEventListener('cancel', event => { event.preventDefault(); cancel(); });
 $('sba-submit').addEventListener('click', async () => {
   if (!preview || busy || !session) return;
   const value = preview, version = generation; busy = true; closePreview(); snapshot = null; render();
-  try { const next = await request('submit', value); if (version === generation) { snapshot = next; notice('提交已记录；读取状态不会重新执行'); } }
+  try { const next = await request('submit', value); if (version === generation) { snapshot = next; notice('提交已记录'); } }
   catch (error) { if (version === generation) notice(error.message); }
   finally { busy = false; if (version === generation) render(); }
 });
 $('sba-reconcile').addEventListener('click', async () => {
   if (busy || snapshot?.job?.status !== 'running') return;
   const version = generation, taskId = snapshot.job.request.taskId; busy = true; render();
-  try { const next = await request('reconcile', { taskId }); if (version === generation) { snapshot = next; notice('已核对 GitHub run 和可信回执，没有重新部署'); } }
+  try { const next = await request('reconcile', { taskId }); if (version === generation) { snapshot = next; notice('已核对 GitHub run 和可信回执'); } }
   catch (error) { if (version === generation) notice(error.message); }
   finally { busy = false; if (version === generation) render(); }
 });

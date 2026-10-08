@@ -20,9 +20,10 @@ try {
     await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:Buffer.from(await response.arrayBuffer())});
   });
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
-  const ready=()=>page.locator('#resource-notice').getByText('已按账户更新资源；各类型的权限和读取结果见下方。',{exact:true}).waitFor();
+  const ready=()=>page.waitForFunction(()=>!document.getElementById('resource-fields').disabled && document.getElementById('resource-notice').textContent==='');
   const directory=process.env.CONNECTIONS_EVIDENCE_DIR??'test-results';await mkdir(directory,{recursive:true});
   await page.goto(origin+'/resources');await ready();assert.equal(await page.getByRole('button',{name:/刷新/}).count(),0);
+  assert.equal(await page.locator('.status-line').isVisible(),false,'Successful inventory has no explanatory notice or empty banner');
   await page.locator('#resource-add').click();assert.equal(await page.getByRole('radio',{name:'Cloudflare',exact:true}).evaluate(el=>el===document.activeElement),true);
   const geometry=()=>page.evaluate(()=>Object.fromEntries(['resource-dialog','resource-save'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return [id,[r.x,r.y,r.width,r.height]];})));
   for(const viewport of [{width:1440,height:1000},{width:390,height:844},{width:320,height:844},{width:720,height:400}]){

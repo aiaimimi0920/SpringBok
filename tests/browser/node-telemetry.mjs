@@ -33,7 +33,7 @@ try {
     if (held) holdFinished = true;
   });
   const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message)); await page.clock.install();
-  const row = n => page.locator(`[data-server-id="${n.context.nodeId}"]`), panel = n => row(n).locator('[data-telemetry]'), ready = () => page.getByText(/目录版本 \d+；这里仅登记元数据/).waitFor();
+  const row = n => page.locator(`[data-server-id="${n.context.nodeId}"]`), panel = n => row(n).locator('[data-telemetry]'), ready = () => page.getByText(/目录版本 \d+/).waitFor();
   await page.goto(origin); await ready();
   await panel(a).getByText(/CPU：0.00%.*最近已接收/).waitFor(); await panel(b).getByText(/CPU：12.00%.*陈旧/).waitFor();
   await panel(a).getByText(/内存：0.00%.*最近已接收.*已用 0.00 GiB（0 bytes）/).waitFor(); await panel(b).getByText(/内存：0.00%.*陈旧.*已用 0.00 GiB（1 bytes）/).waitFor();
@@ -45,7 +45,7 @@ try {
   await panel(legacy).getByText(/磁盘未上报.*旧客户端/).waitFor(); await panel(memoryLegacy).getByText(/磁盘未上报.*旧客户端/).waitFor();
   assert.equal((await panel(a).textContent()).includes('磁盘未确认'), false);
   for (const n of [...nodes, pending]) assert.equal(requests.filter(r => r.path === n.path).length, 1, 'one telemetry GET per initial node render');
-  assert.match(await panel(a).textContent(), /采样时间 1970.*云端接收时间/); assert.match(await panel(a).textContent(), /未证明宿主位置/);
+  assert.match(await panel(a).textContent(), /采样时间 1970.*云端接收时间/); assert.match(await panel(a).textContent(), /范围 linux-proc-stat/);
   mkdirSync('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/node-telemetry-synthetic-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'test-results/node-telemetry-synthetic-mobile.png', fullPage: true });
   mutate = v => { v.sample.memory = memory(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER); }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/内存：100.00%.*9007199254740991 bytes/).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'test-results/node-telemetry-synthetic-mobile-extreme.png', fullPage: true });
@@ -55,7 +55,7 @@ try {
   for (const change of [v => { v.sample.disk.mounts[0].usedBytes = 1; }, v => { delete v.sample.disk; }, v => { v.sample.disk.mounts.push({ ...v.sample.disk.mounts[0] }); }, v => { v.sample.disk.raw = 'not allowed'; }]) {
     mutate = change; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/磁盘未确认/).waitFor(); await panel(a).getByText(/CPU：0.00%/).waitFor(); await panel(a).getByText(/内存：0.00%/).waitFor();
   }
-  mutate = v => { v.sample.disk = { ...disk(), status: 'unavailable', reason: 'report-too-large', sampledAt: null, mounts: [], filtered: null }; }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/磁盘未上报.*超过 6 KiB.*没有截断/).waitFor(); await panel(a).getByText(/内存：0.00%/).waitFor();
+  mutate = v => { v.sample.disk = { ...disk(), status: 'unavailable', reason: 'report-too-large', sampledAt: null, mounts: [], filtered: null }; }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/磁盘未上报.*超过 6 KiB/).waitFor(); await panel(a).getByText(/内存：0.00%/).waitFor();
   mutate = v => { v.sample.disk = disk(); v.sample.disk.status = 'partial'; v.sample.disk.reason = 'mount-unavailable'; v.sample.disk.mounts.push({ ...disk().mounts[0], mountId: 2, mountPoint: '/<img src=x onerror=alert(1)>', status: 'unavailable', reason: 'statfs-failed', totalBytes: null, freeBytes: null, availableBytes: null, usedBytes: null, reservedBytes: null, usagePercent: null }); };
   await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/磁盘：部分采集不可用/).waitFor(); await panel(a).getByText(/挂载点 \/<img.*statfs-failed.*数值未知/).waitFor(); assert.equal(await panel(a).locator('img').count(), 0); await panel(a).getByText(/挂载点 \/；.*0.00%/).waitFor();
   mutate = v => { v.sample.disk.mounts[0].mountPoint = '/' + '长路径'.repeat(300); Object.assign(v.sample.disk.mounts[0], { totalBytes: Number.MAX_SAFE_INTEGER, freeBytes: 0, availableBytes: 0, usedBytes: Number.MAX_SAFE_INTEGER, reservedBytes: 0, usagePercent: 100 }); };
@@ -64,7 +64,7 @@ try {
   mutate = v => { v.sample.cpu.usagePercent = null; }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU 未确认/).waitFor(); await panel(a).getByText(/内存：0.00%/).waitFor(); await panel(a).getByText(/挂载点 \/；.*0.00%/).waitFor(); mutate = null;
   await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU：0.00%/).waitFor();
   await page.clock.fastForward(30001); await panel(a).getByText(/CPU\/内存\/磁盘\/网络快照已过期/).waitFor();
-  fail = true; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU\/内存\/磁盘\/网络未确认.*不是 0/).waitFor(); assert.equal(await page.locator('#server-add').isEnabled(), true); await row(a).getByText(/执行角色：在线/).waitFor();
+  fail = true; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU\/内存\/磁盘\/网络未确认.*当前值未知/).waitFor(); assert.equal(await page.locator('#server-add').isEnabled(), true); await row(a).getByText(/执行角色：在线/).waitFor();
   fail = false; mismatch = true; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU\/内存\/磁盘\/网络未确认/).waitFor(); mismatch = false;
   delay = true; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU\/内存\/磁盘\/网络快照已过期/).waitFor();
   // 同 owner 的旧 render 迟到也不能覆盖新 render。

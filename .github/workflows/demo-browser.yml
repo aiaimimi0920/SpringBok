@@ -58,6 +58,14 @@ jobs:
         run: node tests/browser/connected-execution.mjs
       - name: Check Neuro shell, colors, responsive layouts and keyboard states
         run: node tests/browser/neuro-ui.mjs
+      - name: Check catalog, enrollment and telemetry UI on Linux
+        run: |
+          node tests/browser/server-catalog.mjs
+          node tests/browser/service-catalog.mjs
+          node tests/browser/node-enrollment.mjs
+          node tests/browser/node-heartbeat.mjs
+          node tests/browser/node-telemetry.mjs
+          node tests/browser/network-telemetry.mjs
       - name: Save demo and clearly labeled fake-backend screenshots
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

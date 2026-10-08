@@ -31,17 +31,17 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.locator('#sba-submit').evaluate(button => { button.click(); button.click(); });
-  await page.getByText('提交已记录；读取状态不会重新执行', { exact: true }).waitFor();
+  await page.getByText('提交已记录', { exact: true }).waitFor();
   assert.equal(x.state.dispatches, 1); assert.equal(paths.filter(path => path === '/api/admin/sba/submit').length, 1);
-  await page.reload(); await page.getByText('已读取持久记录，没有触发部署或自动回收', { exact: true }).waitFor();
+  await page.reload(); await page.getByText('已读取持久记录', { exact: true }).waitFor();
   assert.equal(await start.isEnabled(), false); assert.equal(x.state.dispatches, 1);
   const allowed = await x.permit(); assert.equal(allowed.status, 200);
   const result = { schemaVersion: 2, taskId: allowed.value.request.taskId, action: 'deploy', sourceSha, applicationVersion: '1.0.0',
     status: 'succeeded', checks: [{ id: 'health-check', passed: true }] };
   x.state.archive = zip({ schemaVersion: 1, runId: 456, runAttempt: 1, executorSha: sha, requestDigest: allowed.value.requestDigest,
     permitId: allowed.value.permitId, result }); x.state.runStatus = 'completed';
-  await page.locator('#refresh').click(); await page.getByText('已读取持久记录，没有触发部署或自动回收', { exact: true }).waitFor();
-  await page.locator('#sba-reconcile').click(); await page.getByText('已核对 GitHub run 和可信回执，没有重新部署', { exact: true }).waitFor();
+  await page.locator('#refresh').click(); await page.getByText('已读取持久记录', { exact: true }).waitFor();
+  await page.locator('#sba-reconcile').click(); await page.getByText('已核对 GitHub run 和可信回执', { exact: true }).waitFor();
   assert.match(await page.locator('#sba-record').textContent(), /应用报告检查通过/);
   assert.equal(await page.locator('#sba-reconcile').isEnabled(), false);
   assert.doesNotMatch(await page.locator('body').textContent(), /synthetic-deployment-secret|permitId|never-return/);
@@ -54,8 +54,8 @@ try {
   const recovered = await y.post('recover-unstarted', { taskId: y.state.request.taskId, executorSha: 'f'.repeat(40) });
   assert.equal(recovered.status, 200);
   y.f.bindings.SBA_POLICY = JSON.stringify({ ...policy, github: { ...policy.github, executorSha: 'f'.repeat(40), ref: `sba-executor-${'f'.repeat(40)}` } });
-  await y.f.restart(); await page.reload(); await page.getByText('已读取持久记录，没有触发部署或自动回收', { exact: true }).waitFor();
-  assert.equal(await start.isEnabled(), true); assert.match(await page.locator('#sba-record').textContent(), /归档历史（保留原 outcome，不重放旧任务）/);
+  await y.f.restart(); await page.reload(); await page.getByText('已读取持久记录', { exact: true }).waitFor();
+  assert.equal(await start.isEnabled(), true); assert.match(await page.locator('#sba-record').textContent(), /归档历史/);
   assert.match(await page.locator('#sba-record').textContent(), /"outcome": "not-executed"/);
   assert.match(await page.locator('#sba-record').textContent(), /sba-test-task/);
   assert.doesNotMatch(await page.locator('body').textContent(), /synthetic-deployment-secret|permitId|never-return/);

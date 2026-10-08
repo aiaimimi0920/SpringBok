@@ -27,7 +27,7 @@ try {
   });
   const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
   await page.clock.install();
-  const row = n => page.locator(`[data-server-id="${n.context.nodeId}"]`), ready = () => page.getByText(/目录版本 \d+；这里仅登记元数据/).waitFor();
+  const row = n => page.locator(`[data-server-id="${n.context.nodeId}"]`), ready = () => page.getByText(/目录版本 \d+/).waitFor();
   await page.goto(origin); await ready();
   await row(a).locator('[data-heartbeat-role="execute"]').getByText(/执行角色：在线/).waitFor();
   await row(a).locator('[data-heartbeat-role="observe"]').getByText(/未知\/尚无心跳/).waitFor();

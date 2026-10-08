@@ -3,6 +3,7 @@
 /* UI-01: shared Neuro primitives. Exact colors live only in tokens.css. */
 :root { font-family: Inter, "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; font-size: 15px; color: var(--neuro-text); background: var(--neuro-bg); --rail-width: 216px; }
 * { box-sizing: border-box; }
+.status-line:has(> :only-child:empty) { display: none; }
 [hidden] { display: none !important; }
 body { margin: 0; height: 100dvh; display: grid; grid-template-columns: var(--rail-width) minmax(0, 1fr); grid-template-rows: 56px minmax(0, 1fr); overflow: hidden; }
 a { color: var(--neuro-info-text); text-underline-offset: 3px; }

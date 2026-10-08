@@ -6,6 +6,7 @@ const id = v => Number.isSafeInteger(v) && v > 0;
 
 // 独立的首次部署槽；旧 fixture/节点账本不复用、不改名、不迁移。
 export class SbaDeployment extends DurableObject {
+  requestFor(policy, taskId, manifest) { return sbaRequest(policy, taskId, manifest); }
   async policyFor(_actor) {
     const policy = sbaPolicy(this.env);
     requireSba(this.ctx.id.toString() === this.env.SBA_TASKS.idFromName(sbaObjectName(policy)).toString());
@@ -75,10 +76,10 @@ export class SbaDeployment extends DurableObject {
       if (job) {
         exactSba(job, ['actor', 'request', 'manifest', 'requestDigest', 'status', 'runId', 'submittedAt', 'permitDeadline', 'permitAt', 'permitId', 'resultDeadline', 'result', 'errorCode']);
         requireSba(typeof job.actor === 'string' && /^[a-f0-9]{64}$/.test(job.actor) && (actor === null || job.actor === actor));
-        requireSba(canonicalSba(job.request) === canonicalSba(sbaRequest(policy, job.request.taskId, job.manifest)) && await sbaDigest(job.request) === job.requestDigest);
+        requireSba(canonicalSba(job.request) === canonicalSba(await this.requestFor(policy, job.request.taskId, job.manifest)) && await sbaDigest(job.request) === job.requestDigest);
         requireSba(statuses.includes(job.status) && (job.runId === null || id(job.runId)) && Number.isSafeInteger(job.submittedAt) && job.submittedAt > 0 && job.permitDeadline === job.submittedAt + 900000);
         requireSba((job.permitId === null && job.permitAt === null && job.resultDeadline === null) ||
-          (typeof job.permitId === 'string' && /^[a-f0-9]{64}$/.test(job.permitId) && id(job.permitAt) && id(job.runId) && job.resultDeadline === job.permitAt + job.manifest.actions.deploy.timeoutSeconds * 1000 + 600000));
+          (typeof job.permitId === 'string' && /^[a-f0-9]{64}$/.test(job.permitId) && id(job.permitAt) && id(job.runId) && job.resultDeadline === job.permitAt + job.manifest.actions[job.request.action].timeoutSeconds * 1000 + 600000));
         requireSba(job.status !== 'running' || (job.permitId !== null && job.result === null));
         requireSba(!['dispatching', 'dispatched', 'dispatch-unknown'].includes(job.status) || (job.permitId === null && job.result === null));
         requireSba(job.status !== 'dispatched' || id(job.runId));
@@ -113,7 +114,7 @@ export class SbaDeployment extends DurableObject {
     requireSba(typeof actor === 'string' && /^[a-f0-9]{64}$/.test(actor));
     return this.#run(actor, async (job, save, policy, history) => {
       exactSba(input, ['request', 'manifest']);
-      const request = sbaRequest(policy, input.request.taskId, input.manifest);
+      const request = await this.requestFor(policy, input.request.taskId, input.manifest);
       requireSba(canonicalSba(request) === canonicalSba(input.request));
       requireSba(!history.some(entry => entry.taskId === request.taskId));
       if (job) {
@@ -194,7 +195,7 @@ export class SbaDeployment extends DurableObject {
       requireSba(job && job.request.taskId === taskId && job.requestDigest === requestDigest && id(runId));
       requireSba(['dispatching', 'dispatched', 'dispatch-unknown'].includes(job.status) && job.permitId === null && (job.runId === null || job.runId === runId));
       job.runId = runId; job.permitId = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
-      job.permitAt = Date.now(); job.resultDeadline = job.permitAt + job.manifest.actions.deploy.timeoutSeconds * 1000 + 600000;
+      job.permitAt = Date.now(); job.resultDeadline = job.permitAt + job.manifest.actions[job.request.action].timeoutSeconds * 1000 + 600000;
       job.status = 'running'; job.errorCode = null; save(job);
       return { permitId: job.permitId, request: job.request, manifest: job.manifest, requestDigest: job.requestDigest };
     });

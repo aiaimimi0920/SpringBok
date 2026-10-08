@@ -33,7 +33,7 @@ try {
   const waitReady = () => page.getByText(/目录版本 \d+/).waitFor();
   const waitSaved = () => page.getByText(/目录已保存（版本 \d+）/).waitFor();
   const posts = () => requests.filter(r => r.path === '/api/admin/services' && r.method === 'POST').length;
-  await page.goto(origin); await waitReady(); assert.equal(await page.locator('#service-add').isEnabled(), false);
+  await page.goto(origin + '/history'); await waitReady(); assert.equal(await page.locator('#service-add').isEnabled(), false);
   await page.locator('#server-name').fill('服务目标'); await page.locator('#server-add').click(); await waitSaved();
   const serverId = await page.locator('#servers > li[data-server-id]').getAttribute('data-server-id');
   assert.equal(await page.locator('#service-server').inputValue(), serverId);

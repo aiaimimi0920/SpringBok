@@ -1,22 +1,27 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>新建部署 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><script type="module" src="/shell.js"></script><script type="module" src="/deploy.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>服务 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/services.css"><script type="module" src="/shell.js"></script><script type="module" src="/services.js"></script></head>
 <body>
 <a class="skip-link" href="#main-content">跳到主要内容</a>
-<aside class="rail"><a class="brand" href="/" aria-label="SpringBok 首页" data-icon="brand">SpringBok</a><nav aria-label="主导航"><a href="/" data-icon="history"><span>历史部署</span></a>
-<a href="/deploy" data-icon="deploy" aria-current="page"><span>新建部署</span></a>
+<aside class="rail"><a class="brand" href="/" aria-label="SpringBok 首页" data-icon="brand">SpringBok</a><nav aria-label="主导航"><a href="/services" data-icon="deploy" aria-current="page"><span>服务</span></a>
 <a href="/resources" data-icon="resources"><span>云资源</span></a>
 <a href="/settings" data-icon="settings" class="nav-settings"><span>连接设置</span></a></nav></aside>
-<header class="topbar"><span class="context">部署控制台 <span>/</span> <strong>新建部署</strong></span><span>Cloudflare Workers</span></header>
-<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">DEPLOYMENT</p><h1>新建部署</h1></div><button id="deploy-refresh" type="button" data-icon="refresh">刷新连接与资源</button></div>
-<div class="status-line"><p id="deploy-notice" role="status" aria-live="polite">正在验证身份…</p></div>
-<form id="deploy-form" class="deploy-board"><fieldset id="deploy-fields" disabled>
-<section><h2><span class="step">01</span>应用版本</h2><div class="form-grid"><div class="field"><label for="deploy-github">GitHub 应用连接</label><select id="deploy-github" required></select></div><div class="field"><label for="deploy-sha">精确 Git commit SHA（40 位）</label><input id="deploy-sha" pattern="[a-f0-9]{40}" maxlength="40" required autocomplete="off" placeholder="输入完整提交 SHA"></div></div><div class="actions"><button id="deploy-load" type="button">读取应用声明</button></div><p id="deploy-application"></p></section>
-<section><h2><span class="step">02</span>首次部署 · Cloudflare Workers</h2><div class="form-grid"><div class="field"><label for="deploy-cloudflare">Cloudflare 连接</label><select id="deploy-cloudflare" required></select></div><div class="field"><label for="deploy-environment">部署环境标识</label><input id="deploy-environment" pattern="[a-z][a-z0-9-]{1,62}" maxlength="63" placeholder="例如 staging" required></div></div><div id="deploy-resources"></div></section>
-<section><h2><span class="step">03</span>公开配置（勿填密钥）</h2><div id="deploy-inputs"></div></section>
-<div class="actions"><button id="deploy-preview" type="submit" disabled>审阅部署计划</button></div></fieldset></form>
-<section id="deploy-review" hidden><h2><span class="step">04</span>审阅与确认</h2><pre id="deploy-plan"></pre><p id="deploy-execution-note">部署执行未启用</p><div class="actions"><button id="deploy-submit" type="button" disabled>确认部署</button><button id="deploy-cancel" type="button">取消审阅</button></div></section>
-<section><div class="section-heading"><h2>部署任务</h2><button id="deploy-tasks-refresh" type="button" data-icon="refresh">刷新任务列表</button></div><div class="task-toolbar"><div class="field"><label for="deploy-tasks">选择任务</label><select id="deploy-tasks" aria-label="部署任务"></select></div><button id="deploy-task-open" type="button">打开任务</button></div></section>
-<section id="deploy-result" hidden><h2>部署结果</h2><pre id="deploy-record"></pre><a id="deploy-run" target="_blank" rel="noopener noreferrer" hidden>查看 GitHub Actions</a><button id="deploy-reconcile" type="button">读取执行结果</button></section>
+<header class="topbar service-topbar"><span class="context">部署控制台 <span>/</span> <strong>服务</strong></span><span id="service-loading" role="status" aria-live="polite"></span></header>
+<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">SERVICES</p><h1>服务</h1></div><button id="service-add" class="primary" type="button" data-icon="deploy">部署服务</button></div>
+<div class="status-line"><p id="service-notice" role="status" aria-live="polite"></p></div>
+<p id="service-empty">尚无服务部署</p><ul id="service-list" aria-label="服务实例"></ul>
 </main>
+<dialog id="service-dialog" aria-labelledby="service-dialog-title">
+<div class="section-heading"><h2 id="service-dialog-title">部署服务</h2><button id="service-close" type="button">关闭</button></div>
+<div id="service-tabs" role="tablist" aria-label="可部署服务"></div>
+<p id="service-catalog-status" role="status" aria-live="polite"></p>
+<form id="service-form"><div class="service-form-scroll">
+<div id="service-edit" role="tabpanel"><p id="service-selection"></p><fieldset id="service-fields" disabled>
+<div class="field"><label for="service-version">版本</label><select id="service-version" required></select></div>
+<div class="field"><label for="service-cloudflare">目标账户</label><select id="service-cloudflare" required></select></div>
+<div class="field"><label for="service-environment">环境</label><input id="service-environment" pattern="[a-z][a-z0-9-]{1,62}" maxlength="63" placeholder="例如 staging" required></div>
+<div id="service-resources"></div><h3>公开配置 · 勿填密钥</h3><div id="service-inputs"></div>
+</fieldset></div><div id="service-review" hidden></div>
+</div><div class="service-dialog-footer"><p id="service-dialog-notice" role="status" aria-live="polite"></p><button id="service-back" type="button" hidden>返回修改</button><button id="service-submit" class="primary" type="submit" disabled>部署</button></div></form>
+</dialog>
 </body></html>

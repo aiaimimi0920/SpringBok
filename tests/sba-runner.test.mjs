@@ -111,6 +111,29 @@ test('runner uses fresh external files and accepts only a bound application resu
   assert.equal(repeated.result.status, 'unknown');
 });
 
+test('native SBA update calls the selected migration while retaining existing synthetic application data', { skip: process.platform !== 'win32' }, async t => {
+  const f = await fixture(t), previous = { sourceSha: f.input.sourceSha, applicationVersion: manifest.version };
+  const dataPath = join(f.base, 'existing-data.json'), data = { schemaVersion: 1, users: [{ id: 'existing-user', value: 'preserve-me' }] };
+  await writeFile(dataPath, JSON.stringify(data), 'utf8');
+  const nextManifest = { ...manifest, version: '2.0.0' };
+  await writeFile(join(f.root, '.sba', 'manifest.json'), JSON.stringify(nextManifest), 'utf8');
+  await writeFile(join(f.root, '.sba', 'springbok.ps1'), `param([string]$RequestPath,[string]$ResultPath)
+$ErrorActionPreference = 'Stop'
+$request = [IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
+if ($request.action -ne 'update' -or $request.previous.applicationVersion -ne '1.0.0') { exit 7 }
+$data = [IO.File]::ReadAllText($request.configuration.dataPath) | ConvertFrom-Json
+$data.schemaVersion = 2
+[IO.File]::WriteAllText($request.configuration.dataPath, ($data | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+$result = @{schemaVersion=2;taskId=$request.taskId;action=$request.action;sourceSha=$request.sourceSha;applicationVersion=$request.applicationVersion;status='succeeded';checks=@(@{id='synthetic-data-preserved';passed=($data.users[0].value -eq 'preserve-me')})}
+[IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+`, 'utf8');
+  f.git(['add', '.sba']); f.git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'synthetic update']);
+  const next = { ...f.input, taskId: 'task-update', action: 'update', sourceSha: f.git(['rev-parse', 'HEAD']), applicationVersion: '2.0.0', previous, configuration: { dataPath } };
+  const result = await executeCheckout({ checkout: f.root, request: next, tempRoot: f.base, environment: { ...process.env, DEPLOY_TOKEN: 'synthetic-only' } });
+  assert.equal(result.result.status, 'succeeded'); assert.equal(result.result.action, 'update');
+  assert.deepEqual(JSON.parse(await readFile(dataPath, 'utf8')), { ...data, schemaVersion: 2 });
+});
+
 test('timeout, missing/malformed/oversized/mismatched results and false success stay unknown', async t => {
   const f = await fixture(t);
   const path = join(f.base, 'result.json');

@@ -18,7 +18,7 @@ try {
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
   });
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
-  await page.goto(origin); await page.locator('#sba-panel').waitFor().catch(async error => { throw new Error(JSON.stringify({ errors, paths, text: await page.locator('body').textContent(), cause: error.message })); });
+  await page.goto(origin + '/history'); await page.locator('#sba-panel').waitFor().catch(async error => { throw new Error(JSON.stringify({ errors, paths, text: await page.locator('body').textContent(), cause: error.message })); });
   const start = page.locator('#sba-start'); await start.click(); await page.locator('#sba-confirm').waitFor();
   await page.locator('#sba-cancel').click(); assert.equal(x.state.dispatches, 0);
   await start.click(); await page.locator('#sba-confirm').waitFor(); await page.keyboard.press('Escape'); assert.equal(x.state.dispatches, 0);

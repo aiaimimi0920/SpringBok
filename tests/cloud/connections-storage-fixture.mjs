@@ -4,6 +4,7 @@ export class ConnectionVault extends Vault {
   inspectStorage() { return this.ctx.storage.sql.exec('SELECT * FROM connections').toArray(); }
   inspectBudgetTables() { return this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE name IN ('usage_budget_meta','usage_budgets') ORDER BY name").toArray(); }
   expireListing() { this.ctx.storage.sql.exec("UPDATE resource_lists SET listing=json_set(listing,'$.checkedAt',0)"); }
+  legacyDeploymentIndex() { this.ctx.storage.sql.exec("UPDATE connection_deployments SET record=json_remove(record,'$.service')"); }
   breakStorage(kind) {
     if (kind === 'owner') this.ctx.storage.sql.exec('DELETE FROM connection_owner');
     else if (kind === 'table') this.ctx.storage.sql.exec('DROP TABLE connections');

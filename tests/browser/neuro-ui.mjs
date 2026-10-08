@@ -2,11 +2,12 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { deploymentFixture } from '../cloud/deployment-fixture.mjs';
+import { serviceFixture } from '../cloud/service-fixture.mjs';
+import { configureService, reviewService, ready } from './service-fixture.mjs';
 import { origin } from '../cloud/admin-fixture.mjs';
 
 // Actual pages + workerd, synthetic identity/providers. No production access.
-const { f, input, resource } = await deploymentFixture();
+const { f, input, resource } = await serviceFixture();
 let browser;
 try {
   let token = f.jwt(), writes = 0;
@@ -22,13 +23,15 @@ try {
   });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  const pages = [['/', '历史部署', '#notice'], ['/settings', '连接设置', '#connection-status'], ['/resources', '云资源', '#resource-notice'], ['/deploy', '新建部署', '#deploy-notice']];
+  const pages = [['/history', null, '#notice'], ['/settings', '连接设置', '#connection-status'], ['/resources', '云资源', '#resource-notice'], ['/services', '服务', '#service-loading']];
   for (const [path, label, status] of pages) {
     await page.goto(origin + path);
     await page.waitForFunction(id => !/正在验证|正在读取|读取持久记录|读取连接…/.test(document.querySelector(id).textContent), status);
     await page.locator('.brand svg').waitFor();
     assert.equal(await page.locator('.field-note, .section-note, .legacy-note, #connection-help, #connection-secret-help').count(),0,'No explanatory UI panels');
-    assert.equal(await page.locator('nav a[aria-current=page]').textContent(), label);
+    if(label)assert.equal(await page.locator('nav a[aria-current=page]').textContent(), label);
+    else assert.equal(await page.locator('nav a[aria-current=page]').count(),0);
+    assert.equal(await page.locator('nav a').count(),3);
     assert.equal(await page.locator('h1').count(), 1);
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--neuro-signal-yellow').trim()), '#d9ff38');
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), 'rgb(6, 8, 13)');
@@ -60,14 +63,9 @@ try {
   assert.equal(await page.locator('#connection-save').isDisabled(), true);
   assert.equal(await page.locator('#connection-save').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(9, 12, 17)');
   await page.screenshot({ path: join(directory, 'neuro-auth-error.png') });
-  token = f.jwt(); await page.goto(origin + '/deploy'); await page.getByText('连接已读取', { exact: true }).waitFor();
-  await page.locator('#deploy-sha').fill(input.sourceSha); await page.locator('#deploy-load').click();
-  await page.getByText('应用声明已读取', { exact: true }).waitFor();
-  await page.locator('#deploy-environment').fill('testing'); await page.locator('#resource-database').selectOption(resource.id);
-  await page.getByLabel('Worker 名称', { exact: true }).fill('test-worker'); await page.locator('#deploy-preview').click();
-  await page.getByText('计划已生成，尚未执行部署', { exact: true }).waitFor();
-  assert.equal(await page.locator('#deploy-plan').evaluate(el => getComputedStyle(el).overflowY), 'auto');
-  await page.locator('#deploy-review').scrollIntoViewIfNeeded(); await page.screenshot({ path: join(directory, 'neuro-deployment-review.png') });
+  token = f.jwt(); await ready(page); await configureService(page,input,resource); await reviewService(page);
+  assert.equal(await page.locator('.service-form-scroll').evaluate(el => getComputedStyle(el).overflowY), 'auto');
+  await page.screenshot({ path: join(directory, 'neuro-deployment-review.png') });
   assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   assert.deepEqual(errors, []);
   console.log('PASS Neuro UI: four actual pages, 5 widths, canonical colors, focus, Escape/restore, dialog scroll lock, error/disabled, plan, no implicit writes; synthetic providers');

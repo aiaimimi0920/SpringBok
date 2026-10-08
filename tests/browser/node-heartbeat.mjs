@@ -28,7 +28,7 @@ try {
   const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
   await page.clock.install();
   const row = n => page.locator(`[data-server-id="${n.context.nodeId}"]`), ready = () => page.getByText(/目录版本 \d+/).waitFor();
-  await page.goto(origin); await ready();
+  await page.goto(origin + '/history'); await ready();
   await row(a).locator('[data-heartbeat-role="execute"]').getByText(/执行角色：在线/).waitFor();
   await row(a).locator('[data-heartbeat-role="observe"]').getByText(/未知\/尚无心跳/).waitFor();
   await row(b).getByText(/加入中或待核对/).waitFor();

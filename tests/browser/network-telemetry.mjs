@@ -29,7 +29,7 @@ try {
   });
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message)); await page.clock.install();
   const panel = n => page.locator(`[data-server-id="${n.context.nodeId}"] [data-telemetry]`);
-  const ready = () => page.getByText(/目录版本 \d+；这里仅登记元数据/).waitFor();
+  const ready = () => page.getByText(/目录版本 \d+/).waitFor();
   const refresh = async change => { mutate = change; await page.locator('#catalog-refresh').click(); await ready(); };
   await page.goto(origin); await ready();
   await panel(a).getByText(/接口 eth0；接收 0.00 bytes\/s；发送 0.00 bytes\/s；窗口接收 0 bytes；窗口发送 0 bytes.*最近已接收/).waitFor();
@@ -39,11 +39,11 @@ try {
   mkdirSync('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/node-network-synthetic-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   for (const reason of ['warming-up', 'context-changed', 'interface-set-changed']) {
-    await refresh(v => { v.sample.network = unknown(reason); }); await panel(a).getByText(new RegExp(`网络：采集未知.*${reason}`)).waitFor(); await panel(a).getByText(/数值未知（不是 0）/).waitFor(); assert.equal((await panel(a).textContent()).includes('接收 0.00 bytes/s'), false);
+    await refresh(v => { v.sample.network = unknown(reason); }); await panel(a).getByText(new RegExp(`网络：采集未知.*${reason}`)).waitFor(); await panel(a).getByText(/数值未知/).waitFor(); assert.equal((await panel(a).textContent()).includes('接收 0.00 bytes/s'), false);
   }
   for (const reason of ['read-failed', 'invalid-counters', 'no-interfaces', 'clock-unavailable']) { await refresh(v => { v.sample.network = unavailable(reason); }); await panel(a).getByText(new RegExp(`网络：采集不可用.*${reason}`)).waitFor(); await panel(a).getByText(/CPU：0.00%/).waitFor(); }
   await refresh(v => { v.sample.network = unavailable('report-too-large'); v.sample.disk = { ...disk(), status: 'unavailable', reason: 'report-too-large', sampledAt: null, mounts: [], filtered: null }; });
-  await panel(a).getByText(/网络未上报.*超过 3 KiB.*没有截断/).waitFor(); await panel(a).getByText(/磁盘未上报.*超过 3 KiB/).waitFor();
+  await panel(a).getByText(/网络未上报.*超过 3 KiB/).waitFor(); await panel(a).getByText(/磁盘未上报.*超过 3 KiB/).waitFor();
   for (const change of [v => { delete v.sample.network; }, v => { v.sample.sampleVersion = 99; }, v => { v.sample.network.interfaces[0].rxBytesPerSecond = 1; }, v => { v.sample.network.interfaces.push({ ...v.sample.network.interfaces[0] }); }, v => { v.sample.network.interfaces[0].name = '<img src=x>'; }, v => { v.sample.network.ip = 'private'; }]) {
     await refresh(change); await panel(a).getByText(/网络未确认/).waitFor(); await panel(a).getByText(/CPU：0.00%/).waitFor(); assert.equal(await panel(a).locator('img').count(), 0);
   }

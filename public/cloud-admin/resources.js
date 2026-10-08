@@ -10,7 +10,7 @@ async function request(path, body) {
   const version=generation;
   const response=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',redirect:'error',headers:body?{'content-type':'application/json','x-csrf-token':session?.csrf??''}:{},...(body?{body:JSON.stringify(body)}:{})});
   if(response.status===403){if(version===generation){invalidate();notice('身份验证失败，请重新登录','error');if($('resource-dialog').open)dialogNotice('身份验证失败，请重新登录','error');}throw new Error('身份验证失败，请重新登录');}
-  if(!response.ok)throw new Error(body && body.action!=='inventory' ? '保存或选用未确认，请检查密钥、账号读取权限和连接容量；没有自动重试。' : '读取失败：请检查权限或平台状态，不能据此判断资源为空。');
+  if(!response.ok)throw new Error(body && body.action!=='inventory' ? '保存或选用未确认，请检查密钥、权限和连接容量。' : '读取失败，请检查权限或平台状态。');
   return response.json();
 }
 const textNode=(tag,text,className)=>{const node=document.createElement(tag);node.textContent=text;if(className)node.className=className;return node;};
@@ -29,7 +29,7 @@ async function readKind(row, kind, host, version, cursor='') {
         const li=document.createElement('li');li.dataset.id=item.id;li.append(textNode('p',item.name));
         if(item.id!==item.name)li.append(textNode('small',item.id));
         if(kind!=='worker' && item.available!==false){const button=document.createElement('button');button.type='button';button.textContent='用于部署';button.addEventListener('click',()=>void useResource(row,kind,item,pageCursor,button));li.append(button);}
-        else li.append(textNode('small',kind==='worker'?'已有服务，仅展示；不会自动覆盖':item.reason==='unsupported-name'?'当前部署契约不支持此仓库名称':'仓库已归档或停用'));
+        else li.append(textNode('small',kind==='worker'?'只读':item.reason==='unsupported-name'?'不支持的仓库名称':'已归档或停用'));
         list.append(li);count++;
       }
       current=data.next||'';pages++;host.dataset.count=String(count);
@@ -43,7 +43,7 @@ async function readKind(row, kind, host, version, cursor='') {
 async function renderAccounts(version) {
   $('resource-accounts').replaceChildren();
   const roots=connections.filter(row=>!row.parentId);
-  if(!roots.length){$('resource-accounts').append(textNode('p','尚未添加云账户，点击右上角“添加资源”连接品牌账户。','empty-state'));return;}
+  if(!roots.length){$('resource-accounts').append(textNode('p','暂无云账户','empty-state'));return;}
   for(const row of roots){
     if(version!==generation)return;
     const section=document.createElement('section'),heading=document.createElement('div');heading.className='section-heading';
@@ -64,7 +64,7 @@ async function refresh() {
     const state=await request('/api/admin/state');if(version!==generation)return;
     if(!state.connectionsEnabled)throw new Error('连接管理尚未启用');session=state;
     const result=await request('/api/admin/connections');if(version!==generation)return;connections=result.connections;
-    await renderAccounts(version);if(version===generation){lastRead=Date.now();notice('已按账户更新资源；各类型的权限和读取结果见下方。');}
+    await renderAccounts(version);if(version===generation){lastRead=Date.now();notice('');}
   }catch(error){if(version===generation){invalidate();notice(error.message,'error');}}
   finally{if(version===generation){busy=false;controls();}}
 }

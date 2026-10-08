@@ -30,10 +30,10 @@ async function begin(server, revision) {
   pending = { seed, revision, challengeDigest: [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join(''), downloaded: false, uncertain: false };
   $('enrollment-target').textContent = `${server.name} · ${server.id}`;
   $('enrollment-confirm-saved').checked = false; $('enrollment-authorize').disabled = true;
-  $('enrollment-dialog').showModal(); notice('先保存加入材料，再授权其摘要；关闭不会注册服务器。');
+  $('enrollment-dialog').showModal(); notice('');
 }
 function cancel() {
-  if (busy) return; const uncertain = pending?.uncertain; pending = null; $('enrollment-dialog').close(); notice(uncertain ? '授权可能已记录；关闭仅隐藏材料，请使用原文件刷新核对。' : '已取消授权；未提交注册。已下载材料尚未获得加入权限。');
+  if (busy) return; const uncertain = pending?.uncertain; pending = null; $('enrollment-dialog').close(); notice(uncertain ? '授权待核对，请保留原文件。' : '已取消授权');
 }
 $('enrollment-cancel').addEventListener('click', cancel);
 $('enrollment-dialog').addEventListener('cancel', event => { event.preventDefault(); cancel(); });
@@ -42,7 +42,7 @@ $('enrollment-download').addEventListener('click', () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(pending.seed, null, 2)], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = `springbok-join-${pending.seed.enrollmentId}.json`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000); pending.downloaded = true;
-  notice('已发起材料下载。请确认文件保存成功；该文件含一次性秘密，请只交给目标节点。');
+  notice('已发起下载');
 });
 $('enrollment-confirm-saved').addEventListener('change', () => { $('enrollment-authorize').disabled = busy || !pending?.downloaded || !$('enrollment-confirm-saved').checked || pending.uncertain; });
 $('enrollment-authorize').addEventListener('click', async () => {
@@ -52,7 +52,7 @@ $('enrollment-authorize').addEventListener('click', async () => {
   try {
     const result = await call('/api/admin/enrollments', { id: value.seed.enrollmentId, revision: value.revision, serverId: value.seed.nodeId, challengeDigest: value.challengeDigest }, AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]));
     if (version !== generation) return;
-    notice(result.reconciliationRequired ? '目录已记录，节点准备待核对；保留原材料。' : '已准备一次性加入；请在期限内把材料交给该目标节点。');
+    notice(result.reconciliationRequired ? '节点准备待核对' : '一次性加入已准备');
     pending = null; $('enrollment-dialog').close(); await reload();
   } catch {
     if (version === generation) { value.uncertain = true; notice(`授权结果未确认。保留原材料，刷新并核对 ${value.seed.enrollmentId}，不要重新生成挑战。`); }
@@ -65,7 +65,7 @@ async function inspect(server) {
     const result = await call(`/api/admin/enrollments/${server.id}`, null, AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]));
     if (version !== generation) return;
     const record = result.enrollment;
-    notice(record ? `加入 ${record.enrollmentId}：目录 ${record.state}；节点 ${result.node.status}。期限 ${new Date(record.expiresAt).toLocaleString()}；这不是在线或部署证明。` : '没有已授权的加入记录。');
+    notice(record ? `加入 ${record.enrollmentId}：目录 ${record.state}；节点 ${result.node.status}。期限 ${new Date(record.expiresAt).toLocaleString()}` : '没有已授权的加入记录。');
     if (record && ['unprepared', 'joined'].includes(result.node.status) && record.state === 'enrolling') {
       $('enrollment-finish').hidden = false;
       $('enrollment-finish').onclick = () => reconcile(server.id, record.enrollmentId);

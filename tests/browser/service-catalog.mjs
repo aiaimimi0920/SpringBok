@@ -30,7 +30,7 @@ try {
   });
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
   const rows = page.locator('#services > li[data-service-id]');
-  const waitReady = () => page.getByText(/目录版本 \d+；这里仅登记元数据/).waitFor();
+  const waitReady = () => page.getByText(/目录版本 \d+/).waitFor();
   const waitSaved = () => page.getByText(/目录已保存（版本 \d+）/).waitFor();
   const posts = () => requests.filter(r => r.path === '/api/admin/services' && r.method === 'POST').length;
   await page.goto(origin); await waitReady(); assert.equal(await page.locator('#service-add').isEnabled(), false);

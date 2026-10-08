@@ -14,7 +14,7 @@ async function request(path, body, signal) {
 function render() {
   $('identity').textContent = `已验证管理员：${state.email}`;
   $('start').disabled = !state.ready || sending;
-  $('readiness').textContent = state.ready ? '服务端允许准备一次固定联调计划；不代表节点当前在线或业务已就绪' : '当前不允许新测试：执行配置未启用、已有任务或本次固定验收已使用';
+  $('readiness').textContent = state.ready ? '固定测试可执行' : '固定测试不可执行';
   $('jobs').replaceChildren();
   for (const job of [...state.jobs].reverse()) {
     const item = document.createElement('li'), title = document.createElement('strong'); title.textContent = `${job.input.id} · ${labels[job.status] ?? '未知状态'}`; item.append(title);
@@ -31,7 +31,7 @@ function render() {
 async function refresh() {
   if (sending) return;
   invalidate(); clearCatalog(); clearSba(); state = null; $('identity').textContent = '重新验证管理员身份…'; $('jobs').replaceChildren(); $('readiness').textContent = '未取得服务端状态'; $('start').disabled = true; const version = generation; controller = new AbortController(); status('读取记录…');
-  try { const value = await request('/api/admin/state', null, controller.signal); if (version !== generation) return; state = value; render(); status('记录已刷新，没有触发执行'); void refreshCatalog(value); void refreshSba(value); }
+  try { const value = await request('/api/admin/state', null, controller.signal); if (version !== generation) return; state = value; render(); status('记录已刷新'); void refreshCatalog(value); void refreshSba(value); }
   catch (error) { if (version === generation) status(error.message); }
 }
 $('refresh').addEventListener('click', refresh);
@@ -45,7 +45,7 @@ $('start').addEventListener('click', async () => {
   } catch (error) { if (version === generation) status(error.message); }
   finally { if (version === generation) $('start').disabled = !state?.ready; }
 });
-function cancel() { if (sending) return; invalidate(); $('start').disabled = !state?.ready; status('已取消，没有提交执行'); }
+function cancel() { if (sending) return; invalidate(); $('start').disabled = !state?.ready; status('已取消'); }
 $('cancel').addEventListener('click', cancel); $('confirm').addEventListener('cancel', event => { event.preventDefault(); cancel(); });
 $('submit').addEventListener('click', async () => {
   if (!preview || sending) return; const value = preview; preview = null; sending = true; $('submit').disabled = true; $('cancel').disabled = true; $('start').disabled = true; $('refresh').disabled = true;

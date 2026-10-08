@@ -29,7 +29,7 @@ try {
   assert.equal(requests.filter(r => r.path === '/api/admin/submit').length, 0);
   blockPreview = true; await start.click(); const until = Date.now() + 10000; while (!holdPreview && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(holdPreview, 'preview request must arrive');
   await page.getByRole('button', { name: '刷新记录', exact: true }).click(); holdPreview(); blockPreview = false;
-  await page.getByText('记录已刷新，没有触发执行', { exact: true }).waitFor(); assert.equal(await page.locator('#confirm').isVisible(), false);
+  await page.getByText('记录已刷新', { exact: true }).waitFor(); assert.equal(await page.locator('#confirm').isVisible(), false);
   await start.click(); await page.getByRole('dialog', { name: '确认固定测试计划' }).waitFor();
   mkdirSync('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/cloud-admin-synthetic-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

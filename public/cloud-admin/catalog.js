@@ -20,7 +20,7 @@ export function clearCatalog() {
 function heartbeatView(server, parent) {
   if (!['enrolling', 'active'].includes(server.state)) return;
   const panel = document.createElement('div'); panel.dataset.heartbeat = server.id; parent.append(panel);
-  if (!catalogSession?.heartbeatEnabled) { panel.textContent = '心跳功能未启用（不代表节点离线）。'; return; }
+  if (!catalogSession?.heartbeatEnabled) { panel.textContent = '心跳功能未启用。'; return; }
   panel.textContent = '读取执行/采集角色心跳…';
   const version = heartbeatGeneration, ownerId = catalogSession.ownerId;
   const requestedAt = performance.now();
@@ -46,7 +46,7 @@ function heartbeatView(server, parent) {
         }
       }
       const note = document.createElement('p');
-      note.textContent = `云端判定于 ${new Date(value.evaluatedAt).toISOString()}；自云端接收起 ${value.thresholds.staleMs / 1000} 秒陈旧、${value.thresholds.offlineMs / 1000} 秒离线。心跳不证明业务健康或部署就绪。`;
+      note.textContent = `判定时间 ${new Date(value.evaluatedAt).toISOString()}`;
       panel.append(note);
       validMs = Math.max(0, validMs - (performance.now() - requestedAt));
       const expiry = performance.now() + validMs;
@@ -55,7 +55,7 @@ function heartbeatView(server, parent) {
       heartbeatTimers.add(timer);
       // 后台标签页恢复时不保留已过期的“在线”；身份切换由同一清理边界中止。
       panel._expireHeartbeat = expire;
-    } catch { if (version === heartbeatGeneration && panel.isConnected) panel.textContent = '心跳未确认：当前状态未知（不是已确认离线）。目录记录仍保留，请刷新核对。'; }
+    } catch { if (version === heartbeatGeneration && panel.isConnected) panel.textContent = '心跳未确认：当前状态未知，请刷新核对。'; }
   })();
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) for (const panel of document.querySelectorAll('[data-heartbeat]')) panel._expireHeartbeat?.(); });
@@ -78,7 +78,7 @@ function render() {
   for (const server of catalog?.servers ?? []) {
     const item = document.createElement('li'); item.dataset.serverId = server.id;
     const title = document.createElement('strong'); title.textContent = server.name; item.append(title);
-    const labels = { draft: '尚未接入服务器', enrolling: '加入中或待核对（不代表在线）', active: '已完成加入登记（不代表在线或部署就绪）', archived: '已归档（没有卸载或删除数据）' };
+    const labels = { draft: '尚未接入服务器', enrolling: '加入中或待核对', active: '已完成加入登记', archived: '已归档' };
     const info = document.createElement('p'); info.textContent = `${server.id} · ${labels[server.state] ?? '未知状态，禁止操作'}`; item.append(info);
     heartbeatView(server, item);
     telemetryView(server, item, catalogSession);
@@ -87,7 +87,7 @@ function render() {
       const name = document.createElement('input'); name.value = server.name; name.maxLength = 128; name.setAttribute('aria-label', `服务器名称 ${server.id}`); name.disabled = busy;
       const rename = document.createElement('button'); rename.textContent = '保存名称'; rename.disabled = busy; rename.addEventListener('click', () => mutate({ action: 'rename', serverId: server.id, name: name.value }));
       const linked = catalog.services.some(service => service.serverId === server.id && service.state === 'draft');
-      const archive = document.createElement('button'); archive.textContent = '归档条目'; archive.disabled = busy || linked; archive.title = linked ? '先归档关联服务条目；不会停止或卸载服务' : ''; archive.addEventListener('click', () => mutate({ action: 'archive', serverId: server.id }));
+      const archive = document.createElement('button'); archive.textContent = '归档条目'; archive.disabled = busy || linked; archive.title = linked ? '存在未归档的关联服务' : ''; archive.addEventListener('click', () => mutate({ action: 'archive', serverId: server.id }));
       if (linked) { const note = document.createElement('p'); note.textContent = '有关联的未归档服务，暂不能归档此服务器条目。'; item.append(note); }
       actions.append(name, rename, archive); item.append(actions);
     }
@@ -108,7 +108,7 @@ function render() {
   for (const service of catalog?.services ?? []) {
     const item = document.createElement('li'); item.dataset.serviceId = service.id;
     const title = document.createElement('strong'); title.textContent = service.name; item.append(title);
-    const info = document.createElement('p'); info.textContent = `${service.id} · 服务器 ${service.serverId} · ${service.state === 'draft' ? '仅登记，尚未部署' : '已归档（没有停止、卸载或删除数据）'}`; item.append(info);
+    const info = document.createElement('p'); info.textContent = `${service.id} · 服务器 ${service.serverId} · ${service.state === 'draft' ? '仅登记，尚未部署' : '已归档'}`; item.append(info);
     if (service.state === 'draft') {
       const actions = document.createElement('div'); actions.className = 'actions server-actions';
       const name = document.createElement('input'); name.value = service.name; name.maxLength = 128; name.setAttribute('aria-label', `服务名称 ${service.id}`); name.disabled = busy;
@@ -126,7 +126,7 @@ export async function refreshCatalog(session) {
   configureEnrollment(session, () => refreshCatalog(session));
   csrf = session.csrf; $('catalog').hidden = false; $('catalog-notice').textContent = '读取服务器目录…'; render();
   const version = generation; controller = new AbortController();
-  try { const next = await readCatalog(AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])); if (version !== generation) return; catalog = next; render(); $('catalog-notice').textContent = `目录版本 ${catalog.revision}；这里仅登记元数据，不连接或部署服务器。`; }
+  try { const next = await readCatalog(AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])); if (version !== generation) return; catalog = next; render(); $('catalog-notice').textContent = `目录版本 ${catalog.revision}`; }
   catch { if (version === generation) { catalog = null; render(); $('catalog-notice').textContent = uncertain; } }
 }
 async function mutate(change, resource = 'servers') {
@@ -139,7 +139,7 @@ async function mutate(change, resource = 'servers') {
     const next = await readCatalog(AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]));
     if (version !== generation) return;
     catalog = next; if (change.action === 'create') $(resource === 'servers' ? 'server-name' : 'service-name').value = '';
-    $('catalog-notice').textContent = `目录已保存（版本 ${catalog.revision}），没有连接服务器或触发部署。`;
+    $('catalog-notice').textContent = `目录已保存（版本 ${catalog.revision}）`;
   } catch { if (version === generation) { catalog = null; $('catalog-notice').textContent = `${uncertain} 请求 ${input.id}`; } }
   finally { if (version === generation) { busy = false; render(); } }
 }

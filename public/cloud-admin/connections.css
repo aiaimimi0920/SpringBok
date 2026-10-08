@@ -1,7 +1,6 @@
 /* Product compositions; shared controls and colors are defined by style/tokens. */
 #connection-form { max-width: 820px; }
 #connection-token, #connection-target, #deploy-sha { font-family: ui-monospace, Consolas, monospace; }
-#connection-help, #connection-secret-help { color: var(--neuro-text-muted); font-size: 12px; }
 #connections-list, #resource-discovered, #resource-registered { list-style: none; padding: 0; margin: 0; max-height: 560px; overflow: auto; scrollbar-gutter: stable; }
 #connections-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 22px; }
 #connections-list h3, #connections-list p { grid-column: 1; margin: 3px 0; }
@@ -63,7 +62,6 @@
 .deploy-board > fieldset > .actions { padding: 0 24px 24px; }
 .step { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-right: 10px; background: var(--neuro-control); border: 1px solid var(--neuro-line); border-radius: 4px; color: var(--neuro-text-muted); font: 12px ui-monospace, Consolas, monospace; }
 #deploy-inputs, #deploy-resources { max-width: 820px; }
-#deploy-inputs:empty::before { content: '读取应用声明后显示配置字段'; display: block; color: var(--neuro-text-muted); font-size: 13px; padding: 12px 0; }
 #deploy-application { color: var(--neuro-info-text); font: 12px/1.7 ui-monospace, Consolas, monospace; }
 #deploy-form:has(#deploy-application:empty) #deploy-load,
 body:not(:has(#deploy-review:not([hidden]))) #deploy-form:has(#deploy-application:not(:empty)) #deploy-preview { background: var(--neuro-signal-yellow); color: var(--neuro-on-yellow); border-color: var(--neuro-signal-yellow); }

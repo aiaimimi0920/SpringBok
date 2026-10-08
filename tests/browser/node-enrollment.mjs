@@ -26,7 +26,7 @@ try {
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
   const rows = page.locator('#servers > li[data-server-id]'), notice = page.locator('#enrollment-notice');
   const posts = path => requests.filter(request => request.path === path && request.method === 'POST').length;
-  const waitReady = () => page.getByText(/目录版本 \d+；这里仅登记元数据/).waitFor();
+  const waitReady = () => page.getByText(/目录版本 \d+/).waitFor();
   async function create(name) {
     await page.getByLabel('新服务器名称', { exact: true }).fill(name); await page.locator('#server-add').click();
     await page.getByText(/目录已保存（版本 \d+）/).waitFor(); return rows.filter({ has: page.getByText(name, { exact: true }) });
@@ -65,7 +65,7 @@ try {
   await a.getByRole('button', { name: '核对加入状态', exact: true }).click(); await page.getByText(/节点 joined/).waitFor();
   assert.equal(posts('/api/admin/enrollments/reconcile'), 0);
   await page.locator('#enrollment-finish').evaluate(button => { button.click(); button.click(); }); await waitReady();
-  await a.getByText(/已完成加入登记（不代表在线或部署就绪）/).waitFor(); assert.equal(posts('/api/admin/enrollments/reconcile'), 1);
+  await a.getByText(/已完成加入登记/).waitFor(); assert.equal(posts('/api/admin/enrollments/reconcile'), 1);
   assert.equal(await a.getByRole('button', { name: '保存名称', exact: true }).count(), 0);
   const active = await client.step(); assert.equal(active.directoryState, 'active'); assert.equal(active.requestId, joined.requestId);
   client.close(); client = openEnrollmentClient({ directory: join(directory, 'node-a'), grant, expectedOrigin: origin, fetcher });

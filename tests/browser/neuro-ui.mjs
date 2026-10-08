@@ -27,6 +27,7 @@ try {
     await page.goto(origin + path);
     await page.waitForFunction(id => !/正在验证|正在读取|读取持久记录|读取连接…/.test(document.querySelector(id).textContent), status);
     await page.locator('.brand svg').waitFor();
+    assert.equal(await page.locator('.field-note, .section-note, .legacy-note, #connection-help, #connection-secret-help').count(),0,'No explanatory UI panels');
     assert.equal(await page.locator('nav a[aria-current=page]').textContent(), label);
     assert.equal(await page.locator('h1').count(), 1);
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--neuro-signal-yellow').trim()), '#d9ff38');
@@ -59,9 +60,9 @@ try {
   assert.equal(await page.locator('#connection-save').isDisabled(), true);
   assert.equal(await page.locator('#connection-save').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(9, 12, 17)');
   await page.screenshot({ path: join(directory, 'neuro-auth-error.png') });
-  token = f.jwt(); await page.goto(origin + '/deploy'); await page.getByText('请选择应用连接与精确版本', { exact: true }).waitFor();
+  token = f.jwt(); await page.goto(origin + '/deploy'); await page.getByText('连接已读取', { exact: true }).waitFor();
   await page.locator('#deploy-sha').fill(input.sourceSha); await page.locator('#deploy-load').click();
-  await page.getByText('应用声明已读取，请选择目标资源并填写公开配置', { exact: true }).waitFor();
+  await page.getByText('应用声明已读取', { exact: true }).waitFor();
   await page.locator('#deploy-environment').fill('testing'); await page.locator('#resource-database').selectOption(resource.id);
   await page.getByLabel('Worker 名称', { exact: true }).fill('test-worker'); await page.locator('#deploy-preview').click();
   await page.getByText('计划已生成，尚未执行部署', { exact: true }).waitFor();

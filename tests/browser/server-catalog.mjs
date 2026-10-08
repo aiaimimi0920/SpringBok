@@ -28,7 +28,7 @@ try {
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
   const notice = page.locator('#catalog-notice'), rows = page.locator('#servers > li[data-server-id]');
   const posts = () => requests.filter(r => r.path === '/api/admin/servers' && r.method === 'POST').length;
-  const waitReady = () => page.getByText(/目录版本 \d+；这里仅登记元数据/).waitFor();
+  const waitReady = () => page.getByText(/目录版本 \d+/).waitFor();
   const waitSaved = () => page.getByText(/目录已保存（版本 \d+）/).waitFor();
   await page.goto(origin); await waitReady();
   assert.equal(await page.locator('#start').isEnabled(), false);
@@ -49,7 +49,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.getByRole('button', { name: '归档条目', exact: true }).click(); await waitSaved();
   assert.equal(await page.getByRole('button', { name: '保存名称', exact: true }).count(), 0);
-  await page.getByText(/已归档（没有卸载或删除数据）/).waitFor();
+  await page.getByText(/已归档/).waitFor();
   await f.restart(); await page.reload(); await waitReady(); assert.equal(await rows.first().getAttribute('data-server-id'), id);
   // 其他页面修改 revision 后，本页不能用旧快照覆盖目录。
   const session = (await f.call('/api/admin/state', { token })).json();

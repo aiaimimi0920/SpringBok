@@ -1,11 +1,12 @@
-// 仅固定官方 GET。错误不带 token、上游 body、URL 或账号名称。
-export async function readJson(url, token, github, transport = fetch, timeoutMs = 8000) {
+// 固定官方读取；GraphQL 仅供服务端固定 analytics query 使用。错误不包含上游内容。
+async function boundedJson(url, token, github, transport, timeoutMs, body) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
   let reader;
   try {
-    const response = await transport(url, { method: 'GET', redirect: 'manual', signal: controller.signal,
+    const response = await transport(url, { method: body === undefined ? 'GET' : 'POST', redirect: 'manual', signal: controller.signal,
       headers: { authorization: `Bearer ${token}`, accept: 'application/json', 'user-agent': 'SpringBok-Connections/1.0',
-        ...(github ? { 'x-github-api-version': '2022-11-28' } : {}) } });
+        ...(github ? { 'x-github-api-version': '2022-11-28' } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     if (response.status !== 200 || !response.headers.get('content-type')?.includes('application/json') || !response.body) {
       await response.body?.cancel(); throw new Error('provider denied');
     }
@@ -25,6 +26,12 @@ export async function readJson(url, token, github, transport = fetch, timeoutMs 
     };
     return await Promise.race([read(), deadline]);
   } finally { clearTimeout(timer); await reader?.cancel().catch(() => {}); }
+}
+export function readJson(url, token, github, transport = fetch, timeoutMs = 8000) {
+  return boundedJson(url, token, github, transport, timeoutMs);
+}
+export function readAnalytics(query, variables, token, transport = fetch, timeoutMs = 8000) {
+  return boundedJson('https://api.cloudflare.com/client/v4/graphql', token, false, transport, timeoutMs, { query, variables });
 }
 export async function verifyConnection(row, token, transport = fetch, timeoutMs = 8000) {
   try {

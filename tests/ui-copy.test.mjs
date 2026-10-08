@@ -4,7 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 
 test('UI-05: production UI does not restore explanatory copy or helper panels', async () => {
   const root = new URL('../public/cloud-admin/', import.meta.url);
-  const files = (await readdir(root)).filter(name => /\.(html|js|css)$/.test(name));
+  const files = (await readdir(root)).filter(name => /\.(html|m?js|css)$/.test(name));
   const forbidden = /已按账户更新资源|各类型的权限和读取结果见下方|resource-brand-help|resource-secret-help|connection-secret-help|应用声明文件要求|固定节点联调范围|读取应用声明后显示配置字段|这里仅登记元数据|不证明业务健康|未列出不代表不存在/;
   for (const file of files) {
     const source = await readFile(new URL(file, root), 'utf8');

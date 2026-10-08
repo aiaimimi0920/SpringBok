@@ -16,7 +16,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
   await context.route('**/*', async route => {
     const req = route.request(); assert.equal(new URL(req.url()).origin, origin);
-    if (req.method() === 'POST' && req.postDataJSON()?.action !== 'inventory') writes++;
+    if (req.method() === 'POST' && !['inventory', 'usage'].includes(req.postDataJSON()?.action)) writes++;
     const response = await f.mf.dispatchFetch(req.url(), { method: req.method(), headers: { ...req.headers(), 'cf-access-jwt-assertion': token }, ...(req.postData() === null ? {} : { body: req.postData() }) });
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
   });

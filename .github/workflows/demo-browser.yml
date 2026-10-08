@@ -52,6 +52,8 @@ jobs:
         run: node tests/browser/connections.mjs
       - name: Check existing cloud resource discovery and registration
         run: node tests/browser/resources.mjs
+      - name: Check dual resource views, usage aggregation and planning without cloud writes
+        run: node tests/browser/resource-usage.mjs
       - name: Check declaration-driven deployment planning without dispatch
         run: node tests/browser/deployment-plan.mjs
       - name: Check connected deployment execution with synthetic GitHub and actual workerd

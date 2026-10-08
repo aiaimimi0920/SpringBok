@@ -35,7 +35,11 @@ async function head(repository, token) {
 // Each call has a bounded page or one immutable application read. Browsing never
 // creates a derived connection, registers resources or claims an execution slot.
 export async function serviceCatalog(vault, owner, kind, input) {
-  exactSba(input, kind === 'catalog' ? ['github', 'cursor'] : kind === 'versions' ? ['github', 'repository', 'cursor'] : ['github', 'repository', 'sourceSha']);
+  const keys = kind === 'catalog' ? ['github', 'cursor'] : kind === 'versions' ? ['github', 'repository', 'cursor'] : ['github', 'repository', 'sourceSha'];
+  if (kind === 'application' && Object.hasOwn(input, 'defaultBranch')) {
+    keys.push('defaultBranch'); requireSba(input.sourceSha === null && refName(input.defaultBranch));
+  }
+  exactSba(input, keys);
   connectionReference(input.github);
   vault.ctx.storage.transactionSync(() => vault.guard(owner));
   const { row, sealed } = vault.activeConnection(input.github.id, input.github.revision);
@@ -49,7 +53,8 @@ export async function serviceCatalog(vault, owner, kind, input) {
     const rows = account ? data : [data]; requireSba(Array.isArray(rows) && rows.length <= 20);
     const items = rows.map(item => {
       requireSba(typeof item.full_name === 'string' && item.full_name.length <= 201 && Number.isSafeInteger(item.id) && item.id > 0);
-      return { repository: item.full_name, available: serviceRepository(item.full_name) && item.archived !== true && item.disabled !== true };
+      return { repository: item.full_name, available: serviceRepository(item.full_name) && item.archived !== true && item.disabled !== true,
+        ...(refName(item.default_branch) ? { defaultBranch: item.default_branch } : {}) };
     });
     result = { items, next: account && rows.length === 20 ? String(n + 1) : null };
   } else {
@@ -62,6 +67,14 @@ export async function serviceCatalog(vault, owner, kind, input) {
       result = { repository, items, next: tags.length === 20 ? String(n + 1) : null };
     } else {
       requireSba(kind === 'application' && (input.sourceSha === null || sha(input.sourceSha)));
+      if (input.defaultBranch) {
+        const base = sbaPolicy(vault.env);
+        const present = await createGithubExecutor({ ...base.github, applicationRepository: repository }, { token }).hasApplication(input.defaultBranch);
+        if (!present) {
+          vault.activeConnection(row.id, row.revision);
+          return { repository, sourceSha: null, status: 'absent', github: input.github };
+        }
+      }
       const version = input.sourceSha === null ? await head(repository, token) : { sourceSha: input.sourceSha };
       try {
         const application = await readApplication(vault.env, repository, version.sourceSha, token, true);

@@ -35,6 +35,22 @@ test('missing directory, unsupported declaration, fixed repository restrictions,
     assert.equal((await f.call('/api/admin/deployments/catalog', { token: other, headers: { 'x-csrf-token': auth.csrf }, body: { github, cursor: '' } })).status, 409);
   } finally { await f.close(); }
 });
+test('directory preflight skips deep reads only for absent trees and still validates pinned candidates', async () => {
+  const { f, github, service, state } = await serviceFixture();
+  try {
+    const before = state.requests.length;
+    const absent = await service('application', { github, repository: 'owner/empty', sourceSha: null, defaultBranch: 'main' });
+    assert.equal(absent.status, 200); assert.equal(absent.json().status, 'absent');
+    assert.deepEqual(state.requests.slice(before).filter(row => new URL(row.url).origin === 'https://api.github.com').map(row => row.url), ['https://api.github.com/repos/owner/empty/git/trees/main']);
+    const ready = await service('application', { github, repository: 'owner/repo', sourceSha: null, defaultBranch: 'main' });
+    assert.equal(ready.json().status, 'ready'); assert.equal(ready.json().sourceSha, sourceSha);
+    assert.equal((await service('application', { github, repository: 'owner/broken', sourceSha: null, defaultBranch: 'main' })).json().status, 'invalid');
+    for (const patch of [{ defaultBranch: '../main' }, { sourceSha }]) assert.equal((await service('application', { github, repository: 'owner/repo', sourceSha: null, defaultBranch: 'main', ...patch })).status, 409);
+    const prior = state.provider; state.provider = (request, context) => request.url.endsWith('/git/trees/main') ? new Response(null, {status:403}) : prior(request,context);
+    assert.equal((await service('application', { github, repository: 'owner/empty', sourceSha: null, defaultBranch: 'main' })).status, 409, 'denied tree is not a missing directory');
+    assert.equal(state.dispatches,0);
+  } finally { await f.close(); }
+});
 test('same instance updates using SBA update, original configuration/resources and exact receipt; restart retains both versions', async () => {
   const { f, github, service, input, state, submit, machine, receipt, api } = await serviceFixture();
   try {

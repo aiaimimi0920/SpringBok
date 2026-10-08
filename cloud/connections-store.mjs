@@ -4,7 +4,7 @@ import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs
 import { verifyConnection } from './connections-provider.mjs';
 import { resourceInput, discoverResources } from './resources.mjs';
 import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connectionReference } from './deployment-contract.mjs';
-import { sbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
+import { sbaPolicy, connectedSbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
 import { applicationRepository, readApplication, serviceCatalog } from './service-catalog.mjs';
 import { serviceSummary, serviceEntries, updateOperation } from './service-instance.mjs';
 import { connectedTaskId } from './connected-store.mjs';
@@ -140,7 +140,7 @@ export class ConnectionVault extends DurableObject {
     }
     const input=deploymentInput(raw);this.ctx.storage.transactionSync(()=>this.resourceGuard(owner));
     const {row:github,sealed}=this.activeConnection(input.github.id,input.github.revision);requireSba(github.provider==='github');
-    const base=sbaPolicy(this.env), repository=applicationRepository(github,input.repository);
+    const base=connectedSbaPolicy(this.env), repository=applicationRepository(github,input.repository);
     const application=await readApplication(this.env,repository,input.sourceSha,await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,github,sealed));
     const {manifest,declaration}=application;
     this.activeConnection(github.id,github.revision);

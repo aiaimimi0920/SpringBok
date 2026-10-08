@@ -25,6 +25,14 @@ export function sbaPolicy(env) {
   return p;
 }
 export function sbaEnabled(env) { try { sbaPolicy(env); return true; } catch { return false; } }
+export function connectedSbaPolicy(env) {
+  const policy = sbaPolicy(env), sha = env.SBA_CONNECTED_EXECUTOR_SHA;
+  if (sha === undefined) return policy;
+  requireSba(typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha));
+  policy.github.executorSha = sha;
+  policy.github.ref = `sba-executor-${sha}`;
+  return sbaPolicy({ ...env, SBA_POLICY: JSON.stringify(policy) });
+}
 export function sbaRequest(policy, taskId, manifest, operation = null) {
   const app = validateManifest(manifest);
   requireSba(canonicalSba(app.secrets) === canonicalSba(policy.secretNames));

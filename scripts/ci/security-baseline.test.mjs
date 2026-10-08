@@ -78,6 +78,9 @@ test("SBA native execution checks run on Windows without deployment credentials"
   const workflow = read(".github/workflows/contract-tests.yml");
   assert.match(workflow, /sba-windows:\s+runs-on: windows-2025\s+timeout-minutes: 5/);
   assert.match(workflow, /node --test tests\/sba-contract\.test\.mjs tests\/sba-runner\.test\.mjs tests\/sba-workflow\.test\.mjs tests\/sba-source\.test\.mjs/);
+  assert.match(workflow, /tests\/sba-preview\.test\.mjs/);
+  assert.match(read("tests/cloud/package.json"), /upgrade-preview\.test\.mjs/);
+  assert.match(read(".github/workflows/demo-browser.yml"), /node tests\/browser\/upgrade-preview\.mjs/);
   assert.doesNotMatch(workflow, /secrets\.|CLOUDFLARE_API_TOKEN|SBA_EXECUTE:/);
 });
 

@@ -1,4 +1,5 @@
 // 平台仅校验并调用应用契约，不解释迁移或业务实现。
+import { PREVIEW_ACTIONS, previewAction, validatePreviewContext, validatePreviewResult } from './preview.mjs';
 export class SbaContractError extends Error {}
 const fail = message => { throw new SbaContractError(message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -24,7 +25,7 @@ export function compareVersions(left, right) {
 
 export function validateManifest(value) {
   exact(value, ['schemaVersion', 'id', 'name', 'version', 'entrypoint', 'runtime', 'actions', 'secrets']);
-  if (value.schemaVersion !== 2) fail('unsupported SBA schema; migrate v1 explicitly');
+  if (![2, 3].includes(value.schemaVersion)) fail('unsupported SBA schema; migrate v1 explicitly');
   if (!identifier(value.id) || typeof value.name !== 'string' || !value.name.trim() || value.name.length > 100 || /[\x00-\x1f]/.test(value.name)) fail('invalid application identity');
   versionParts(value.version);
   // 入口相对 .sba；文件存在、符号链接和解析后边界由执行端另行检查。
@@ -32,8 +33,9 @@ export function validateManifest(value) {
   exact(value.runtime, ['runner', 'powershell', 'python', 'node']);
   if (value.runtime.runner !== 'windows-2025' || value.runtime.powershell !== '5.1' ||
       value.runtime.python !== '3.12' || value.runtime.node !== '22') fail('unsupported SBA runtime');
-  exact(value.actions, SBA_ACTIONS);
-  for (const action of SBA_ACTIONS) {
+  const actions = value.schemaVersion === 3 ? [...SBA_ACTIONS, ...PREVIEW_ACTIONS] : SBA_ACTIONS;
+  exact(value.actions, actions);
+  for (const action of actions) {
     exact(value.actions[action], ['timeoutSeconds']);
     const timeout = value.actions[action].timeoutSeconds;
     if (!Number.isInteger(timeout) || timeout < 1 || timeout > 3600) fail('invalid action timeout');
@@ -45,8 +47,8 @@ export function validateManifest(value) {
 
 export function validateRequest(value, manifest) {
   const app = validateManifest(manifest);
-  exact(value, ['schemaVersion', 'taskId', 'action', 'repository', 'sourceSha', 'applicationId', 'applicationVersion', 'environment', 'configuration', 'previous']);
-  if (value.schemaVersion !== 2 || !identifier(value.taskId) || !SBA_ACTIONS.includes(value.action) ||
+  exact(value, ['schemaVersion', 'taskId', 'action', 'repository', 'sourceSha', 'applicationId', 'applicationVersion', 'environment', 'configuration', 'previous', ...(previewAction(value.action) ? ['context'] : [])]);
+  if (value.schemaVersion !== app.schemaVersion || !identifier(value.taskId) || !Object.hasOwn(app.actions, value.action) ||
       typeof value.repository !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}\/[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/.test(value.repository) ||
       !sha(value.sourceSha) || !identifier(value.environment)) fail('invalid execution identity');
   if (value.applicationId !== app.id || value.applicationVersion !== app.version) fail('application identity mismatch');
@@ -58,14 +60,15 @@ export function validateRequest(value, manifest) {
     exact(value.previous, ['sourceSha', 'applicationVersion']);
     if (!sha(value.previous.sourceSha)) fail('invalid previous release');
     const comparison = compareVersions(value.applicationVersion, value.previous.applicationVersion);
-    if (value.action === 'update' && (comparison <= 0 || value.sourceSha === value.previous.sourceSha)) fail('update requires a newer version and different SHA');
-    if (value.action === 'verify' && (comparison !== 0 || value.sourceSha !== value.previous.sourceSha)) fail('verify requires the selected deployed release');
+    if (['update', 'preview'].includes(value.action) && (comparison <= 0 || value.sourceSha === value.previous.sourceSha)) fail('update requires a newer version and different SHA');
+    if (['verify', 'destroy-preview'].includes(value.action) && (comparison !== 0 || value.sourceSha !== value.previous.sourceSha)) fail('verify requires the selected deployed release');
   }
+  if (previewAction(value.action)) validatePreviewContext(value);
   return structuredClone(value);
 }
 
 export function validateResult(value, request) {
-  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode']);
+  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode', ...(previewAction(request.action) ? ['lifecycle'] : [])]);
   for (const key of ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion']) {
     if (value[key] !== request[key]) fail('result identity mismatch');
   }
@@ -77,6 +80,10 @@ export function validateResult(value, request) {
     if (!identifier(check.id) || typeof check.passed !== 'boolean') fail('invalid check');
   }
   if (value.status === 'succeeded' && (!value.checks.length || value.checks.some(check => !check.passed))) fail('success requires passing application checks');
+  if (request.schemaVersion === 3 && request.action === 'update' && ['succeeded', 'deployed-unverified'].includes(value.status)) {
+    for (const id of ['backup-created', 'data-preserved']) if (!value.checks.some(check => check.id === id && check.passed)) fail('update requires backup and data preservation checks');
+  }
   if (Object.hasOwn(value, 'errorCode') && (typeof value.errorCode !== 'string' || !/^[A-Z][A-Z0-9_]{1,79}$/.test(value.errorCode))) fail('invalid error code');
+  if (previewAction(request.action)) validatePreviewResult(value, request);
   return structuredClone(value);
 }

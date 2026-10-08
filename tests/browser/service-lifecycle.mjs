@@ -67,7 +67,7 @@ try {
     await route.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"synthetic-old-request"}' });
     return true;
   };
-  await row.getByRole('button', { name: '切换版本', exact: true }).click(); await oldRequest;
+  await row.getByRole('button', { name: '升级', exact: true }).click(); await oldRequest;
   await page.locator('#service-close').click();
   await configureService(page, input, resource);
   await page.waitForFunction(() => !document.getElementById('service-submit').disabled);
@@ -81,7 +81,7 @@ try {
   assert.equal(await page.locator('#service-dialog-notice').textContent(), '', 'a closed update request cannot overwrite a new deployment dialog');
   assert.deepEqual(await page.evaluate(() => window.staleNoticeWrites), [], 'stale errors do not mutate the current dialog');
   await page.locator('#service-close').click();
-  await row.getByRole('button', { name: '切换版本', exact: true }).click();
+  await row.getByRole('button', { name: '升级', exact: true }).click();
   await page.waitForFunction(() => document.getElementById('service-version').options.length > 1);
   assert.equal(await page.locator('#service-submit').isDisabled(), true, 'unchanged version is not an update');
   await page.locator('#service-version').selectOption(updatedSha);

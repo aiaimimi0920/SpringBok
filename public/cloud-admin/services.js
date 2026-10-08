@@ -271,7 +271,8 @@ function buildFields(data) {
   const platform = element('output', 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
   const config = updateTarget?.configuration ?? data.declaration.defaults;
   const automatic = data.declaration.schemaVersion === 2;
-  for (const [index, field] of (importing || automatic || rehearsing ? [] : data.declaration.fields).entries()) {
+  for (const [index, field] of (importing || rehearsing ? [] : data.declaration.fields).entries()) {
+    if (automatic && field.template !== null) continue;
     const input = element(field.type === 'json' ? 'textarea' : 'input'), initial = valueAt(config, field.path);
     input.required = field.required; input.value = field.type === 'json' ? JSON.stringify(initial ?? {}, null, 2) : String(initial ?? '');
     if (field.type === 'json') input.rows = 3; else input.maxLength = 8192;
@@ -431,7 +432,8 @@ async function prepare(event) {
     }
     const values = {}, selections = {}, cloudflare = ref($('service-cloudflare').value);
     const automatic = data.declaration.schemaVersion === 2;
-    for (const [index, field] of (automatic ? [] : data.declaration.fields).entries()) {
+    for (const [index, field] of data.declaration.fields.entries()) {
+      if (automatic && field.template !== null) continue;
       const raw = $('service-field-' + index).value; values[field.path.join('.')] = field.type === 'json' ? JSON.parse(raw) : raw;
     }
     const wanted = (automatic ? [] : data.declaration.resources).map(field => {

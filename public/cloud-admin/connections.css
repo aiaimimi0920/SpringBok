@@ -24,7 +24,22 @@
 .resource-types input:focus-visible + span { outline: 2px solid var(--neuro-signal-yellow); outline-offset: 3px; }
 .resource-types input:disabled + span { color: var(--neuro-text-muted); border-style: dashed; cursor: not-allowed; }
 #resource-config-help { border: 0; padding: 0; margin: 8px 0 20px; }
-#resource-dialog-notice { font-size: 13px; }
+#resource-dialog { height: min(480px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); overflow: hidden; }
+#resource-dialog[open] { display: flex; flex-direction: column; }
+#resource-dialog > .section-heading { flex: 0 0 auto; }
+#resource-form { flex: 1; min-height: 0; display: flex; }
+#resource-fields { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+#resource-dialog .brand-types { flex: 0 0 auto; margin-bottom: 16px; }
+.resource-form-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 4px; }
+#resource-dialog .field { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 12px; margin-bottom: 12px; }
+#resource-dialog .field[hidden] { display: none; }
+#resource-dialog .field label { margin: 0; font-size: 13px; }
+#resource-dialog .field input { min-width: 0; width: 100%; }
+.resource-dialog-footer { flex: 0 0 64px; display: flex; align-items: center; gap: 12px; padding-top: 12px; }
+#resource-dialog-notice { flex: 1; min-width: 0; max-height: 52px; overflow: auto; overflow-wrap: anywhere; margin: 0; font-size: 13px; }
+#resource-dialog-notice[data-tone=error] { color: var(--neuro-danger-text); }
+#resource-save { flex-shrink: 0; margin-left: auto; }
+@media (max-width: 400px) { #resource-dialog { padding: 16px; } #resource-dialog .field { grid-template-columns: 80px minmax(0, 1fr); gap: 8px; } }
 .brand-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 #resource-save:disabled { color: var(--neuro-text-muted); background: var(--neuro-surface); border-color: var(--neuro-line); }
 .account-target { color: var(--neuro-text-muted); font: 12px ui-monospace, Consolas, monospace; }

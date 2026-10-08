@@ -24,11 +24,37 @@ try {
   const directory=process.env.CONNECTIONS_EVIDENCE_DIR??'test-results';await mkdir(directory,{recursive:true});
   await page.goto(origin+'/resources');await ready();assert.equal(await page.getByRole('button',{name:/刷新/}).count(),0);
   await page.locator('#resource-add').click();assert.equal(await page.getByRole('radio',{name:'Cloudflare',exact:true}).evaluate(el=>el===document.activeElement),true);
+  const geometry=()=>page.evaluate(()=>Object.fromEntries(['resource-dialog','resource-save'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return [id,[r.x,r.y,r.width,r.height]];})));
+  for(const viewport of [{width:1440,height:1000},{width:390,height:844},{width:320,height:844},{width:720,height:400}]){
+    await page.setViewportSize(viewport);
+    await page.getByText('Cloudflare',{exact:true}).click();
+    assert.equal(await page.locator('#resource-dialog-notice').textContent(),'');
+    assert.equal(await page.getByLabel('API Token',{exact:true}).count(),1);
+    assert.equal(await page.getByLabel('GitHub PAT',{exact:true}).count(),0);
+    assert.equal(await page.getByLabel('Account ID',{exact:true}).isVisible(),true);
+    assert.equal(await page.getByRole('button',{name:'添加',exact:true}).count(),1);
+    const before=await geometry();
+    assert.equal(await page.locator('#resource-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth && el.scrollHeight<=el.clientHeight),true);
+    assert.equal(await page.locator('.resource-form-scroll .field').evaluateAll(rows=>rows.every(row=>{const l=row.querySelector('label').getBoundingClientRect(),i=row.querySelector('input').getBoundingClientRect();return l.right<=i.left && Math.abs((l.top+l.bottom-i.top-i.bottom)/2)<2;})),true);
+    await page.screenshot({path:join(directory,`resource-dialog-cloudflare-${viewport.width}x${viewport.height}.png`)});
+    await page.getByText('GitHub',{exact:true}).click();
+    assert.equal(await page.getByLabel('GitHub PAT',{exact:true}).count(),1);
+    assert.equal(await page.getByLabel('API Token',{exact:true}).count(),0);
+    assert.equal(await page.getByLabel('Account ID',{exact:true}).isVisible(),false);
+    assert.deepEqual(await geometry(),before,'Brand change must not move or resize dialog/footer');
+    await page.evaluate(()=>{const host=document.querySelector('.resource-form-scroll');for(let i=0;i<12;i++){const row=document.createElement('div');row.className='field overflow-fixture';row.innerHTML='<label>测试字段</label><input aria-label="测试字段 '+i+'">';host.append(row);}});
+    await page.locator('.overflow-fixture input').last().focus();
+    assert.equal(await page.locator('.resource-form-scroll').evaluate(el=>el.scrollHeight>el.clientHeight && el.scrollTop>0),true);
+    assert.deepEqual(await geometry(),before,'Overflow must scroll inside stable dialog/footer');
+    await page.evaluate(()=>document.querySelectorAll('.overflow-fixture').forEach(el=>el.remove()));
+  }
+  await page.setViewportSize({width:1440,height:1000});await page.getByText('Cloudflare',{exact:true}).click();await page.getByRole('radio',{name:'Cloudflare',exact:true}).focus();
   await page.keyboard.press('ArrowRight');assert.equal(await page.getByRole('radio',{name:'GitHub',exact:true}).isChecked(),true);
   await page.keyboard.press('Escape');assert.equal(await page.locator('#resource-add').evaluate(el=>el===document.activeElement),true);
   await page.locator('#resource-add').click();await page.getByText('Cloudflare',{exact:true}).click();assert.deepEqual(mutations,[]);
   await page.locator('#resource-name').fill('测试品牌密钥');await page.locator('#resource-token').fill(fakeToken);
   hold=new Promise(resolve=>{release=resolve;});await page.locator('#resource-save').click();assert.equal(await page.locator('#resource-token').inputValue(),'');
+  assert.equal(await page.locator('#resource-dialog-notice').textContent(),'添加中…');
   await page.keyboard.press('Escape');assert.equal(await page.locator('#resource-add').evaluate(el=>el===document.activeElement),true);
   await page.locator('#resource-add').click();assert.equal(await page.locator('#resource-close').evaluate(el=>el===document.activeElement),true);
   release();hold=null;await ready();assert.deepEqual(mutations,['connect']);
@@ -61,7 +87,8 @@ try {
   await page.goto(origin+'/resources');await ready();assert.equal(await page.locator('#resource-accounts > section').count(),3,'Derived repository does not duplicate its account');
   await page.locator('[data-kind=d1] button').first().click();await page.waitForURL('**/deploy#cloudflare=*');assert.deepEqual(mutations.slice(-2),['discover','register']);
   await page.goto(origin+'/resources');await ready();await page.locator('#resource-add').click();await page.locator('#resource-name').fill('过期会话');await page.locator('#resource-token').fill(fakeToken);
-  token='invalid';await page.locator('#resource-save').click();await page.locator('#resource-dialog-notice').getByText('身份验证失败，请重新登录',{exact:true}).waitFor();
+  const errorGeometry=await geometry();token='invalid';await page.locator('#resource-save').click();await page.locator('#resource-dialog-notice').getByText('身份验证失败，请重新登录',{exact:true}).waitFor();
+  assert.deepEqual(await geometry(),errorGeometry,'Error feedback must not resize dialog/footer');
   assert.equal(await page.locator('#resource-accounts').textContent(),'');assert.equal(await page.locator('#resource-token').inputValue(),'');assert.equal(await page.locator('#resource-fields').evaluate(el=>el.disabled),true);
   await page.locator('#resource-close').click();assert.equal(await page.locator('#resource-add').evaluate(el=>el===document.activeElement),true);
   assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);assert.deepEqual(errors,[]);

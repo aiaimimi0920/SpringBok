@@ -19,13 +19,12 @@
 <label><input type="radio" name="resource-brand" value="cloudflare" checked autofocus><span data-icon="cloudflare">Cloudflare</span></label>
 <label><input type="radio" name="resource-brand" value="github"><span data-icon="github">GitHub</span></label>
 </div>
-<p id="resource-brand-help" class="field-note"></p>
-<div class="field"><label for="resource-name">账户备注</label><input id="resource-name" maxlength="64" required autocomplete="off" placeholder="例如：生产账户"></div>
-<div class="field"><label for="resource-token">API Token / GitHub PAT</label><input id="resource-token" type="password" minlength="20" maxlength="512" required autocomplete="new-password" spellcheck="false" aria-describedby="resource-secret-help"></div>
-<details id="resource-account-field"><summary>指定 Cloudflare 账户（可选）</summary><label for="resource-account-id">Account ID</label><input id="resource-account-id" maxlength="32" pattern="[a-f0-9]{32}" autocomplete="off" spellcheck="false"><p class="field-note">默认自动识别全部可读取账户；若密钥不能列举账户，可填写指定账户 ID。</p></details>
-<p id="resource-secret-help" class="field-note">密钥仅加密保存在服务端，保存后不回显。不接受 Cloudflare Global API Key。资源可读取不代表有部署写权限。</p>
-<div class="actions"><button id="resource-save" class="primary" type="submit">验证密钥并添加</button></div>
+<div class="resource-form-scroll">
+<div class="field"><label for="resource-name">账号名</label><input id="resource-name" maxlength="64" required autocomplete="off"></div>
+<div class="field" id="resource-account-field"><label for="resource-account-id">Account ID</label><input id="resource-account-id" maxlength="32" pattern="[a-f0-9]{32}" autocomplete="off" spellcheck="false"></div>
+<div class="field"><label id="resource-token-label" for="resource-token">API Token</label><input id="resource-token" type="password" minlength="20" maxlength="512" required autocomplete="new-password" spellcheck="false"></div>
+</div>
+<div class="resource-dialog-footer"><p id="resource-dialog-notice" role="status" aria-live="polite"></p><button id="resource-save" class="primary" type="submit">添加</button></div>
 </fieldset></form>
-<p id="resource-dialog-notice" role="status" aria-live="polite"></p>
 </dialog>
 </body></html>

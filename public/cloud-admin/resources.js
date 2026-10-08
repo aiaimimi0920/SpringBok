@@ -4,6 +4,7 @@ const $ = id => document.getElementById(id);
 let session = null, connections = [], sources = [], generation = 0, busy = false, lastRead = 0, createId = crypto.randomUUID(), view = 'account';
 let budgetTarget = null, detailFocus = null, budgetFocus = null;
 const notice = (text, tone='info') => { $('resource-notice').textContent=text; $('resource-notice').dataset.tone=tone; };
+const loading = text => { $('resource-loading').textContent=text; };
 const dialogNotice = (text, tone='info') => { $('resource-dialog-notice').textContent=text; $('resource-dialog-notice').dataset.tone=tone; };
 const budgetNotice = (text, tone='info') => { $('resource-budget-notice').textContent=text; $('resource-budget-notice').dataset.tone=tone; };
 const clearSecret = () => { $('resource-token').value=''; };
@@ -35,7 +36,7 @@ const tree = createResourceTree($('resource-accounts'), {
   },
 });
 function invalidate() {
-  generation++;busy=false;session=null;connections=[];sources=[];budgetTarget=null;clearSecret();tree.clear();
+  generation++;busy=false;session=null;connections=[];sources=[];budgetTarget=null;clearSecret();tree.clear();loading('');
   $('resource-detail-dialog').close();$('resource-budget-dialog').close();$('resource-detail').replaceChildren();controls();
 }
 async function request(path, body) {
@@ -79,7 +80,7 @@ async function more(source,button){
 }
 async function refresh() {
   if(busy || document.hidden)return;
-  const version=++generation;busy=true;controls();notice('正在读取账户与云资源…');
+  const version=++generation;busy=true;controls();notice('');loading('正在读取账户与云资源');
   try {
     const state=await request('/api/admin/state');if(version!==generation)return;
     if(!state.connectionsEnabled)throw new Error('连接管理尚未启用');session=state;
@@ -89,7 +90,7 @@ async function refresh() {
     const read=async()=>{while(next<tasks.length && version===generation){const source=tasks[next++];await readKind(source,version);if(version===generation)await readUsage(source,version);}};
     await Promise.all([read(),read()]);if(version===generation){lastRead=Date.now();notice('');}
   }catch(error){if(version===generation){invalidate();notice(error.message,'error');}}
-  finally{if(version===generation){busy=false;controls();}}
+  finally{if(version===generation){busy=false;controls();loading('');}}
 }
 async function save(event) {
   event.preventDefault();if(busy || !session)return;

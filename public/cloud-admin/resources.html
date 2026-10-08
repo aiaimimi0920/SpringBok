@@ -7,9 +7,9 @@
 <a href="/deploy" data-icon="deploy"><span>新建部署</span></a>
 <a href="/resources" data-icon="resources" aria-current="page"><span>云资源</span></a>
 <a href="/settings" data-icon="settings" class="nav-settings"><span>连接设置</span></a></nav></aside>
-<header class="topbar"><span class="context">部署控制台 <span>/</span> <strong>云资源</strong></span><span>Cloudflare Workers</span></header>
+<header class="topbar resource-topbar"><span class="context">部署控制台 <span>/</span> <strong>云资源</strong></span><span id="resource-loading" role="status" aria-live="polite"></span></header>
 <main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">CLOUD RESOURCES</p><h1>云资源</h1></div><button id="resource-add" class="primary" type="button" data-icon="add">添加资源</button></div>
-<div class="status-line"><p id="resource-notice" role="status" aria-live="polite">正在验证身份…</p></div>
+<div class="status-line"><p id="resource-notice" role="status" aria-live="polite"></p></div>
 <div class="resource-toolbar" role="group" aria-label="资源视角"><button id="resource-view-account" type="button" aria-pressed="true">账户视图</button><button id="resource-view-kind" type="button" aria-pressed="false">资源视图</button></div>
 <div id="resource-accounts"></div>
 </main>

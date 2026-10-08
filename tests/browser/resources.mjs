@@ -20,7 +20,7 @@ try {
     await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:Buffer.from(await response.arrayBuffer())});
   });
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
-  const ready=()=>page.waitForFunction(()=>!document.getElementById('resource-fields').disabled && document.getElementById('resource-notice').textContent==='');
+  const ready=()=>page.waitForFunction(()=>!document.getElementById('resource-fields').disabled && document.getElementById('resource-notice').textContent==='' && document.getElementById('resource-loading').textContent==='');
   const directory=process.env.CONNECTIONS_EVIDENCE_DIR??'test-results';await mkdir(directory,{recursive:true});
   await page.goto(origin+'/resources');await ready();assert.equal(await page.getByRole('button',{name:/刷新/}).count(),0);
   assert.equal(await page.locator('.status-line').isVisible(),false,'Successful inventory has no explanatory notice or empty banner');
@@ -82,6 +82,7 @@ try {
   await ready();releaseOld();await page.waitForTimeout(100);
   assert.equal(await page.locator('.resource-node[data-account]:not(.inventory-group)').count(),3,'Late old 403 must not invalidate restored page');
   assert.equal(await page.locator('#resource-fields').evaluate(el=>el.disabled),false);
+  assert.equal(await page.locator('#resource-loading').textContent(),'','Late old 403 must not leave a stale loading status');
   state.r2Denied=true;await page.reload();await ready();assert.equal(await page.locator('[data-kind=r2] [data-tone=error]').count(),2);assert.equal(await page.locator('[data-kind=d1] li').count(),2);
   state.r2Denied=false;
   await page.locator('[data-kind=repository] > summary').click();await page.locator('[data-kind=repository] button[data-use]').click();await page.waitForURL('**/deploy#github=*');assert.equal(mutations.at(-1),'use-repository');

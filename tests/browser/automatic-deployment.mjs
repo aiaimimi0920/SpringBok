@@ -19,7 +19,14 @@ try{
   };
   await ready(page);await page.locator('#service-add').click();await page.locator('[role=tab][data-repository="owner/repo"]').click();
   assert.match(await page.locator('#service-environment').inputValue(),/^app-[a-f0-9]{12}$/);
-  assert.equal(await page.locator('#service-inputs input, #service-inputs textarea, #service-resources select').count(),0);
+  assert.equal(await page.locator('#service-inputs input, #service-resources select').count(),0);
+  assert.equal(await page.locator('#service-inputs textarea').count(),1);
+  await page.locator('#service-field-1').fill('{');
+  await page.locator('#service-submit').click();
+  await page.getByText('JSON 配置格式不正确',{exact:true}).waitFor();
+  assert.equal(creates,0);assert.equal(state.dispatches,0);
+  const publicVars={CLOUDFLARE_SENDER_ADDRESS:'accounts@example.invalid'};
+  await page.locator('#service-field-1').fill(JSON.stringify(publicVars));
   assert.equal(await page.locator('#service-resource-database').evaluate(el=>el.tagName),'OUTPUT');
   assert.equal(requests.some(row=>['inventory','discover','register'].includes(row.body?.action)),false);
   for(const width of [1440,390,320]){
@@ -31,12 +38,17 @@ try{
   await reviewService(page);assert.equal(creates,0);assert.match(await page.locator('#service-review').textContent(),/my-instance-worker/);
   await page.locator('#service-submit').click();await page.waitForFunction(()=>!document.getElementById('service-dialog').open);
   assert.equal(creates,1);assert.equal(state.dispatches,1);assert.equal(state.request.configuration.database.id,'87654321-1234-1234-1234-123456789abc');
+  assert.deepEqual(state.request.configuration.vars,publicVars);
   receipt(await(await machine()).json());await ready(page);await page.getByText('部署成功',{exact:true}).waitFor();
   await page.getByRole('button',{name:'升级',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#service-version option[value="'+'c'.repeat(40)+'"]'));
-  await page.locator('#service-version').selectOption('c'.repeat(40));await reviewService(page);
+  await page.locator('#service-version').selectOption('c'.repeat(40));
+  assert.equal(await page.locator('#service-field-1').isDisabled(),true);
+  assert.deepEqual(JSON.parse(await page.locator('#service-field-1').inputValue()),publicVars);
+  await reviewService(page);
   await page.locator('#service-submit').click();await page.waitForFunction(()=>!document.getElementById('service-dialog').open);
   assert.equal(creates,1,'updates never provision again');assert.equal(state.dispatches,2);assert.equal(state.request.action,'update');
   assert.equal(state.request.configuration.server.name,'my-instance-worker');assert.deepEqual(errors,[]);
+  assert.deepEqual(state.request.configuration.vars,publicVars);
   console.log('Automatic service deploy and retained-resource update passed (synthetic providers).');
 }finally{await suite.close();}

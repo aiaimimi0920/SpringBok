@@ -41,7 +41,7 @@ test('directory preflight skips deep reads only for absent trees and still valid
     const before = state.requests.length;
     const absent = await service('application', { github, repository: 'owner/empty', sourceSha: null, defaultBranch: 'main' });
     assert.equal(absent.status, 200); assert.equal(absent.json().status, 'absent');
-    assert.deepEqual(state.requests.slice(before).filter(row=>row.url.startsWith('https://api.github.com')).map(row=>row.url), ['https://api.github.com/repos/owner/empty/git/trees/main']);
+    assert.deepEqual(state.requests.slice(before).filter(row => new URL(row.url).origin === 'https://api.github.com').map(row => row.url), ['https://api.github.com/repos/owner/empty/git/trees/main']);
     const ready = await service('application', { github, repository: 'owner/repo', sourceSha: null, defaultBranch: 'main' });
     assert.equal(ready.json().status, 'ready'); assert.equal(ready.json().sourceSha, sourceSha);
     assert.equal((await service('application', { github, repository: 'owner/broken', sourceSha: null, defaultBranch: 'main' })).json().status, 'invalid');

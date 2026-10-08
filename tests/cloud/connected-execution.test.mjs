@@ -4,6 +4,38 @@ import { connectedFixture } from './connected-fixture.mjs';
 import { fakeToken } from './connections-fixture.mjs';
 import { randomUUID } from 'node:crypto';
 const nextTask=()=>`dc-${randomUUID().replaceAll('-','')}`;
+test('new executor can submit, obtain its own permit and settle an exact receipt',async()=>{
+  const {f,preview,submit,machine,receipt,api}=await connectedFixture();try{
+    const next='9'.repeat(40);f.bindings.SBA_CONNECTED_EXECUTOR_SHA=next;await f.restart();
+    const plan=await preview(),submitted=await submit(plan);assert.equal(submitted.status,200,submitted.text);
+    const permit=await machine();assert.equal(permit.status,200);
+    receipt(await permit.json());assert.equal((await api('reconcile',{taskId:plan.taskId})).json().job.status,'succeeded');
+  }finally{await f.close();}
+});
+test('connected executor release pins new drafts without rewriting legacy or in-flight authority',async()=>{
+  const {f,session,preview,submit,machine,receipt,api,post,input,state}=await connectedFixture();try{
+    const old=await preview(),legacy=(await f.call('/api/admin/sba/state',session)).json();
+    assert.equal((await submit(old)).status,200);
+    const next='9'.repeat(40);f.bindings.SBA_CONNECTED_EXECUTOR_SHA=next;await f.restart();
+    const fresh=await preview();
+    assert.equal(fresh.plan.policy.github.executorSha,next);
+    assert.equal(fresh.plan.policy.github.ref,`sba-executor-${next}`);
+    assert.notEqual(fresh.plan.digest,old.plan.digest);
+    assert.deepEqual((await f.call('/api/admin/sba/state',session)).json(),legacy);
+    assert.equal((await api('state',{taskId:old.taskId})).status,200);
+    const permit=await machine();assert.equal(permit.status,200);receipt(await permit.json());
+    assert.equal((await api('reconcile',{taskId:old.taskId})).json().job.status,'succeeded');
+    assert.equal(state.dispatches,1);
+    f.bindings.SBA_CONNECTED_EXECUTOR_SHA='main';await f.restart();
+    assert.equal((await post(input)).status,409);
+  }finally{await f.close();}
+});
+test('executor release invalidates an unsubmitted old draft without dispatch',async()=>{
+  const {f,preview,submit,state}=await connectedFixture();try{
+    const old=await preview();f.bindings.SBA_CONNECTED_EXECUTOR_SHA='9'.repeat(40);await f.restart();
+    assert.equal((await submit(old)).status,409);assert.equal(state.dispatches,0);
+  }finally{await f.close();}
+});
 test('account lane serializes owners and retains claimed resources and environments after successful release',async()=>{
   const {f}=await connectedFixture();try{
     const ns=await f.mf.getDurableObjectNamespace('DEPLOYMENT_LOCKS'),stub=ns.get(ns.idFromName('deployment-account/v1/'+'a'.repeat(32))),one=nextTask(),two=nextTask();

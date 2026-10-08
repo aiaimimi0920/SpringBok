@@ -1,7 +1,7 @@
 import { connectedStub, connectedTaskId } from './connected-store.mjs';
 import { serviceEntries } from './service-instance.mjs';
 import { deploymentTargets, deploymentValue } from './deployment-contract.mjs';
-import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest } from './sba-control.mjs';
+import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSbaPolicy } from './sba-control.mjs';
 import { compareVersions } from '../src/sba/contract.mjs';
 import { resourceIdentity, validatePreviewInventory } from '../src/sba/preview.mjs';
 
@@ -38,7 +38,9 @@ export async function servicePreviewDraft(vault, owner, input) {
     requireSba(canonicalSba(context.resources) === canonicalSba(job.request.context.resources));
     const operation = { action: 'destroy-preview', instanceId: input.instanceId, previousTaskId: input.previousTaskId,
       previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };
-    const plan = { ...old, operation };
+    const executor = connectedSbaPolicy(vault.env).github;
+    const policy = { ...old.policy, github: { ...old.policy.github, executorSha: executor.executorSha, ref: executor.ref } };
+    const plan = { ...old, policy, operation };
     sbaRequest(plan.policy, 'dc-' + '0'.repeat(32), plan.application.manifest, operation);
     return { ...plan, digest: await sbaDigest({ ...plan, digest: null }) };
   }

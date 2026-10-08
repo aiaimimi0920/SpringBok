@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SbaDeployment } from './sba-store.mjs';
 import { ownerId } from './connections-contract.mjs';
-import { sbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba } from './sba-control.mjs';
+import { sbaPolicy, connectedSbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba } from './sba-control.mjs';
 import { importedId } from './service-import.mjs';
 export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));return value; };
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
@@ -10,7 +10,7 @@ export class ConnectedDeployment extends SbaDeployment {
   async initialize(owner,taskId,plan){
     ownerId(owner);connectedTaskId(taskId);requireSba(this.env.ENABLE_CONNECTED_DEPLOYMENTS==='yes');
     requireSba(this.ctx.id.toString()===this.env.CONNECTED_TASKS.idFromName(`connected/v1/${taskId}`).toString());
-    const current=sbaPolicy(this.env),policy=sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(plan.policy)});
+    const current=connectedSbaPolicy(this.env),policy=sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(plan.policy)});
     requireSba(canonicalSba({...policy.github,applicationRepository:current.github.applicationRepository})===canonicalSba(current.github)&&policy.runnerOrigin===current.runnerOrigin);
     const record={owner,taskId,plan},digest=await sbaDigest(record);
     return this.ctx.storage.transactionSync(()=>{

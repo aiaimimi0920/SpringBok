@@ -1,7 +1,7 @@
 import { readJson } from './connections-provider.mjs';
 import { openToken } from './connections-crypto.mjs';
 import { accountGithub } from './brand-resources.mjs';
-import { connectionReference, deploymentDeclaration } from './deployment-contract.mjs';
+import { connectionReference, deploymentDeclaration, deploymentSecrets } from './deployment-contract.mjs';
 import { sbaPolicy, requireSba, exactSba } from './sba-control.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 
@@ -21,7 +21,8 @@ export async function readApplication(env, repository, sourceSha, token, optiona
   const value = await createGithubExecutor({ ...base.github, applicationRepository: repository }, { token }).readApplication(sourceSha, optional);
   if (value === null) return null;
   const declaration = deploymentDeclaration(value.declaration), { manifest } = value;
-  requireSba(manifest.secrets.length === 1 && manifest.secrets[0] === 'CLOUDFLARE_API_TOKEN');
+  const expected=deploymentSecrets(declaration);
+  requireSba(manifest.secrets.length===expected.length&&expected.every(name=>manifest.secrets.includes(name)));
   return { repository, sourceSha, manifest, declaration };
 }
 async function head(repository, token) {

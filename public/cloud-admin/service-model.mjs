@@ -17,12 +17,14 @@ export function newerVersion(next, previous) {
   return false;
 }
 export function boundResources(instance) {
-  const resources = Object.values(instance?.resources ?? {}).map(row => ({ kind: row.kind, id: row.remoteId, name: row.name }));
-  for (const target of instance?.targets ?? []) if (target.kind === 'worker') resources.push({ kind: 'worker', id: target.value, name: target.value });
-  return [...new Map(resources.map(row => [row.kind + '/' + row.id, row])).values()];
+  const resources = Object.values(instance?.resources ?? {}).map(row => ({ kind: row.kind, id: row.remoteId, name: row.name, connectionId: row.connectionId ?? instance?.connections?.cloudflare?.id, accountId: row.accountId ?? instance?.accountId }));
+  for (const target of instance?.targets ?? []) if (target.kind === 'worker') resources.push({ kind: 'worker', id: target.value, name: target.value, accountId: target.accountId ?? instance?.accountId,
+    connectionId: Object.values(instance?.accounts ?? {}).find(account => account.accountId === target.accountId)?.connection.id ?? instance?.connections?.cloudflare?.id });
+  return [...new Map(resources.map(row => [row.accountId + '/' + row.kind + '/' + row.id, row])).values()];
 }
 export function resourceMetrics(instance, resource, usage) {
-  const source = instance.connections?.cloudflare ? usage.get(instance.connections.cloudflare.id + '/' + resource.kind) : null;
+  const connectionId = resource.connectionId ?? instance.connections?.cloudflare?.id;
+  const source = connectionId ? usage.get(connectionId + '/' + resource.kind) : null;
   const fallback = { id: resource.kind === 'worker' ? 'requests' : 'storage', label: resource.kind === 'worker' ? '请求' : '存储', unit: resource.kind === 'worker' ? 'requests' : 'bytes', periodLabel: '时间未知' };
   return (source?.metrics?.length ? source.metrics : [fallback]).map(metric => {
     const sample = source?.samples?.[resource.id]?.[metric.id];

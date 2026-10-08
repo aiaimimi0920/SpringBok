@@ -12,7 +12,7 @@ export function serviceSummary(taskId, plan) {
     application: { id: plan.application.manifest.id, name: plan.application.manifest.name, version: plan.application.manifest.version,
       repository: plan.application.repository, sourceSha: plan.application.sourceSha },
     environment: plan.policy.environment, accountId: plan.application.declaration.accountPath.reduce((value,key)=>value[key],plan.configuration), connections: plan.connections, resources: plan.resources,
-    targets: deploymentTargets(plan.application.declaration, plan.configuration) };
+    targets: deploymentTargets(plan.application.declaration, plan.configuration), ...(plan.accounts?{accounts:plan.accounts}:{}) };
 }
 
 export async function updateOperation(vault, owner, instance, plan) {

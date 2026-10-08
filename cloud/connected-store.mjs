@@ -84,5 +84,15 @@ export class DeploymentLocks extends DurableObject {
       sql.exec('INSERT INTO deployment_claims VALUES(?,?)',taskId,identity);sql.exec('UPDATE deployment_lane SET task=? WHERE id=1',taskId);return {claimed:true};
     });
   }
+  bindCreated(owner,taskId,digest,keys,instanceId){
+    ownerId(owner);connectedTaskId(taskId);connectedTaskId(instanceId);
+    requireSba(Array.isArray(keys)&&keys.length<=12&&keys.every(key=>typeof key==='string'&&key.startsWith('identity:')&&key.length<=256));
+    return this.ctx.storage.transactionSync(()=>{
+      const sql=this.ctx.storage.sql,claim=JSON.parse(sql.exec('SELECT identity FROM deployment_claims WHERE task=?',taskId).one().identity);
+      requireSba(claim.owner===owner&&claim.digest===digest&&(claim.instanceId??taskId)===instanceId&&sql.exec('SELECT task FROM deployment_lane WHERE id=1').one().task===taskId);
+      for(const key of keys){const prior=sql.exec('SELECT task FROM deployment_keys WHERE key=?',key).toArray()[0];requireSba(!prior||prior.task===instanceId);if(!prior)sql.exec('INSERT INTO deployment_keys VALUES(?,?)',key,instanceId);}
+      return {bound:true};
+    });
+  }
   release(taskId){connectedTaskId(taskId);this.ctx.storage.sql.exec('UPDATE deployment_lane SET task=NULL WHERE id=1 AND task=?',taskId);}
 }

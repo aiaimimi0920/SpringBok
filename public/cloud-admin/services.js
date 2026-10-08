@@ -108,9 +108,9 @@ function renderInstances() {
         for (const metric of resourceMetrics(instance, bound, usage)) metrics.append(element('dt', metric.label + ' · ' + metric.periodLabel), element('dd', metric.text));
         const shared = [...instances.values()].filter(other => {
           const candidate = states.get(other.id)?.instance ?? other.summary;
-          return candidate?.accountId === instance.accountId && boundResources(candidate).some(resource => resource.kind === bound.kind && resource.id === bound.id);
+          return boundResources(candidate).some(resource => resource.accountId === bound.accountId && resource.kind === bound.kind && resource.id === bound.id);
         }).length > 1;
-        detailPanel.append(fold(id + '/resource/' + bound.kind + '/' + bound.id, `${resourceLabels[bound.kind]} · ${bound.name} · ${shared ? '共享资源用量' : '资源级用量'}`, metrics));
+        detailPanel.append(fold(id + '/resource/' + bound.accountId + '/' + bound.kind + '/' + bound.id, `${resourceLabels[bound.kind]} · ${bound.name} · ${shared ? '共享资源用量' : '资源级用量'}`, metrics));
       }
       const records = element('div');
       for (const item of state?.history ?? []) {
@@ -141,12 +141,12 @@ function renderInstances() {
 }
 async function loadUsage(instance, version) {
   if (!instance?.connections || !session) return;
-  for (const kind of new Set(boundResources(instance).map(row => row.kind))) {
-    const key = instance.connections.cloudflare.id + '/' + kind;
+  const sources = new Map(boundResources(instance).filter(row => row.id && row.connectionId).map(row => [row.connectionId + '/' + row.kind, row]));
+  for (const [key, { kind, connectionId }] of sources) {
     if (usagePending.has(key) || Date.now() - (usage.get(key)?.checkedAt ?? 0) < 60000) continue;
     usagePending.add(key);
     try {
-      const result = await request('/api/admin/resources', { action: 'usage', connectionId: instance.connections.cloudflare.id, kind });
+      const result = await request('/api/admin/resources', { action: 'usage', connectionId, kind });
       if (current(version)) { usage.set(key, result); renderInstances(); }
     } catch { if (current(version)) usage.set(key, { status: 'unavailable', checkedAt: Date.now() }); }
     finally { if (current(version)) usagePending.delete(key); }
@@ -255,8 +255,10 @@ function fillOptions(select, values, placeholder = null) {
 function buildFields(data) {
   $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
   if (data.status !== 'ready') return;
+  const platform = element('output', 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
   const config = updateTarget?.configuration ?? data.declaration.defaults;
-  for (const [index, field] of (importing ? [] : data.declaration.fields).entries()) {
+  const automatic = data.declaration.schemaVersion === 2;
+  for (const [index, field] of (importing || automatic ? [] : data.declaration.fields).entries()) {
     const input = element(field.type === 'json' ? 'textarea' : 'input'), initial = valueAt(config, field.path);
     input.required = field.required; input.value = field.type === 'json' ? JSON.stringify(initial ?? {}, null, 2) : String(initial ?? '');
     if (field.type === 'json') input.rows = 3; else input.maxLength = 8192;
@@ -266,10 +268,24 @@ function buildFields(data) {
   const hash = new URLSearchParams(location.hash.slice(1));
   $('service-cloudflare').value = updateTarget?.instance.connections.cloudflare.id ?? hash.get('cloudflare') ?? ($('service-cloudflare').options.length === 2 ? $('service-cloudflare').options[1].value : '');
   $('service-cloudflare').disabled = !!updateTarget; $('service-environment').disabled = !!updateTarget || importing;
-  $('service-environment').value = updateTarget?.instance.environment ?? '';
-  $('service-environment').closest('.field').hidden = importing; $('service-config-heading').hidden = importing;
+  $('service-environment').value = updateTarget?.instance.environment ?? (automatic ? 'app-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : '');
+  $('service-environment').closest('.field').hidden = importing; $('service-config-heading').hidden = importing || automatic;
   $('service-version-label').textContent = importing ? '声明版本' : '版本';
   if (importing) { importFields(data); return; }
+  if (automatic) {
+    for (const account of data.declaration.accounts.slice(1)) {
+      const select = element('select'); select.required = true; select.disabled = !!updateTarget;
+      fillOptions(select, connections.filter(row => row.provider === 'cloudflare' && row.state === 'verified').map(row => [row.id, row.accountName || row.name]), '请选择账户');
+      select.value = updateTarget?.instance.connections['cloudflare_' + account.key]?.id ?? $('service-cloudflare').value;
+      addField($('service-inputs'), 'service-account-' + account.key, account.label, select);
+    }
+    for (const field of data.declaration.resources) {
+      const output = element('output'); output.dataset.resourceTemplate = field.nameTemplate;
+      output.value = updateTarget?.instance.resources[field.key]?.name ?? field.nameTemplate.replaceAll('{instance}', $('service-environment').value);
+      addField($('service-resources'), 'service-resource-' + field.key, field.label + ' · ' + resourceLabels[field.kind], output);
+    }
+    return;
+  }
   for (const field of data.declaration.resources) {
     const select = element('select'); select.required = true; select.disabled = !!updateTarget;
     fillOptions(select, [], '请选择资源'); addField($('service-resources'), 'service-resource-' + field.key, `${field.label} · ${resourceLabels[field.kind]}`, select);
@@ -278,6 +294,7 @@ function buildFields(data) {
 async function loadResources(version, pageVersion) {
   selectedResources = new Map(); selectionBusy = false; const data = application, connectionId = $('service-cloudflare').value;
   if (!connectionId || data?.status !== 'ready') { controls(); return; }
+  if (!importing && data.declaration.schemaVersion === 2) { selectedResources.ready = true; controls(); return; }
   selectionBusy = true; controls();
   try {
     const reference = ref(connectionId), kinds = importing ? ['worker'] : [...new Set(data.declaration.resources.map(row => row.kind))];
@@ -389,10 +406,11 @@ async function prepare(event) {
       preview = result; $('service-review').replaceChildren(...importReview(result.candidate)); dialogNotice(''); return;
     }
     const values = {}, selections = {}, cloudflare = ref($('service-cloudflare').value);
-    for (const [index, field] of data.declaration.fields.entries()) {
+    const automatic = data.declaration.schemaVersion === 2;
+    for (const [index, field] of (automatic ? [] : data.declaration.fields).entries()) {
       const raw = $('service-field-' + index).value; values[field.path.join('.')] = field.type === 'json' ? JSON.parse(raw) : raw;
     }
-    const wanted = data.declaration.resources.map(field => {
+    const wanted = (automatic ? [] : data.declaration.resources).map(field => {
       const item = selectedResources.get(field.kind)?.find(row => row.id === $('service-resource-' + field.key).value);
       if (!item) throw new Error('请选择全部所需资源'); return { field, item };
     });
@@ -410,13 +428,19 @@ async function prepare(event) {
       }
       selections[field.key] = registered.get(key);
     }
+    const accounts = automatic ? Object.fromEntries(data.declaration.accounts.slice(1).map(account => [account.key, ref($('service-account-' + account.key).value)])) : null;
     const body = { action: 'preview', github: data.github, repository: data.repository, sourceSha: data.sourceSha, cloudflare,
       environment: $('service-environment').value, values, resources: selections,
+      ...(accounts ? { accounts } : {}),
       ...(updateTarget ? { instance: { id: updateTarget.instance.id, previousTaskId: updateTarget.taskId } } : {}) };
     const result = await request(api + 'plan', body); if (!currentDialog(version, pageVersion)) return; preview = result;
     const details = element('dl');
     const plan = result.plan;
     for (const [label, value] of [['服务', plan.application.manifest.name], ['版本', `v${plan.application.manifest.version} · ${plan.application.sourceSha}`], ['环境', plan.policy.environment], ['账户', connections.find(row => row.id === cloudflare.id)?.accountName ?? connections.find(row => row.id === cloudflare.id)?.target], ['绑定资源', Object.values(plan.resources).map(row => `${resourceLabels[row.kind]} · ${row.name}`).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
+    if (automatic) {
+      for (const account of data.declaration.accounts.slice(1)) details.append(element('dt', account.label), element('dd', plan.accounts[account.key].accountId));
+      for (const field of data.declaration.fields) { const value = valueAt(plan.configuration, field.path); details.append(element('dt', field.label), element('dd', typeof value === 'string' ? value : JSON.stringify(value))); }
+    }
     const risk = element('p', result.executionEnabled ? updateTarget ? '将更新此服务并运行该版本的迁移。' : '将运行所选代码并修改目标云资源。' : '部署执行未启用'); risk.dataset.tone = 'warning';
     $('service-review').replaceChildren(details, risk); dialogNotice('');
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error instanceof SyntaxError ? 'JSON 配置格式不正确' : error.message, 'error'); }
@@ -466,7 +490,10 @@ $('service-form').addEventListener('submit', event => void prepare(event));
 $('service-back').addEventListener('click', clearPreview);
 $('service-version').addEventListener('change', () => void changeVersion());
 $('service-cloudflare').addEventListener('change', () => { clearPreview(); dialogNotice(''); void loadResources(++dialogGeneration, generation); });
-$('service-fields').addEventListener('input', () => { if (preview) clearPreview(); });
+$('service-fields').addEventListener('input', () => {
+  if (preview) clearPreview();
+  if (!updateTarget) for (const output of document.querySelectorAll('output[data-resource-template]')) output.value = output.dataset.resourceTemplate.replaceAll('{instance}', $('service-environment').value);
+});
 $('service-tabs').addEventListener('keydown', event => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || busy || submitting) return;
   const tabs = [...$('service-tabs').children], index = tabs.indexOf(document.activeElement); if (index < 0) return;

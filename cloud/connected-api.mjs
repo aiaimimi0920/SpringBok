@@ -27,15 +27,23 @@ export async function submitConnected(env,session,input){
     throw error;
   }
   requireSba(input.draft.action==='preview'&&canonicalSba(plan)===canonicalSba(input.plan));
-  const accountId=plan.resources[Object.keys(plan.resources)[0]]?.accountId??(await vault.snapshot(session.actor)).connections.find(r=>r.id===plan.connections.cloudflare.id)?.target;
+  const accountId=plan.accounts?.runtime.accountId??plan.resources[Object.keys(plan.resources)[0]]?.accountId??(await vault.snapshot(session.actor)).connections.find(r=>r.id===plan.connections.cloudflare.id)?.target;
   requireSba(/^[a-f0-9]{32}$/.test(accountId));
   // 检查最终公开配置，而非只查资源声明；这是配置冲突保护，不是对应用代码的沙箱。
   const legacy=legacyIdentities(sbaPolicy(env).configuration),observed=[...new Set(strings(plan.configuration).filter(s=>s.length<=256))];
   requireSba(observed.length<=256&&observed.every(value=>!legacy.includes(value)));
+  const reservation=await vault.reserveDeployment(session.actor,input.taskId,plan);
+  if(reservation.alreadyReserved)return connectedState(env,session.actor,input.taskId);
+  const accountIds=reservation.accountIds??[accountId],targets=deploymentTargets(plan.application.declaration,plan.configuration);
+  for(const id of accountIds){
+    const resources=Object.values(plan.resources).filter(row=>row.accountId===id);
+    const keys=[...new Set([...resources.flatMap(row=>plan.accounts?[row.name]:[row.remoteId,row.name]),...targets.filter(t=>!t.accountId||t.accountId===id).map(t=>t.value)].map(value=>'identity:'+value))];
+    await accountStub(env,id).claim(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,plan.operation?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null);
+  }
+  if(plan.accounts&&!plan.operation)plan=await vault.provisionDeployment(session.actor,input.taskId,plan);
+  // Bind generated IDs as well as names before the runner can receive credentials.
+  if(plan.accounts)for(const id of accountIds)await accountStub(env,id).bindCreated(session.actor,input.taskId,plan.digest,Object.values(plan.resources).filter(row=>row.accountId===id).map(row=>'identity:'+row.remoteId),plan.operation?.instanceId??input.taskId);
   const request=sbaRequest(plan.policy,input.taskId,plan.application.manifest,plan.operation??null);
-  await vault.reserveDeployment(session.actor,input.taskId,plan);
-  const lock=accountStub(env,accountId),keys=[...new Set([...Object.values(plan.resources).flatMap(r=>[r.remoteId,r.name]),...deploymentTargets(plan.application.declaration,plan.configuration).map(t=>t.value)].map(value=>'identity:'+value))];
-  await lock.claim(session.actor,input.taskId,accountId,`${request.repository}/${request.environment}`,keys,plan.digest,observed,plan.operation?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null);
   const stub=connectedStub(env,input.taskId);await stub.initialize(session.actor,input.taskId,plan);
   const claim=await stub.begin(session.actor,{request,manifest:plan.application.manifest});
   if(!claim.dispatch)return {...claim.snapshot,taskId:input.taskId};
@@ -47,7 +55,7 @@ export async function connectedState(env,owner,taskId,reconcile=false){
   connectedTaskId(taskId);const stub=connectedStub(env,taskId);let record;
   try{record=await stub.bootstrap(owner);}catch{
     const entry=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(entry);
-    return {taskId,job:null,status:'preparation-unconfirmed',errorCode:'DEPLOYMENT_PREPARATION_UNCONFIRMED',message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null};
+    return {taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null};
   }
   const policy=record.plan.policy;
   if(reconcile){const job=await stub.inspect(owner);if(job?.status==='running'){
@@ -57,7 +65,7 @@ export async function connectedState(env,owner,taskId,reconcile=false){
   }}
   const snapshot=await stub.snapshot(owner);
   if(['succeeded','deployed-unverified'].includes(snapshot.job?.status)){
-    const index=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);await accountStub(env,index.accountId).release(taskId);
+    const index=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);
   }
   return {...snapshot,taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null};
 }
@@ -79,9 +87,10 @@ export async function connectedMachineRouter(request,env,readBody){
       const token=await vault.deploymentCredential(record.owner,input.taskId,'github'),bytes=await githubSourcePack(job.request.repository,job.request.sourceSha,token);
       return new Response(bytes,{headers:{'content-type':SOURCE_CONTENT_TYPE,'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
     }
-    requireSba(canonicalSba(policy.secretNames)===canonicalSba(['CLOUDFLARE_API_TOKEN']));
-    const token=await vault.deploymentCredential(record.owner,input.taskId,'cloudflare');
+    const mapping=record.plan.credentials??{CLOUDFLARE_API_TOKEN:'cloudflare'};
+    requireSba(canonicalSba([...policy.secretNames].sort())===canonicalSba(Object.keys(mapping).sort()));
+    const secrets={};for(const name of policy.secretNames)secrets[name]=await vault.deploymentCredential(record.owner,input.taskId,mapping[name]);
     const permit=await stub.permit(input.taskId,input.requestDigest,identity.runId);
-    return reply({...permit,secrets:{CLOUDFLARE_API_TOKEN:token}});
+    return reply({...permit,secrets});
   }catch{return reply({error:'SBA_PERMIT_DENIED'},403);}
 }

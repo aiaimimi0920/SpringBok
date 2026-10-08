@@ -11,7 +11,7 @@ export async function deploymentFixture(overrides={}){
     if(url.endsWith(`/git/commits/${sourceSha}`))return Response.json({sha:sourceSha,tree:{sha:'1'.repeat(40)}});
     if(url.endsWith(`/git/trees/${'1'.repeat(40)}`))return Response.json({sha:'1'.repeat(40),truncated:false,tree:[{path:'.sba',type:'tree',mode:'040000',sha:'2'.repeat(40)}]});
     if(url.endsWith(`/git/trees/${'2'.repeat(40)}`))return Response.json({sha:'2'.repeat(40),truncated:false,tree:[{path:'manifest.json',type:'blob',mode:'100644',sha:'3'.repeat(40)},{path:'deployment.json',type:'blob',mode:state.symlink?'120000':'100644',sha:'4'.repeat(40)}]});
-    for(const [sha,value] of [['3'.repeat(40),manifest],['4'.repeat(40),state.declaration]])if(url.endsWith('/git/blobs/'+sha)){const bytes=Buffer.from(JSON.stringify(value));return Response.json({sha,encoding:'base64',size:bytes.length,content:bytes.toString('base64')});}
+    for(const [sha,value] of [['3'.repeat(40),state.manifest??manifest],['4'.repeat(40),state.declaration]])if(url.endsWith('/git/blobs/'+sha)){const bytes=Buffer.from(JSON.stringify(value));return Response.json({sha,encoding:'base64',size:bytes.length,content:bytes.toString('base64')});}
     return new Response(null,{status:404});
   };
   const token=f.jwt(),auth=(await f.call('/api/admin/state',{token})).json(),session={token,headers:{'x-csrf-token':auth.csrf}};

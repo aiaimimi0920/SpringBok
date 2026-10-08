@@ -10,6 +10,7 @@ import { serviceSummary, serviceEntries, updateOperation } from './service-insta
 import { connectedTaskId } from './connected-store.mjs';
 import { connectBrand, inventory, useRepository } from './brand-resources.mjs';
 import { usageOperation, saveResourceBudget } from './resource-budgets.mjs';
+import { importInput, importedId, inspectImported, sameImport } from './service-import.mjs';
 
 export class ConnectionVault extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
@@ -100,6 +101,36 @@ export class ConnectionVault extends DurableObject {
   }
   // 仅供 Worker 内部受认证路径调用；不在任何 HTTP 响应中返回凭据。
   serviceCatalog(owner, kind, input) { return serviceCatalog(this, owner, kind, input); }
+  async importDraft(owner, raw) {
+    const input = importInput(raw); this.ctx.storage.transactionSync(() => this.guard(owner));
+    const github = this.activeConnection(input.github.id, input.github.revision), cloudflare = this.activeConnection(input.cloudflare.id, input.cloudflare.revision);
+    requireSba(github.row.provider === 'github' && cloudflare.row.provider === 'cloudflare');
+    const application = await readApplication(this.env, applicationRepository(github.row, input.repository), input.sourceSha,
+      await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, github.row, github.sealed));
+    const candidate = await inspectImported(owner, application, cloudflare.row.target,
+      await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, cloudflare.row, cloudflare.sealed), input.components,
+      { github: input.github, cloudflare: input.cloudflare });
+    this.activeConnection(github.row.id, github.row.revision); this.activeConnection(cloudflare.row.id, cloudflare.row.revision);
+    return candidate;
+  }
+  importGuard(owner) {
+    this.guard(owner); const sql = this.ctx.storage.sql;
+    const tables = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('service_import_meta','service_imports')").toArray();
+    if (!tables.length) { sql.exec('CREATE TABLE service_import_meta (version INTEGER PRIMARY KEY CHECK(version=1))'); sql.exec('INSERT INTO service_import_meta VALUES(1)'); sql.exec('CREATE TABLE service_imports (id TEXT PRIMARY KEY, record TEXT NOT NULL)'); }
+    else { const versions = sql.exec('SELECT version FROM service_import_meta').toArray(); requireSba(tables.length === 2 && versions.length === 1 && versions[0].version === 1); }
+  }
+  importedIndex(owner) { return this.ctx.storage.transactionSync(() => { this.importGuard(owner); return this.ctx.storage.sql.exec('SELECT record FROM service_imports ORDER BY rowid DESC').toArray().map(row => JSON.parse(row.record)); }); }
+  saveImported(owner, candidate) {
+    requireSba(importedId(candidate.id) && candidate.instance.id === candidate.id);
+    return this.ctx.storage.transactionSync(() => {
+      this.importGuard(owner); const sql = this.ctx.storage.sql, saved = sql.exec('SELECT record FROM service_imports WHERE id=?', candidate.id).toArray()[0];
+      if (saved) { const prior = JSON.parse(saved.record); requireSba(sameImport(prior.candidate, candidate) && prior.candidate.instance.application.id === candidate.instance.application.id && prior.candidate.instance.application.repository === candidate.instance.application.repository); return prior; }
+      if (candidate.instance.connections) for (const ref of Object.values(candidate.instance.connections)) this.activeConnection(ref.id, ref.revision);
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM service_imports').one().n < 128);
+      const record = { id: candidate.id, candidate, createdAt: Date.now() };
+      sql.exec('INSERT INTO service_imports VALUES(?,?)', record.id, JSON.stringify(record)); return record;
+    });
+  }
   async deploymentDraft(owner, raw) {
     const input=deploymentInput(raw);this.ctx.storage.transactionSync(()=>this.resourceGuard(owner));
     const {row:github,sealed}=this.activeConnection(input.github.id,input.github.revision);requireSba(github.provider==='github');

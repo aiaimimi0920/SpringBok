@@ -5,6 +5,7 @@ import { createGithubExecutor } from '../src/sba/github.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 import { githubSourcePack, SOURCE_CONTENT_TYPE } from '../src/sba/source.mjs';
 import { sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
+import { legacyImportRequest } from './service-import-api.mjs';
 const verifyOidc = createSbaOidcVerifier();
 const reply = (value, status = 200) => Response.json(value, { status, headers: {
   'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
@@ -76,10 +77,11 @@ export async function adminSbaRequest(request, env, session, readBody) {
         authentication: session.automation ? { type: 'access-service-token', clientId: session.automation.clientId, expiresAt: session.automation.expiresAt } : { type: 'access-user' } });
     }
     if (request.method === 'GET' && url.pathname === '/api/admin/sba/state') return reply(await stub.snapshot(session.actor));
-    requireSba(request.method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized'].includes(url.pathname));
+    requireSba(request.method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized', '/api/admin/sba/import-preview', '/api/admin/sba/import-submit'].includes(url.pathname));
     requireSba(request.headers.get('origin') === session.origin &&
       sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null)));
     const input = await readBody(request, 65536);
+    if (['import-preview', 'import-submit'].some(route => url.pathname.endsWith('/' + route))) return reply(await legacyImportRequest(env, session, url.pathname.split('/').at(-1), input));
     const executor = createGithubExecutor(policy.github, { token: env.SBA_GITHUB_TOKEN });
     if (url.pathname.endsWith('/recover-unstarted')) {
       exactSba(input, ['taskId', 'executorSha']);

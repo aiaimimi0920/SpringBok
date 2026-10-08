@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { serviceBrowser, ready } from './service-fixture.mjs';
+import { importProvider } from '../cloud/service-import-fixture.mjs';
+const suite = await serviceBrowser(), { page, state, errors, requests, f } = suite;
+importProvider(suite);
+const directory = process.env.UI_EVIDENCE_DIR ?? 'test-results'; await mkdir(directory, { recursive: true });
+const open = async () => {
+  await page.locator('#service-import').click();
+  await page.locator('[role=tab][data-repository="owner/repo"]').click();
+  await page.locator('#service-cloudflare').selectOption(suite.input.cloudflare.id);
+  await page.waitForFunction(() => document.getElementById('service-import-worker-0')?.options.length === 3);
+  await page.locator('#service-import-worker-0').selectOption('test-worker');
+};
+try {
+  await ready(page); await open();
+  assert.equal(await page.locator('#service-dialog-title').textContent(), '导入服务');
+  assert.equal(await page.getByLabel('声明版本', { exact: true }).isVisible(), true);
+  assert.equal(await page.locator('#service-environment').isVisible(), false);
+  assert.equal(await page.locator('#service-resource-database').count(), 0);
+  assert.equal(await page.locator('#service-config-heading').isVisible(), false);
+  assert.equal(state.dispatches, 0);
+  await page.locator('#service-submit').click(); await page.locator('#service-review').waitFor({ state: 'visible' });
+  assert.match(await page.locator('#service-review').textContent(), /test-database/);
+  assert.match(await page.locator('#service-review').textContent(), /版本未知|部署版本未知/);
+  assert.equal(await page.locator('#service-review select, #service-review input').count(), 0);
+  for (const width of [1440, 720, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    assert.equal(await page.locator('#service-submit').isVisible(), true);
+    if (width === 1440 || width === 320) await page.screenshot({ path: join(directory, `service-import-review-${width}.png`) });
+  }
+  await page.keyboard.press('Escape'); assert.equal(await page.locator('#service-import').evaluate(el => el === document.activeElement), true);
+  assert.equal(requests.some(row => row.path.endsWith('/import-submit')), false);
+  await open();
+  state.importDenied = '/workers/domains'; await page.locator('#service-submit').click();
+  await page.waitForFunction(() => document.getElementById('service-dialog-notice').dataset.tone === 'error');
+  assert.equal(await page.locator('#service-review').isVisible(), false); state.importDenied = null;
+  await page.locator('#service-submit').click(); await page.locator('#service-review').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#service-back').evaluate(el => el === document.activeElement), true);
+  await page.locator('#service-submit').click(); await page.locator('#service-dialog').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('.service-status')?.textContent === '已导入');
+  assert.match(await page.locator('#service-list').textContent(), /版本未知/);
+  assert.equal(await page.getByRole('button', { name: '切换版本' }).isDisabled(), true);
+  await page.getByRole('button', { name: '详情', exact: true }).click();
+  assert.match(await page.locator('.service-details').textContent(), /test-database/);
+  assert.match(await page.locator('.service-details').textContent(), /test-worker \/ DB/);
+  assert.doesNotMatch(await page.locator('#service-list').textContent(), /vnull|never-return-this/);
+  await page.screenshot({ path: join(directory, 'service-import-instance-320.png'), fullPage: true });
+  await f.restart(); await ready(page);
+  await page.waitForFunction(() => document.querySelector('.service-status')?.textContent === '已导入');
+  await open(); await page.locator('#service-submit').click(); await page.locator('#service-review').waitFor({ state: 'visible' });
+  await page.locator('#service-submit').click(); await page.locator('#service-dialog').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#service-list > li').count(), 1);
+  await page.locator('#service-add').click(); await page.locator('[role=tab][data-repository="owner/repo"]').click();
+  assert.equal(await page.locator('#service-environment').isVisible(), true);
+  assert.equal(await page.locator('#service-resource-database').isVisible(), true);
+  assert.equal(requests.some(row => /\/(submit|plan)$/.test(row.path) || ['register', 'use-repository'].includes(row.body?.action)), false);
+  assert.equal(state.dispatches, 0); assert.deepEqual(errors, []);
+  console.log('Service import: preview/confirm, read-only resources, error, keyboard, narrow layout, persistence, idempotency and old deploy mode passed (synthetic providers/Access).');
+} finally { await suite.close(); }

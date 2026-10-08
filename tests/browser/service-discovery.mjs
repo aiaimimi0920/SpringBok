@@ -40,6 +40,7 @@ try {
   assert.match(await page.locator('#service-catalog-status').textContent(),/读取失败.*owner\/empty-0/);
   assert.equal(await page.locator('#service-tabs button').count(),1);
   assert.equal(await page.locator('#service-loading').textContent(),'','a timed out read does not leave the loading indicator stuck');
+  assert.equal(requests.filter(row=>row.path.endsWith('/catalog')).length,3,'an awaited default-account read cannot restart the completed scan');
   assert.equal(requests.some(row=>['register','discover','use-repository'].includes(row.body?.action)),false);
   assert.deepEqual(errors,[]);
   release();release=null;

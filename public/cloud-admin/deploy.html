@@ -7,7 +7,7 @@
 <a href="/resources" data-icon="resources"><span>云资源</span></a>
 <a href="/settings" data-icon="settings" class="nav-settings"><span>连接设置</span></a></nav></aside>
 <header class="topbar service-topbar"><span class="context">部署控制台 <span>/</span> <strong>服务</strong></span><span id="service-loading" role="status" aria-live="polite"></span></header>
-<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">SERVICES</p><h1>服务</h1></div><button id="service-add" class="primary" type="button" data-icon="deploy">部署服务</button></div>
+<main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">SERVICES</p><h1>服务</h1></div><div class="service-actions"><button id="service-add" class="primary" type="button" data-icon="deploy">部署服务</button><button id="service-import" type="button">导入服务</button></div></div>
 <div class="status-line"><p id="service-notice" role="status" aria-live="polite"></p></div>
 <p id="service-empty">尚无服务部署</p><ul id="service-list" aria-label="服务实例"></ul>
 </main>
@@ -17,10 +17,10 @@
 <p id="service-catalog-status" role="status" aria-live="polite"></p>
 <form id="service-form"><div class="service-form-scroll">
 <div id="service-edit" role="tabpanel"><p id="service-selection"></p><fieldset id="service-fields" disabled>
-<div class="field"><label for="service-version">版本</label><select id="service-version" required></select></div>
-<div class="field"><label for="service-cloudflare">目标账户</label><select id="service-cloudflare" required></select></div>
+<div class="field"><label id="service-version-label" for="service-version">版本</label><select id="service-version" required></select></div>
+<div class="field"><label for="service-cloudflare">账户</label><select id="service-cloudflare" required></select></div>
 <div class="field"><label for="service-environment">环境</label><input id="service-environment" pattern="[a-z][a-z0-9-]{1,62}" maxlength="63" placeholder="例如 staging" required></div>
-<div id="service-resources"></div><h3>公开配置 · 勿填密钥</h3><div id="service-inputs"></div>
+<div id="service-resources"></div><h3 id="service-config-heading">公开配置 · 勿填密钥</h3><div id="service-inputs"></div>
 </fieldset></div><div id="service-review" hidden></div>
 </div><div class="service-dialog-footer"><p id="service-dialog-notice" role="status" aria-live="polite"></p><button id="service-back" type="button" hidden>返回修改</button><button id="service-submit" class="primary" type="submit" disabled>部署</button></div></form>
 </dialog>

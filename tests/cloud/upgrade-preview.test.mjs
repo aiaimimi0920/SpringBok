@@ -14,7 +14,9 @@ const draft = first => ({ action: 'rehearse', instanceId: first.taskId, previous
 test('preview forks a persistent isolated instance, binds the source, and cleanup preserves production and history', async () => {
   const f = await previewFixture();
   try {
-    const first = await deployed(f), original = structuredClone(f.state.request), planResponse = await f.service('plan', draft(first));
+    const first = await deployed(f), original = structuredClone(f.state.request);
+    f.f.bindings.SBA_CONNECTED_EXECUTOR_SHA='9'.repeat(40);await f.f.restart();
+    const planResponse = await f.service('plan', draft(first));
     assert.equal(planResponse.status, 200, planResponse.text); const plan = planResponse.json();
     assert.equal(f.state.created.length, 1); assert.equal(plan.plan.operation.action, 'preview');
     const outcomes = await Promise.all([f.submit(plan), f.submit(plan)]); assert.ok(outcomes.every(row => row.status === 200), JSON.stringify(outcomes));
@@ -31,8 +33,14 @@ test('preview forks a persistent isolated instance, binds the source, and cleanu
     const update = (await f.service('plan', { ...f.input, sourceSha: updatedSha, instance: { id: first.taskId, previousTaskId: first.taskId } })).json();
     assert.equal((await f.submit(update)).status, 200); assert.equal(f.state.request.action, 'update'); assert.deepEqual(f.state.request.configuration, original.configuration);
     f.complete(await (await f.machine()).json()); await f.service('service-state', stateBody(first.taskId));
-    const removeResponse = await f.service('plan', { action: 'destroy-preview', instanceId: plan.taskId, previousTaskId: plan.taskId });
+    const cleanupInput={ action: 'destroy-preview', instanceId: plan.taskId, previousTaskId: plan.taskId };
+    const staleRemove=(await f.service('plan',cleanupInput)).json();
+    f.f.bindings.SBA_CONNECTED_EXECUTOR_SHA='8'.repeat(40);await f.f.restart();
+    assert.equal((await f.submit(staleRemove)).status,409);
+    const removeResponse = await f.service('plan', cleanupInput);
     assert.equal(removeResponse.status, 200, removeResponse.text); const remove = removeResponse.json();
+    assert.equal(remove.plan.policy.github.executorSha,'8'.repeat(40));
+    assert.equal(remove.plan.policy.sourceSha,plan.plan.policy.sourceSha);
     assert.equal((await f.submit(remove)).status, 200); assert.equal(f.state.request.action, 'destroy-preview');
     assert.equal(Object.hasOwn(f.state.request.context, 'source'), false, 'cleanup must not pass production configuration');
     assert.ok(f.state.request.context.resources.every(row => row.remoteId !== original.configuration.database.id && row.remoteId !== original.configuration.server.name && row.remoteId !== original.configuration.url));

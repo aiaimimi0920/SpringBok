@@ -4,8 +4,16 @@ import { connectedFixture } from './connected-fixture.mjs';
 import { fakeToken } from './connections-fixture.mjs';
 import { randomUUID } from 'node:crypto';
 const nextTask=()=>`dc-${randomUUID().replaceAll('-','')}`;
+test('new executor can submit, obtain its own permit and settle an exact receipt',async()=>{
+  const {f,preview,submit,machine,receipt,api}=await connectedFixture();try{
+    const next='9'.repeat(40);f.bindings.SBA_CONNECTED_EXECUTOR_SHA=next;await f.restart();
+    const plan=await preview(),submitted=await submit(plan);assert.equal(submitted.status,200,submitted.text);
+    const permit=await machine();assert.equal(permit.status,200);
+    receipt(await permit.json());assert.equal((await api('reconcile',{taskId:plan.taskId})).json().job.status,'succeeded');
+  }finally{await f.close();}
+});
 test('connected executor release pins new drafts without rewriting legacy or in-flight authority',async()=>{
-  const {f,session,preview,submit,machine,api,post,input,state}=await connectedFixture();try{
+  const {f,session,preview,submit,machine,receipt,api,post,input,state}=await connectedFixture();try{
     const old=await preview(),legacy=(await f.call('/api/admin/sba/state',session)).json();
     assert.equal((await submit(old)).status,200);
     const next='9'.repeat(40);f.bindings.SBA_CONNECTED_EXECUTOR_SHA=next;await f.restart();
@@ -15,7 +23,8 @@ test('connected executor release pins new drafts without rewriting legacy or in-
     assert.notEqual(fresh.plan.digest,old.plan.digest);
     assert.deepEqual((await f.call('/api/admin/sba/state',session)).json(),legacy);
     assert.equal((await api('state',{taskId:old.taskId})).status,200);
-    assert.equal((await machine()).status,200);
+    const permit=await machine();assert.equal(permit.status,200);receipt(await permit.json());
+    assert.equal((await api('reconcile',{taskId:old.taskId})).json().job.status,'succeeded');
     assert.equal(state.dispatches,1);
     f.bindings.SBA_CONNECTED_EXECUTOR_SHA='main';await f.restart();
     assert.equal((await post(input)).status,409);

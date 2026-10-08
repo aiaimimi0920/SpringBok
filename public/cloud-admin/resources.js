@@ -1,14 +1,15 @@
 const $ = id => document.getElementById(id);
 let session = null, connections = [], generation = 0, busy = false, lastRead = 0, createId = crypto.randomUUID();
 const labels = { worker:'Workers', d1:'D1 数据库', kv:'KV 键值存储', r2:'R2 对象存储（默认管辖区）', repository:'GitHub 仓库' };
-const notice = (text, tone='info') => { for (const id of ['resource-notice','resource-dialog-notice']) { $(id).textContent=text; $(id).dataset.tone=tone; } };
+const notice = (text, tone='info') => { $('resource-notice').textContent=text; $('resource-notice').dataset.tone=tone; };
+const dialogNotice = (text, tone='info') => { $('resource-dialog-notice').textContent=text; $('resource-dialog-notice').dataset.tone=tone; };
 const clearSecret = () => { $('resource-token').value=''; };
 function controls() { $('resource-fields').disabled=busy || !session; }
 function invalidate() { generation++;busy=false;session=null;connections=[];clearSecret();$('resource-accounts').replaceChildren();controls(); }
 async function request(path, body) {
   const version=generation;
   const response=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',redirect:'error',headers:body?{'content-type':'application/json','x-csrf-token':session?.csrf??''}:{},...(body?{body:JSON.stringify(body)}:{})});
-  if(response.status===403){if(version===generation){invalidate();notice('身份验证失败，请重新登录','error');}throw new Error('身份验证失败，请重新登录');}
+  if(response.status===403){if(version===generation){invalidate();notice('身份验证失败，请重新登录','error');if($('resource-dialog').open)dialogNotice('身份验证失败，请重新登录','error');}throw new Error('身份验证失败，请重新登录');}
   if(!response.ok)throw new Error(body && body.action!=='inventory' ? '保存或选用未确认，请检查密钥、账号读取权限和连接容量；没有自动重试。' : '读取失败：请检查权限或平台状态，不能据此判断资源为空。');
   return response.json();
 }
@@ -70,12 +71,12 @@ async function refresh() {
 async function save(event) {
   event.preventDefault();if(busy || !session)return;
   const body={action:'connect',id:createId,name:$('resource-name').value,provider:document.querySelector('[name="resource-brand"]:checked').value,token:$('resource-token').value,accountId:$('resource-account-id').value.trim()};
-  const version=generation;busy=true;controls();clearSecret();notice('正在验证并保存品牌密钥…');
+  const version=generation;busy=true;controls();clearSecret();notice('正在添加账户…');dialogNotice('添加中…');
   try {
     await request('/api/admin/connections',body);if(version!==generation)return;
     createId=crypto.randomUUID();$('resource-form').reset();providerChanged();$('resource-dialog').close();
     busy=false;await refresh();
-  }catch(error){if(version===generation)notice(error.message,'error');}
+  }catch(error){if(version===generation){notice(error.message,'error');dialogNotice(error.message,'error');}}
   finally{body.token=undefined;if(version===generation){busy=false;controls();}}
 }
 async function useResource(row,kind,item,cursor,button) {
@@ -95,9 +96,9 @@ async function useResource(row,kind,item,cursor,button) {
   }catch(error){if(version===generation)notice(error.message,'error');}
   finally{if(version===generation){busy=false;controls();button.disabled=false;}}
 }
-function providerChanged(){clearSecret();$('resource-account-id').value='';const github=document.querySelector('[name="resource-brand"]:checked').value==='github';$('resource-account-field').hidden=github;$('resource-brand-help').textContent=github?'填写 GitHub PAT，保存后自动读取此凭据可访问的仓库。':'填写 Cloudflare API Token，自动识别可读取账户及其 Workers、D1、KV、R2。';}
+function providerChanged(){clearSecret();dialogNotice('');$('resource-account-id').value='';const github=document.querySelector('[name="resource-brand"]:checked').value==='github';$('resource-account-field').hidden=github;$('resource-account-id').disabled=github;$('resource-token-label').textContent=github?'GitHub PAT':'API Token';}
 for(const radio of document.querySelectorAll('[name="resource-brand"]'))radio.addEventListener('change',providerChanged);
-$('resource-add').addEventListener('click',()=>{$('resource-dialog').showModal();($('resource-fields').disabled?$('resource-close'):document.querySelector('[name="resource-brand"]:checked')).focus();});
+$('resource-add').addEventListener('click',()=>{if(!busy)dialogNotice(session?'':'身份验证失败，请重新登录',session?'info':'error');$('resource-dialog').showModal();($('resource-fields').disabled?$('resource-close'):document.querySelector('[name="resource-brand"]:checked')).focus();});
 $('resource-close').addEventListener('click',()=>$('resource-dialog').close());
 $('resource-dialog').addEventListener('close',()=>{clearSecret();$('resource-add').focus();});
 $('resource-form').addEventListener('submit',save);

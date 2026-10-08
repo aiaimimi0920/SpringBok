@@ -14,7 +14,7 @@ export async function adminRequest(request, env, readBody) {
   try {
     const session = await accessSession(request, env), url = new URL(request.url);
     if (session.automation && !automationRoute(request.method, url.pathname)) throw new Error('automation scope denied');
-    if (request.method === 'GET' && ['/', '/deploy', '/deploy.html', '/deploy.js', '/resources', '/resources.html', '/resources.js', '/settings', '/settings.html', '/connections.js', '/connections.css', '/app.js', '/sba.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/network-contract.mjs', '/style.css', '/tokens.css', '/shell.js'].includes(url.pathname)) {
+    if (request.method === 'GET' && ['/', '/deploy', '/deploy.html', '/deploy.js', '/resources', '/resources.html', '/resources.js', '/resource-tree.js', '/resource-model.mjs', '/resource-tree.css', '/settings', '/settings.html', '/connections.js', '/connections.css', '/app.js', '/sba.js', '/catalog.js', '/enrollment.js', '/telemetry.js', '/disk-contract.mjs', '/network-contract.mjs', '/style.css', '/tokens.css', '/shell.js'].includes(url.pathname)) {
       const response = await env.ASSETS.fetch(request);
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...headers } });
     }

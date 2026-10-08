@@ -8,6 +8,7 @@ import { sbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { connectedTaskId } from './connected-store.mjs';
 import { connectBrand, inventory, useRepository } from './brand-resources.mjs';
+import { usageOperation, saveResourceBudget } from './resource-budgets.mjs';
 
 export class ConnectionVault extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
@@ -54,6 +55,8 @@ export class ConnectionVault extends DurableObject {
   }
   async resourceOperation(owner, raw) {
     if(raw?.action === 'inventory') return inventory(this,owner,raw);
+    if(raw?.action === 'usage') return usageOperation(this,owner,raw);
+    if(raw?.action === 'budget') return saveResourceBudget(this,owner,raw);
     const input = resourceInput(raw); this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
     const { row, sealed } = this.activeConnection(input.connectionId);
     if (row.provider !== 'cloudflare') throw new Error('Cloudflare required');

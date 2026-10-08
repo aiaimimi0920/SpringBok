@@ -35,7 +35,7 @@ test('service delegation denies malformed or inactive approval and every route o
   }
   const f = await adminFixture(bindings(good)); t.after(() => f.close());
   const token = f.jwt(claims());
-  for (const path of ['/', '/sba.js', '/api/admin/state', '/api/admin/servers', '/api/admin/enrollments', '/api/admin/sba/new-route', '/api/admin/sba/state?key=value'])
+  for (const path of ['/', '/sba.js', '/resource-tree.js', '/resource-model.mjs', '/resource-tree.css', '/api/admin/resources', '/api/admin/state', '/api/admin/servers', '/api/admin/enrollments', '/api/admin/sba/new-route', '/api/admin/sba/state?key=value'])
     assert.equal((await f.call(path, { token })).status, 403, path);
   for (const headers of [{ origin: 'https://foreign.invalid' }, { 'sec-fetch-site': 'cross-site' }])
     assert.equal((await f.call('/api/admin/sba/state', { token, headers })).status, 403);

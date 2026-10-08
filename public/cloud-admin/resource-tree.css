@@ -1,0 +1,62 @@
+/* Resource trees share the existing Neuro tokens and never encode quota enforcement. */
+.resource-toolbar { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; }
+.resource-toolbar button[aria-pressed=true] { color: var(--neuro-signal-yellow); border-color: var(--neuro-signal-yellow); background: var(--neuro-yellow-soft); }
+#resource-accounts { max-height: calc(100dvh - 230px); min-height: 120px; overflow: auto; scrollbar-gutter: stable; }
+.resource-node { margin: 0; padding: 0; border: 0; border-bottom: 1px solid var(--neuro-line); border-radius: 0; min-width: 0; }
+.resource-node > summary { display: block; position: relative; padding: 15px 12px 15px 30px; cursor: pointer; background: var(--neuro-surface); list-style: none; }
+.resource-node > summary::-webkit-details-marker { display: none; }
+.resource-node > summary::before { content: ''; position: absolute; top: 23px; left: 11px; border: 4px solid transparent; border-left-color: var(--neuro-text-muted); }
+.resource-node[open] > summary::before { transform: rotate(90deg); transform-origin: 25% 50%; }
+.resource-node > summary:hover { background: var(--neuro-control); }
+.resource-node > summary:focus-visible { outline: 2px solid var(--neuro-signal-yellow); outline-offset: -2px; }
+.tree-label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.tree-name { display: flex; align-items: center; gap: 9px; min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 14px; font-weight: 650; }
+.tree-name svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--neuro-info-text); }
+.tree-count { color: var(--neuro-text-muted); font: 12px ui-monospace, Consolas, monospace; }
+.resource-children { padding-left: 16px; border-left: 1px solid var(--neuro-line); }
+.resource-children .resource-children { padding-left: 12px; }
+.resource-children > .account-target { padding: 4px 12px; margin: 0; overflow-wrap: anywhere; }
+.usage-metrics { display: grid; min-width: 0; gap: 10px; margin-top: 10px; }
+.usage-metrics:empty { display: none; }
+.usage-metric { display: grid; grid-template-columns: minmax(140px, 1.2fr) minmax(175px, 1.2fr) minmax(64px, .7fr) minmax(110px, 1fr); align-items: center; gap: 8px 14px; font-size: 12px; line-height: 1.5; min-width: 0; }
+.usage-metric > span { min-width: 0; overflow-wrap: anywhere; }
+.usage-metric small { display: block; color: var(--neuro-text-muted); font-size: 11px; }
+.usage-amount { font-variant-numeric: tabular-nums; }
+.usage-track { display: block; height: 5px; background: var(--neuro-line); overflow: hidden; }
+.usage-track > span { display: block; height: 100%; background: var(--neuro-info-blue); }
+.usage-track[data-unknown=true] { border: 1px dashed var(--neuro-text-muted); background: transparent; }
+.usage-metric[data-over=true] .usage-track > span { background: var(--neuro-signal-yellow); }
+.usage-metric .usage-over { color: var(--neuro-signal-yellow); }
+.resource-group-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 8px 12px; }
+.resource-group-actions button { font-size: 12px; padding: 5px 10px; min-height: 30px; }
+.inventory-group .resource-instances { max-height: none; overflow: visible; }
+.inventory-group .resource-instances li { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.5fr) auto; gap: 12px; padding: 12px; }
+.instance-identity, .instance-usage { min-width: 0; overflow-wrap: anywhere; }
+.instance-identity small, .instance-usage span { display: block; color: var(--neuro-text-muted); font-size: 12px; }
+.resource-instance-name { color: var(--neuro-info-text); text-align: left; background: transparent; border: 0; padding: 3px 0; min-height: 28px; max-width: 100%; overflow-wrap: anywhere; }
+.resource-instance-name:hover { text-decoration: underline; background: transparent; }
+.resource-children > [data-more] { margin: 10px 12px; }
+#resource-detail { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; margin: 0; max-height: 55dvh; overflow: auto; scrollbar-gutter: stable; }
+#resource-detail dt { color: var(--neuro-text-muted); font-size: 12px; }
+#resource-detail dd { margin: 0; overflow-wrap: anywhere; font-size: 13px; }
+#resource-budget-account { overflow-wrap: anywhere; color: var(--neuro-text-muted); font-size: 12px; }
+#resource-budget-notice[data-tone=error] { color: var(--neuro-danger-text); }
+@media (max-width: 1100px) {
+  .usage-metric { grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) minmax(95px, .8fr); }
+  .usage-track { grid-column: 2; grid-row: 2; }
+  .usage-remaining { grid-column: 3; grid-row: 1 / 3; }
+}
+@media (max-width: 720px) {
+  #resource-accounts { max-height: 70dvh; }
+  .resource-children, .resource-children .resource-children { padding-left: 6px; }
+  .resource-node > summary { padding: 12px 8px 12px 23px; }
+  .resource-node > summary::before { left: 8px; top: 19px; }
+  .usage-metric { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 8px; }
+  .usage-label { grid-column: 1 / -1; }
+  .usage-track { grid-column: 1; grid-row: 3; }
+  .usage-remaining { grid-column: 2; grid-row: 2 / 4; }
+  .inventory-group .resource-instances li { grid-template-columns: minmax(0, 1fr); padding: 10px 8px; gap: 6px; }
+  .inventory-group .resource-instances li > button { justify-self: start; margin-left: 0; }
+  #resource-detail { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  #resource-detail dd { margin-bottom: 10px; }
+}

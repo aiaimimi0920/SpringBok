@@ -13,7 +13,9 @@ const paths = {
   settings: 'm9 3-.6 2.4-2 .9L4 5.7 2 9l1.7 1.8v2.4L2 15l2 3.3 2.4-.6 2 .9L9 21h4l.6-2.4 2-.9 2.4.6 2-3.3-1.7-1.8v-2.4L20 9l-2-3.3-2.4.6-2-.9L13 3Zm6 9a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   refresh: 'M20 7V3l-3 3a8 8 0 0 0-13 6m0 5v4l3-3a8 8 0 0 0 13-6',
 };
-for (const host of document.querySelectorAll('[data-icon]')) {
+export function decorateIcons(root = document) {
+for (const host of root.querySelectorAll('[data-icon]')) {
+  if (host.querySelector('svg')) continue;
   const data = paths[host.dataset.icon];
   if (!data) continue;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -21,5 +23,7 @@ for (const host of document.querySelectorAll('[data-icon]')) {
   const path = document.createElementNS(svg.namespaceURI, 'path');
   path.setAttribute('d', data); svg.append(path); host.prepend(svg);
 }
+}
+decorateIcons();
 
 // Dialog behavior stays with the page controllers; this module only adds icons.

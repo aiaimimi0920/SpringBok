@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>云资源 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><script type="module" src="/shell.js"></script><script type="module" src="/resources.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>云资源 · SpringBok</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/connections.css"><link rel="stylesheet" href="/resource-tree.css"><script type="module" src="/shell.js"></script><script type="module" src="/resources.js"></script></head>
 <body>
 <a class="skip-link" href="#main-content">跳到主要内容</a>
 <aside class="rail"><a class="brand" href="/" aria-label="SpringBok 首页" data-icon="brand">SpringBok</a><nav aria-label="主导航"><a href="/" data-icon="history"><span>历史部署</span></a>
@@ -10,6 +10,7 @@
 <header class="topbar"><span class="context">部署控制台 <span>/</span> <strong>云资源</strong></span><span>Cloudflare Workers</span></header>
 <main id="main-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">CLOUD RESOURCES</p><h1>云资源</h1></div><button id="resource-add" class="primary" type="button" data-icon="add">添加资源</button></div>
 <div class="status-line"><p id="resource-notice" role="status" aria-live="polite">正在验证身份…</p></div>
+<div class="resource-toolbar" role="group" aria-label="资源视角"><button id="resource-view-account" type="button" aria-pressed="true">账户视图</button><button id="resource-view-kind" type="button" aria-pressed="false">资源视图</button></div>
 <div id="resource-accounts"></div>
 </main>
 <dialog id="resource-dialog" aria-labelledby="resource-dialog-title">
@@ -26,5 +27,12 @@
 </div>
 <div class="resource-dialog-footer"><p id="resource-dialog-notice" role="status" aria-live="polite"></p><button id="resource-save" class="primary" type="submit">添加</button></div>
 </fieldset></form>
+</dialog>
+<dialog id="resource-detail-dialog" aria-labelledby="resource-detail-title"><div class="section-heading"><h2 id="resource-detail-title">资源详情</h2><button id="resource-detail-close" type="button">关闭</button></div><dl id="resource-detail"></dl></dialog>
+<dialog id="resource-budget-dialog" aria-labelledby="resource-budget-title">
+<div class="section-heading"><h2 id="resource-budget-title">规划容量</h2><button id="resource-budget-close" type="button">关闭</button></div>
+<p id="resource-budget-account"></p>
+<form id="resource-budget-form"><fieldset id="resource-budget-fields"><div class="field"><label for="resource-budget-value">规划容量 (GB)</label><input id="resource-budget-value" type="number" min="0" max="1000000" step="0.001" required></div>
+<p id="resource-budget-notice" role="status" aria-live="polite"></p><div class="actions"><button id="resource-budget-save" class="primary" type="submit">保存规划</button><button id="resource-budget-clear" type="button">清除规划</button></div></fieldset></form>
 </dialog>
 </body></html>

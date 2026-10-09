@@ -1,0 +1,14 @@
+{
+  "title": "SpringBok 开发者文档",
+  "pages": [
+    { "id": "index", "title": "项目介绍", "source": "pages/content/index.md", "group": "开始" },
+    { "id": "quickstart", "title": "接入流程", "source": "ai-docs/integration.md", "group": "开始" },
+    { "id": "files", "title": "文件结构", "source": "ai-docs/files.md", "group": "SBA 参考" },
+    { "id": "manifest", "title": "执行清单", "source": "ai-docs/manifest.md", "group": "SBA 参考" },
+    { "id": "deployment", "title": "部署声明", "source": "ai-docs/deployment.md", "group": "SBA 参考" },
+    { "id": "lifecycle", "title": "请求与生命周期", "source": "ai-docs/lifecycle.md", "group": "SBA 参考" },
+    { "id": "validation", "title": "验证与排错", "source": "ai-docs/validation.md", "group": "实践" },
+    { "id": "example", "title": "完整教学骨架", "source": "pages/content/example.md", "group": "实践" },
+    { "id": "ai", "title": "交给 AI 接入", "source": "pages/content/ai.md", "group": "实践" }
+  ]
+}

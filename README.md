@@ -1,5 +1,13 @@
 # SpringBok
 
+## 开发者文档
+
+- **让 AI 为你的服务接入 SBA**：[AI 接入入口](ai-docs/README.md)。
+- **人类阅读的开发者站**：[站点源码与本地预览](pages/README.md)，介绍项目、接入流程、每个 SBA 文件和可验证示例。
+- **贡献代码**：提交前按 [AGENTS.md](AGENTS.md) 检查两种文档入口的影响；协议参考共用事实源。
+
+当前接入文档面向 manifest v3 与 deployment v2；下方保留历史开发切片，不作为最新字段参考。
+
 > 当前优先方向（2026-10-07）：聚焦部署，建设用户自助的连接设置、已有资源登记与
 > 部署目标选择，见[分步开发计划](docs/deployment-connections-plan.md)。SpringBok 和
 > NAccount 已有真实 Cloudflare 部署及登录证据；历史监控和外部服务器路线保留，
@@ -14,7 +22,7 @@ Cloudflare 承载控制面，外部服务器承载实际业务和受控执行端
 提交并推送，不积攒到整个阶段完成；执行规则见 [AGENTS.md](AGENTS.md)。
 
 目前已具备固定场景的部署契约、配置审阅、执行恢复、Worker/SQLite Durable Object、
-节点出站桥和受保护管理页。真实 Cloudflare/Access 与用户服务器验收仍未完成；
+节点出站桥和受保护管理页。Cloudflare/Access 与 NAccount 部署登录已有实际验收；
 多台真实服务器接入验收与持续资源监控仍未完成。下方 M1–M14 是历史切片记录，不是产品完成比例。
 
 [首批自有服务、交付目标与验收边界](docs/owned-service-deployment.md)：Gateway、Platform、AssetLibrary、Rauthy，以及可选的 Crow 只读查询。Hook/Loom 是桌面访问方。该清单是开发目标，不是可执行配置或已部署证明。

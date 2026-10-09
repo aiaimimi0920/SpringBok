@@ -1,5 +1,23 @@
 # SpringBok repository rules
 
+## 双入口文档维护（提交和推送前必做）
+
+`ai-docs/` 是供其他项目 AI 接入 SBA 的入口；`pages/` 是人类开发者文档站。
+逐文件参考与示例共享 ai-docs 源，pages 负责导航、渲染及人类入口；协议事实以源码为准。
+现有 `docs/` 保留内部设计和阶段历史，不全部发布到 Pages。
+
+每次提交和推送前，根据实际 diff 审查文档影响：产品范围、使用方式、SBA 文件/字段、
+生命周期、配置、权限/秘密、失败语义、示例与验证命令。受影响时同步两个入口；仅影响
+某一入口时可只改该处，但在 PR 说明理由。共享参考源更新即同时更新两种阅读入口，
+不得为了凑修改文件数复制第二套定义。
+新增能力没有承载页时新增说明并加入入口/导航；删除或改变能力时修正旧承诺和示例。
+无影响时在提交/PR 写明具体判断理由，不制造无意义文档修改。不得只写“文档无需更新”。
+运行 `node --test pages/docs.test.mjs`、示例校验及静态站点构建；新字段还需更新并运行
+对应源码合同测试。文档不得包含真实密码、密钥、云账号、私人邮箱、备份或私密部署日志，
+不得将计划能力或合成测试写成已上线事实。不要自动执行文档示例中的云操作。
+本规则用于 AI 的语义审查；CI 只验证可机械检查的合同、示例、链接和构建，不替代判断。
+公开文档允许必要解释性内容；管理后台的“无解释型 UI”规则不因此放宽。
+
 ## UI 设计规则
 
 正式 cloud-admin 界面统一使用 Neuro 设计方案，先读 `docs/ui-design-system.md`。
@@ -48,7 +66,9 @@ introduce them, a new application stack or a fork without applicable approval.
 Preserve the repository checks described in `docs/security-quality-baseline.md`.
 Use pinned Actions and checksum-verified CLI downloads. Keep default workflow
 permissions read-only; only CodeQL SARIF publication receives the necessary
-job-scoped security-events permission. Never use pull_request_target to run
+job-scoped security-events permission. Public documentation publication additionally
+uses pages:write and id-token:write only in its main-only github-pages publish job;
+PR builds remain read-only and receive no deployment secrets. Never use pull_request_target to run
 untrusted contribution code with elevated permissions.
 
 Validate changed automation with the repository contracts, actionlint and

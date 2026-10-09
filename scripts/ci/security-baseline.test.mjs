@@ -15,11 +15,24 @@ test("security workflows keep least privilege and untrusted PR boundaries", () =
     assert.match(workflow, /persist-credentials: false/);
     assert.match(workflow, /timeout-minutes:/);
     assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|packages: write/);
-    if (!["sba-execute.yml", "sba-oidc-diagnostic.yml"].includes(name)) assert.doesNotMatch(workflow, /id-token:/);
+    if (!["sba-execute.yml", "sba-oidc-diagnostic.yml", "pages.yml"].includes(name)) assert.doesNotMatch(workflow, /id-token:/);
+    if (name !== "pages.yml") assert.doesNotMatch(workflow, /pages: write/);
     for (const [, ref] of workflow.matchAll(/uses:\s+([^\s]+) /g)) {
       assert.match(ref, /@[a-f0-9]{40}$/);
     }
   }
+});
+
+test('public documentation publishes only on main with isolated Pages permissions', () => {
+  const workflow = read('.github/workflows/pages.yml');
+  assert.match(workflow, /^permissions:\n  contents: read/m);
+  assert.match(workflow, /publish:\n    if: github.ref == 'refs\/heads\/main' && github.event_name != 'pull_request'/);
+  assert.match(workflow, /permissions:\n      pages: write\n      id-token: write/);
+  assert.equal([...workflow.matchAll(/id-token: write/g)].length, 1);
+  assert.match(workflow, /environment:\n      name: github-pages/);
+  assert.match(workflow, /path: \$\{\{ runner.temp \}\}\/springbok-pages/);
+  assert.doesNotMatch(workflow, /CLOUDFLARE|SBA_EXECUTE|secrets\.|enablement|contents: write/);
+  assert.match(workflow, /node --test pages\/docs.test.mjs/);
 });
 
 test("OIDC diagnostic is manual, exact-tag guarded and has no application or deployment capability", () => {

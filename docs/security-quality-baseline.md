@@ -19,7 +19,9 @@ introduced through a separately reviewed and tested pull request.
 
 Checks run on pull requests, main, weekly schedules and manual dispatch. The
 normal token scope is contents-read; only CodeQL gets the job-scoped permissions
-needed to upload SARIF. Workflows do not deploy or receive real credentials.
+needed to upload SARIF. Test workflows do not deploy or receive real credentials. Developer documentation
+PR builds are read-only; its main-only github-pages publish job has isolated
+pages:write and id-token:write permissions, without application or Cloudflare secrets.
 
 ## Deliberately deferred
 

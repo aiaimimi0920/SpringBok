@@ -1,5 +1,6 @@
 // 平台仅校验并调用应用契约，不解释迁移或业务实现。
 import { PREVIEW_ACTIONS, previewAction, validatePreviewContext, validatePreviewResult } from './preview.mjs';
+import { validateRepairs, validateRepairContext, validateRepairResult } from './repair.mjs';
 export class SbaContractError extends Error {}
 const fail = message => { throw new SbaContractError(message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -24,7 +25,7 @@ export function compareVersions(left, right) {
 }
 
 export function validateManifest(value) {
-  exact(value, ['schemaVersion', 'id', 'name', 'version', 'entrypoint', 'runtime', 'actions', 'secrets']);
+  exact(value, ['schemaVersion', 'id', 'name', 'version', 'entrypoint', 'runtime', 'actions', 'secrets'], ['repairs']);
   if (![2, 3].includes(value.schemaVersion)) fail('unsupported SBA schema; migrate v1 explicitly');
   if (!identifier(value.id) || typeof value.name !== 'string' || !value.name.trim() || value.name.length > 100 || /[\x00-\x1f]/.test(value.name)) fail('invalid application identity');
   versionParts(value.version);
@@ -33,7 +34,7 @@ export function validateManifest(value) {
   exact(value.runtime, ['runner', 'powershell', 'python', 'node']);
   if (value.runtime.runner !== 'windows-2025' || value.runtime.powershell !== '5.1' ||
       value.runtime.python !== '3.12' || value.runtime.node !== '22') fail('unsupported SBA runtime');
-  const actions = value.schemaVersion === 3 ? [...SBA_ACTIONS, ...PREVIEW_ACTIONS] : SBA_ACTIONS;
+  const actions = value.schemaVersion === 3 ? [...SBA_ACTIONS, ...PREVIEW_ACTIONS, ...(object(value.actions) && Object.hasOwn(value.actions, 'repair') ? ['repair'] : [])] : SBA_ACTIONS;
   exact(value.actions, actions);
   for (const action of actions) {
     exact(value.actions[action], ['timeoutSeconds']);
@@ -42,12 +43,13 @@ export function validateManifest(value) {
   }
   if (!Array.isArray(value.secrets) || value.secrets.length > 20 || new Set(value.secrets).size !== value.secrets.length ||
       value.secrets.some(name => typeof name !== 'string' || !/^[A-Z][A-Z0-9_]{1,63}$/.test(name) || reservedEnvironment.test(name))) fail('invalid secret references');
+  validateRepairs(value);
   return structuredClone(value);
 }
 
 export function validateRequest(value, manifest) {
   const app = validateManifest(manifest);
-  exact(value, ['schemaVersion', 'taskId', 'action', 'repository', 'sourceSha', 'applicationId', 'applicationVersion', 'environment', 'configuration', 'previous', ...(previewAction(value.action) ? ['context'] : [])]);
+  exact(value, ['schemaVersion', 'taskId', 'action', 'repository', 'sourceSha', 'applicationId', 'applicationVersion', 'environment', 'configuration', 'previous', ...(previewAction(value.action) || value.action === 'repair' ? ['context'] : [])]);
   if (value.schemaVersion !== app.schemaVersion || !identifier(value.taskId) || !Object.hasOwn(app.actions, value.action) ||
       typeof value.repository !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}\/[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/.test(value.repository) ||
       !sha(value.sourceSha) || !identifier(value.environment)) fail('invalid execution identity');
@@ -60,10 +62,11 @@ export function validateRequest(value, manifest) {
     exact(value.previous, ['sourceSha', 'applicationVersion']);
     if (!sha(value.previous.sourceSha)) fail('invalid previous release');
     const comparison = compareVersions(value.applicationVersion, value.previous.applicationVersion);
-    if (['update', 'preview'].includes(value.action) && (comparison <= 0 || value.sourceSha === value.previous.sourceSha)) fail('update requires a newer version and different SHA');
+    if (['update', 'preview', 'repair'].includes(value.action) && (comparison <= 0 || value.sourceSha === value.previous.sourceSha)) fail('update or repair requires a newer version and different SHA');
     if (['verify', 'destroy-preview'].includes(value.action) && (comparison !== 0 || value.sourceSha !== value.previous.sourceSha)) fail('verify requires the selected deployed release');
   }
   if (previewAction(value.action)) validatePreviewContext(value);
+  if (value.action === 'repair') validateRepairContext(value, app);
   return structuredClone(value);
 }
 
@@ -85,5 +88,6 @@ export function validateResult(value, request) {
   }
   if (Object.hasOwn(value, 'errorCode') && (typeof value.errorCode !== 'string' || !/^[A-Z][A-Z0-9_]{1,79}$/.test(value.errorCode))) fail('invalid error code');
   if (previewAction(request.action)) validatePreviewResult(value, request);
+  if (request.action === 'repair') validateRepairResult(value);
   return structuredClone(value);
 }

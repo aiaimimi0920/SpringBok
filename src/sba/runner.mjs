@@ -51,9 +51,11 @@ function runtimeEnvironment(source) {
 }
 
 // 不继承 GitHub 控制凭据、Actions 文件命令或其他应用的 secret。
-export function applicationEnvironment(source, manifest, directory) {
+export function applicationEnvironment(source, manifest, directory, request = null) {
   const app = validateManifest(manifest), output = runtimeEnvironment(source);
-  for (const name of app.secrets) {
+  if (request !== null) validateRequest(request, app);
+  const names = request?.action === 'repair' ? app.repairs.find(row => row.id === request.context.repairId).secretNames : app.secrets;
+  for (const name of names) {
     if (typeof source[name] !== 'string' || !source[name]) reject();
     output[name] = source[name];
   }
@@ -160,7 +162,7 @@ export async function executeCheckout({ checkout, request, tempRoot, environment
   const directory = await mkdtemp(join(temporary, 'springbok-sba-'));
   const requestPath = join(directory, 'request.json');
   const resultPath = join(directory, 'application-result.json');
-  const childEnvironment = applicationEnvironment(environment, checked.manifest, directory);
+  const childEnvironment = applicationEnvironment(environment, checked.manifest, directory, checked.input);
   await writeFile(requestPath, JSON.stringify(checked.input), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
   let execution;
   try {

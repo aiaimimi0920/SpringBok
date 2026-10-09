@@ -13,6 +13,7 @@ let instances = new Map(), states = new Map(), usage = new Map(), historyRecords
 let registeredResources = [];
 let selected = null, application = null, updateTarget = null, preview = null, busy = false, selectionBusy = false, submitting = false;
 let importing = false;
+let deletionReview = null, deletionGeneration = 0, deletionSubmitting = false, deletionFocus = null;
 let rehearsing = false, deletingPreview = false, testEnvironment = null;
 let returnFocus = null, pollTimer = null, listBusy = false, selectedResources = new Map();
 const expanded = new Set(), statistics = new Set(), usagePending = new Set();
@@ -40,6 +41,7 @@ function restoreFocus() {
   (returnFocus?.isConnected ? returnFocus : replacement || $('service-add')).focus();
 }
 function invalidate() {
+  deletionGeneration++; deletionReview = null; $('service-delete-dialog').close();
   generation++; dialogGeneration++; session = null; clearTimeout(pollTimer); loadingCount = 0; loading(0);
   catalog.clear(); catalogOrder.clear(); instances.clear(); states.clear(); usage.clear(); historyRecords.clear(); usagePending.clear();
   registeredResources = [];
@@ -108,6 +110,8 @@ function renderInstances() {
       update.addEventListener('click', () => void openDialog(state, update));
       const test = focusKey(element('button', '预升级测试'), id + '/preview'); test.type = 'button'; test.disabled = !state?.canPreview || !session;
       test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
+      const remove = focusKey(element('button', '删除', 'danger'), id + '/delete'); remove.type = 'button'; remove.disabled = !state?.canDelete || !session;
+      remove.addEventListener('click', () => void openDeleteService(state, remove)); actions.append(remove);
     }
     row.append(title, version, target, badge, resource, actions); li.append(row);
     const detailPanel = element('div', undefined, 'service-details'); detailPanel.id = 'details-' + id; detailPanel.hidden = !expanded.has(id);
@@ -140,7 +144,7 @@ function renderInstances() {
         itemRow.append(button, output); records.append(itemRow);
       }
       if (state?.status !== 'imported') detailPanel.append(fold(id + '/history', '执行记录 · ' + (state?.history?.length ?? 0), records));
-      const result = element('pre', JSON.stringify(state?.status === 'imported' ? state.provenance : state?.job?.result ?? { status, errorCode: state?.errorCode ?? state?.job?.errorCode ?? null }, null, 2));
+      const result = element('pre', JSON.stringify(state?.deletion ?? (state?.status === 'imported' ? state.provenance : state?.job?.result ?? { status, errorCode: state?.errorCode ?? state?.job?.errorCode ?? null }), null, 2));
       detailPanel.append(fold(id + '/receipt', state?.status === 'imported' ? '导入来源' : '最近回执', result));
       if (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[0-9]+$/.test(state?.runUrl ?? '')) {
         const link = element('a', 'GitHub Actions'); link.href = state.runUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; detailPanel.append(link);
@@ -176,16 +180,57 @@ async function refreshInstances() {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
         if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
-      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canPreview: false, canDeletePreview: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
+      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
     });
   } catch (error) { if (current(version)) notice(error.message, 'error'); }
   finally {
     if (current(version)) {
       listBusy = false; clearTimeout(pollTimer);
-      if ([...states.values()].some(state => ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state.job?.status ?? state.status))) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(); }, 5000);
+      if ([...states.values()].some(state => state.status === 'deleting' || ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state.job?.status ?? state.status))) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(); }, 5000);
     }
   }
 }
+
+async function openDeleteService(state, trigger) {
+  const version = ++deletionGeneration, pageVersion = generation;
+  deletionFocus = trigger; deletionReview = null; deletionSubmitting = false;
+  $('service-delete-title').textContent = '删除服务 · ' + (state.instance.environment ?? state.instance.application.name);
+  $('service-delete-resources').replaceChildren(); $('service-delete-submit').disabled = true;
+  $('service-delete-risk-label').hidden = true; $('service-delete-risk').checked = false;
+  $('service-delete-close').disabled = false; $('service-delete-notice').textContent = '正在核对关联资源';
+  $('service-delete-dialog').showModal();
+  try {
+    const result = await request(api + 'delete-plan', { instanceId: state.instance.id, previousTaskId: state.taskId });
+    if (version !== deletionGeneration || !current(pageVersion) || !$('service-delete-dialog').open) return;
+    deletionReview = result;
+    const list = element('dl');
+    for (const row of result.plan.resources) list.append(element('dt', ({ worker: 'Worker', domain: '域名', d1: 'D1', kv: 'KV' })[row.kind]), element('dd', `${row.name} · ${row.remoteId} · ${row.accountId}${row.present ? '' : ' · 已不存在'}`));
+    $('service-delete-resources').append(list);
+    for (const risk of result.plan.unverifiedReferences) $('service-delete-resources').append(element('p', `未核实历史 Pages 引用：${risk.project} · ${risk.kind.toUpperCase()} · ${risk.accountId} · ${risk.deploymentIds.join('、')}`));
+    $('service-delete-risk-label').hidden = !result.plan.unverifiedReferences.length;
+    $('service-delete-notice').textContent = ''; $('service-delete-submit').disabled = !!result.plan.unverifiedReferences.length;
+  } catch { if (version === deletionGeneration && current(pageVersion)) $('service-delete-notice').textContent = '无法核对删除清单，请检查共享绑定、资源变更或连接权限'; }
+}
+$('service-delete-close').addEventListener('click', () => $('service-delete-dialog').close());
+$('service-delete-risk').addEventListener('change', () => { $('service-delete-submit').disabled = !deletionReview || deletionSubmitting || !!deletionReview.plan.unverifiedReferences.length && !$('service-delete-risk').checked; });
+$('service-delete-dialog').addEventListener('cancel', event => { if (deletionSubmitting) event.preventDefault(); });
+$('service-delete-dialog').addEventListener('close', () => {
+  deletionGeneration++; deletionReview = null;
+  const key = deletionFocus?.dataset.focusKey;
+  (document.querySelector(`[data-focus-key="${CSS.escape(key ?? '')}"]`) ?? $('service-add')).focus();
+});
+$('service-delete-submit').addEventListener('click', async () => {
+  if (!deletionReview || deletionSubmitting || !session) return;
+  if (Date.now() >= deletionReview.expiresAt) { deletionReview = null; $('service-delete-submit').disabled = true; $('service-delete-notice').textContent = '确认已过期，请关闭后重新核对'; return; }
+  const version = generation; deletionSubmitting = true; $('service-delete-submit').disabled = true; $('service-delete-close').disabled = true;
+  $('service-delete-notice').textContent = '正在删除';
+  try {
+    const result = await request(api + 'delete-submit', { ...deletionReview, acceptUnverifiedReferences: $('service-delete-risk').checked });
+    if (!current(version)) return;
+    $('service-delete-dialog').close(); notice(result.status === 'deleted' ? '服务及关联数据已删除' : '删除结果未确认，请查看逐项回执', result.status === 'deleted' ? 'success' : 'warning');
+  } catch { if (current(version)) { $('service-delete-notice').textContent = '删除请求未确认，请查看实例状态；不要重复提交'; } }
+  finally { deletionSubmitting = false; deletionReview = null; $('service-delete-close').disabled = false; if (current(version)) await refreshInstances(); }
+});
 
 function renderTabs() {
   const focus = document.activeElement?.dataset.repository;

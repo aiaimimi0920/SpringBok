@@ -13,8 +13,12 @@ import { usageOperation, saveResourceBudget } from './resource-budgets.mjs';
 import { importInput, importedId, inspectImported, sameImport } from './service-import.mjs';
 import { automaticDraft, provisionDeployment } from './deployment-provisioning.mjs';
 import { servicePreviewDraft, continuesInstance, createsResources } from './service-preview.mjs';
+import { deletionPlan, deleteService, deletionRecord, assertNotDeleting } from './service-deletion.mjs';
 
 export class ConnectionVault extends DurableObject {
+  deletionPlan(owner, input) { return deletionPlan(this, owner, input); }
+  deleteService(owner, input) { return deleteService(this, owner, input); }
+  deletionRecord(owner, instanceId) { return deletionRecord(this, owner, instanceId); }
   constructor(ctx, env) { super(ctx, env); this.env = env; }
   guard(owner) {
     ownerId(owner);
@@ -113,6 +117,7 @@ export class ConnectionVault extends DurableObject {
       await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, cloudflare.row, cloudflare.sealed), input.components,
       { github: input.github, cloudflare: input.cloudflare });
     this.activeConnection(github.row.id, github.row.revision); this.activeConnection(cloudflare.row.id, cloudflare.row.revision);
+    assertNotDeleting(this, owner, candidate.id);
     return candidate;
   }
   importGuard(owner) {
@@ -123,6 +128,7 @@ export class ConnectionVault extends DurableObject {
   }
   importedIndex(owner) { return this.ctx.storage.transactionSync(() => { this.importGuard(owner); return this.ctx.storage.sql.exec('SELECT record FROM service_imports ORDER BY rowid DESC').toArray().map(row => JSON.parse(row.record)); }); }
   saveImported(owner, candidate) {
+    assertNotDeleting(this, owner, candidate.id);
     requireSba(importedId(candidate.id) && candidate.instance.id === candidate.id);
     return this.ctx.storage.transactionSync(() => {
       this.importGuard(owner); const sql = this.ctx.storage.sql, saved = sql.exec('SELECT record FROM service_imports WHERE id=?', candidate.id).toArray()[0];
@@ -134,6 +140,7 @@ export class ConnectionVault extends DurableObject {
     });
   }
   async deploymentDraft(owner, raw) {
+    if (raw?.instance?.id || raw?.instanceId) assertNotDeleting(this, owner, raw.instance?.id ?? raw.instanceId);
     if (['rehearse', 'destroy-preview'].includes(raw?.action)) {
       this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
       return servicePreviewDraft(this, owner, raw);
@@ -177,7 +184,7 @@ export class ConnectionVault extends DurableObject {
       // 声明路径可能嵌套；账号身份以已核验的 Cloudflare 连接为准。
       const cloudflare=this.row(plan.connections.cloudflare.id);requireSba(cloudflare);record.accountId=JSON.parse(cloudflare.metadata).target;
       if(prior){const old=JSON.parse(prior.record);requireSba(old.digest===record.digest);return {...old,alreadyReserved:true};}
-      if(plan.operation){const source=plan.operation.action==='preview'?plan.operation.context.source:{instanceId:plan.operation.instanceId,taskId:plan.operation.previousTaskId};const entries=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),source.instanceId);requireSba(entries.length&&entries[0].taskId===source.taskId);}
+      if(plan.operation){const source=plan.operation.action==='preview'?plan.operation.context.source:{instanceId:plan.operation.instanceId,taskId:plan.operation.previousTaskId};assertNotDeleting(this,owner,source.instanceId);const entries=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),source.instanceId);requireSba(entries.length&&entries[0].taskId===source.taskId);}
       for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
       for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&(continuesInstance(plan)||Date.now()-row.checkedAt<=300000));}
       if(plan.accounts){record.accountIds=[...new Set(Object.values(plan.accounts).map(a=>a.accountId))].sort();record.credentials=plan.credentials;}

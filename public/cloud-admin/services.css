@@ -41,6 +41,14 @@
 #service-submit:disabled, #service-add:disabled { color: var(--neuro-text-muted); background: var(--neuro-surface); border-color: var(--neuro-line); }
 #service-review dl { font-size: 13px; }
 #service-review p { font-size: 13px; }
+#service-delete-dialog { max-height: calc(100dvh - 32px); overflow: hidden; }
+#service-delete-dialog[open] { display: flex; flex-direction: column; }
+#service-delete-resources { max-height: 50dvh; overflow-wrap: anywhere; }
+#service-delete-notice { flex: 1; min-width: 0; font-size: 12px; }
+#service-delete-submit { flex-shrink: 0; }
+#service-delete-risk-label { font-size: 12px; margin-top: 12px; }
+#service-delete-risk { width: auto; min-height: 0; margin-right: 8px; }
+@media (max-width: 400px) { #service-delete-dialog { padding: 16px; } #service-delete-dialog .service-dialog-footer { flex-wrap: wrap; flex-basis: auto; } }
 @media (max-width: 1250px) { .service-row { grid-template-columns: minmax(130px, 1.3fr) minmax(80px, .7fr) minmax(100px, 1fr) minmax(90px, .8fr); } .service-bindings { grid-column: 1 / 3; } .service-actions { grid-column: 3 / 5; } }
 @media (max-width: 720px) {
   .service-topbar { display: block; position: absolute; top: 0; right: 16px; height: 54px; padding: 0; border: 0; background: transparent; }

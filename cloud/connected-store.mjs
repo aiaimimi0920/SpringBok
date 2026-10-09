@@ -35,6 +35,36 @@ export class ConnectedDeployment extends SbaDeployment {
   recoverAuthorized(){throw new Error('connected recovery not authorized');}
 }
 export class DeploymentLocks extends DurableObject {
+  claimDeletion(owner, instanceId, operationId, accountId, keys, digest) {
+    ownerId(owner); connectedTaskId(operationId); requireSba(importedId(instanceId) || /^dc-[a-f0-9]{32}$/.test(instanceId));
+    requireSba(this.ctx.id.toString() === this.env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`).toString());
+    requireSba(Array.isArray(keys) && keys.length > 0 && keys.length <= 64 && /^[a-f0-9]{64}$/.test(digest));
+    return this.ctx.storage.transactionSync(() => {
+      const sql = this.ctx.storage.sql;
+      const claim = importedId(instanceId) ? sql.exec('SELECT identity FROM import_claims WHERE id=?', instanceId).toArray()[0] : sql.exec('SELECT identity FROM deployment_claims WHERE task=?', instanceId).toArray()[0];
+      requireSba(claim && JSON.parse(claim.identity).owner === owner);
+      requireSba(sql.exec('SELECT task FROM deployment_lane WHERE id=1').one().task === null);
+      for (const key of keys) requireSba(sql.exec('SELECT task FROM deployment_keys WHERE key=?', 'identity:' + key).toArray()[0]?.task === instanceId);
+      sql.exec('CREATE TABLE IF NOT EXISTS deletion_claims (operation TEXT PRIMARY KEY, instance TEXT NOT NULL, owner TEXT NOT NULL, digest TEXT NOT NULL, finished INTEGER NOT NULL)');
+      sql.exec('INSERT INTO deletion_claims VALUES(?,?,?,?,0)', operationId, instanceId, owner, digest);
+      sql.exec('UPDATE deployment_lane SET task=? WHERE id=1', operationId);
+      return { claimed: true };
+    });
+  }
+  finishDeletion(owner, instanceId, operationId, digest) {
+    ownerId(owner); connectedTaskId(operationId);
+    return this.ctx.storage.transactionSync(() => {
+      const sql = this.ctx.storage.sql, row = sql.exec('SELECT * FROM deletion_claims WHERE operation=?', operationId).one();
+      requireSba(row.instance === instanceId && row.owner === owner && row.digest === digest);
+      if (row.finished) return { released: true };
+      requireSba(sql.exec('SELECT task FROM deployment_lane WHERE id=1').one().task === operationId);
+      sql.exec('DELETE FROM deployment_keys WHERE task=?', instanceId);
+      if (importedId(instanceId)) sql.exec('DELETE FROM import_keys WHERE instance=?', instanceId);
+      sql.exec('UPDATE deletion_claims SET finished=1 WHERE operation=?', operationId);
+      sql.exec('UPDATE deployment_lane SET task=NULL WHERE id=1');
+      return { released: true };
+    });
+  }
   registerImported(owner, id, accountId, resourceKeys, application) {
     ownerId(owner); requireSba(importedId(id) && Array.isArray(resourceKeys) && resourceKeys.length > 0 && resourceKeys.length <= 64);
     requireSba(this.ctx.id.toString() === this.env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`).toString());
@@ -42,6 +72,7 @@ export class DeploymentLocks extends DurableObject {
     const identity = canonicalSba({ owner, id, keys, application });
     return this.ctx.storage.transactionSync(() => {
       const sql = this.ctx.storage.sql, tables = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('import_claims','import_keys')").toArray();
+      if (sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='deletion_claims'").toArray().length) requireSba(!sql.exec('SELECT operation FROM deletion_claims WHERE instance=?', id).toArray().length);
       if (!tables.length) { sql.exec('CREATE TABLE import_claims (id TEXT PRIMARY KEY, identity TEXT NOT NULL)'); sql.exec('CREATE TABLE import_keys (key TEXT PRIMARY KEY, instance TEXT NOT NULL)'); }
       else requireSba(tables.length === 2);
       const prior = sql.exec('SELECT identity FROM import_claims WHERE id=?', id).toArray()[0];

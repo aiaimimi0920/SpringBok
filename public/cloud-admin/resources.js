@@ -47,7 +47,7 @@ async function request(path, body) {
   return response.json();
 }
 function render() { tree.render(projectAccounts(sources), view); }
-function types(row) { return row.provider==='cloudflare'?['worker','d1','kv','r2']:['repository']; }
+function types(row) { return row.provider==='cloudflare'?['worker','d1','kv','r2','zone']:['repository']; }
 async function readKind(source, version, cursor='') {
   let current=cursor,pages=0;const seen=new Set([cursor]);source.status='loading';
   try {
@@ -65,7 +65,7 @@ async function readKind(source, version, cursor='') {
   if(version===generation)render();
 }
 async function readUsage(source,version){
-  if(source.kind==='repository')return;
+  if(['repository','zone'].includes(source.kind))return;
   try{
     const result=await request('/api/admin/resources',{action:'usage',connectionId:source.row.id,kind:source.kind});
     if(version!==generation)return;

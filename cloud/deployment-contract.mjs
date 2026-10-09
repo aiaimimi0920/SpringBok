@@ -46,6 +46,7 @@ export function deploymentInput(input) {
   const keys=input.action==='application'?['action','github','sourceSha']:['action','github','sourceSha','cloudflare','environment','values','resources'];
   if(Object.hasOwn(input,'repository'))keys.push('repository');
   if(input.action==='preview'&&Object.hasOwn(input,'accounts'))keys.push('accounts');
+  if(input.action==='preview'&&Object.hasOwn(input,'domains')){keys.push('domains');requireValue(object(input.domains)&&Object.keys(input.domains).length<=8);for(const row of Object.values(input.domains)){exact(row,['resource','subdomain']);connectionReference(row.resource);requireValue(typeof row.subdomain==='string'&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(row.subdomain));}}
   if(input.action==='preview'&&Object.hasOwn(input,'instance')){keys.push('instance');exact(input.instance,['id','previousTaskId']);for(const value of Object.values(input.instance))requireValue(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));}
   exact(input,keys);
   requireValue(['application','preview'].includes(input.action));connectionReference(input.github);requireValue(typeof input.sourceSha==='string'&&/^[a-f0-9]{40}$/.test(input.sourceSha));

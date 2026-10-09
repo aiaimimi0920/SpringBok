@@ -155,7 +155,7 @@ export class ConnectionVault extends DurableObject {
     const {row:cloudflare}=this.activeConnection(input.cloudflare.id,input.cloudflare.revision);requireSba(cloudflare.provider==='cloudflare');
     let resources={},automatic=null;
     if(declaration.schemaVersion===2){automatic=await automaticDraft(this,owner,input,application);resources=automatic.resources;}
-    else {requireSba(!Object.hasOwn(input,'accounts'));
+    else {requireSba(!Object.hasOwn(input,'accounts')&&!Object.hasOwn(input,'domains'));
     for(const field of declaration.resources){const ref=connectionReference(input.resources[field.key]);const stored=this.ctx.storage.sql.exec('SELECT metadata FROM resources WHERE id=?',ref.id).toArray()[0];requireSba(stored);const row=JSON.parse(stored.metadata);
       requireSba(row.revision===ref.revision&&row.connectionId===cloudflare.id&&row.connectionRevision===cloudflare.revision&&Date.now()-row.checkedAt<=300000);resources[field.key]=row;}
     requireSba(Object.keys(input.resources).length===declaration.resources.length);}

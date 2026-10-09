@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resourceInput, discoverResources } from '../cloud/resources.mjs';
 const account = 'a'.repeat(32), id = '12345678-1234-1234-1234-123456789abc';
+test('Zone inventory uses account-scoped active zones with 50-item pagination', async () => {
+  const rows=Array.from({length:50},(_,i)=>({id:i.toString(16).padStart(32,'0'),name:`zone-${i}.example.com`,account:{id:account},status:'active'}));
+  let url;
+  const result=await discoverResources(account,'synthetic','zone','1',async u=>{url=u;return Response.json({success:true,result:rows,result_info:{page:1}});});
+  assert.equal(result.next,'2');assert.equal(new URL(url).searchParams.get('account.id'),account);assert.equal(new URL(url).searchParams.get('per_page'),'50');
+  for(const row of [{...rows[0],account:{id:'b'.repeat(32)}},{...rows[0],status:'pending'}]) await assert.rejects(discoverResources(account,'synthetic','zone','',async()=>Response.json({success:true,result:[row]})));
+});
 test('resource input rejects arbitrary provider, account, URL, cursor and unknown fields', () => {
   const input = { action:'discover', connectionId:'12345678-1234-4234-8234-123456789abc', kind:'d1', cursor:'' };
   assert.deepEqual(resourceInput(input), input);

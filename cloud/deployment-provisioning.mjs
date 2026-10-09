@@ -5,6 +5,7 @@ import { readJson } from './connections-provider.mjs';
 import { connectedStub } from './connected-store.mjs';
 import { serviceSummary } from './service-instance.mjs';
 import { finalizePreview } from './service-preview.mjs';
+import { resolveDeploymentDomains } from './deployment-domains.mjs';
 
 export async function automaticDraft(vault,owner,input,application){
   const declaration=application.declaration,accounts={},connections={github:input.github,cloudflare:input.cloudflare},credentials={},facts={};
@@ -15,13 +16,16 @@ export async function automaticDraft(vault,owner,input,application){
     const connectionKey=account.key==='runtime'?'cloudflare':'cloudflare_'+account.key;
     connections[connectionKey]=reference;credentials[account.secret]=connectionKey;
     accounts[account.key]={accountId:row.target,connection:reference};
-    if(!input.instance&&(declaration.fields.some(f=>!Object.hasOwn(input.values,f.path.join('.'))&&f.template?.includes('{subdomain:'+account.key+'}'))||declaration.resources.some(resource=>resource.nameTemplate.includes('{subdomain:'+account.key+'}')))){
+  }
+  let resources={},values=await resolveDeploymentDomains(vault,owner,input,declaration,accounts);
+  for(const account of declaration.accounts){
+    if(!input.instance&&(declaration.fields.some(f=>!Object.hasOwn(values,f.path.join('.'))&&f.template?.includes('{subdomain:'+account.key+'}'))||declaration.resources.some(resource=>resource.nameTemplate.includes('{subdomain:'+account.key+'}')))){
+      const {row,sealed}=vault.activeConnection(accounts[account.key].connection.id,accounts[account.key].connection.revision);
       const token=await openToken(vault.env.CONNECTIONS_ENCRYPTION_KEY,owner,row,sealed);
       const response=await readJson(`https://api.cloudflare.com/client/v4/accounts/${row.target}/workers/subdomain`,token,false);
       requireSba(response.success===true);facts[account.key]={subdomain:response.result?.subdomain};
     }
   }
-  let resources={},values=input.values;
   if(input.instance){
     const prior=await connectedStub(vault.env,input.instance.previousTaskId).bootstrap(owner);
     requireSba(prior.plan.application.declaration.schemaVersion===2);

@@ -3,9 +3,14 @@ import assert from 'node:assert/strict';
 import { serviceFixture, updatedSha } from './service-fixture.mjs';
 import { deletionProvider } from './service-deletion-fixture.mjs';
 import { importFixture } from './service-import-fixture.mjs';
+function withConsent(s) {
+  const service = s.service;
+  s.service = (route, body) => service(route, route === 'delete-submit' ? { acceptUnverifiedReferences: false, ...body } : body);
+  return s;
+}
 
 async function deployed() {
-  const s = await serviceFixture();
+  const s = withConsent(await serviceFixture());
   const plan = (await s.service('plan', s.input)).json(); assert.equal((await s.submit(plan)).status, 200);
   s.receipt(await (await s.machine()).json(), 'deployed-unverified');
   const state = (await s.service('service-state', { instanceId: plan.taskId, reconcile: true })).json(); assert.equal(state.canDelete, true);
@@ -28,7 +33,7 @@ test('ordinary deletion confirms exact inventory, deletes provider resources onc
   } finally { await s.f.close(); }
 });
 test('imported service and KV can be deleted with exact claims; deleted import cannot silently reclaim a recreated identity', async () => {
-  const s = await importFixture();
+  const s = withConsent(await importFixture());
   try {
     s.state.importBindings.push({ name: 'KV', type: 'kv_namespace', namespace_id: '1'.repeat(32) });
     const draft = (await s.service('import-preview', s.draft)).json();
@@ -48,8 +53,7 @@ test('shared references, stale metadata, missing CSRF, tampered confirmation and
   try {
     s.live.shared = true; assert.equal((await s.service('delete-plan', s.body)).status, 409); s.live.shared = false;
     s.live.pagesShared = true; assert.equal((await s.service('delete-plan', s.body)).status, 409); s.live.pagesShared = false;
-    s.live.pagesDeployments = [{ uses_functions: true }]; assert.equal((await s.service('delete-plan', s.body)).status, 409);
-    s.live.pagesDeployments = [{ uses_functions: true, d1_databases: { DB: { id: s.resource.remoteId } } }]; assert.equal((await s.service('delete-plan', s.body)).status, 409); s.live.pagesDeployments = null;
+    s.live.pagesDeployments = [{ id: '87654321-1234-1234-1234-123456789abc', uses_functions: true, d1_databases: { DB: { id: s.resource.remoteId } } }]; assert.equal((await s.service('delete-plan', s.body)).status, 409); s.live.pagesDeployments = null;
     const review = (await s.service('delete-plan', s.body)).json();
     assert.equal((await s.f.call('/api/admin/deployments/delete-submit', { ...s.session, headers: {}, body: review })).status, 403);
     assert.equal((await s.service('delete-submit', { ...review, confirmation: 'bad' })).status, 409);
@@ -88,7 +92,7 @@ test('competing confirmations cannot delete twice; a confirmed new update invali
   } finally { await t.f.close(); }
 });
 test('automatic same-name rebuild obtains fresh resource IDs after deletion without changing old receipts', async () => {
-  const s = await serviceFixture();
+  const s = withConsent(await serviceFixture());
   try {
     const d = structuredClone(s.state.declaration); d.schemaVersion = 2; d.accountMode = 'single';
     d.accounts = [{ key: 'runtime', label: '账户', path: ['accountId'], secret: 'CLOUDFLARE_API_TOKEN' }];
@@ -117,5 +121,19 @@ test('automatic same-name rebuild obtains fresh resource IDs after deletion with
     assert.equal((await s.service('service-state', { instanceId: first.taskId, reconcile: true })).json().status, 'deleted');
     const nextReview = (await s.service('delete-plan', { instanceId: second.taskId, previousTaskId: second.taskId })).json();
     assert.equal((await s.service('delete-submit', nextReview)).json().status, 'deleted'); assert.equal(live.deletes.length, 5);
+  } finally { await s.f.close(); }
+});
+test('missing Pages binding type is an explicit signed risk, never silently empty, and requires consent', async () => {
+  const s = await deployed();
+  try {
+    const id = '87654321-1234-1234-1234-123456789abc';
+    s.live.pagesDeployments = [{ id, uses_functions: true, kv_namespaces: {} }];
+    const review = (await s.service('delete-plan', s.body)).json();
+    assert.deepEqual(review.plan.unverifiedReferences, [{ accountId: 'a'.repeat(32), project: 'other-pages', kind: 'd1', deploymentIds: [id] }]);
+    assert.equal((await s.service('delete-submit', review)).status, 409); assert.equal(s.live.deletes.length, 0);
+    const altered = structuredClone(review); altered.plan.unverifiedReferences = [];
+    assert.equal((await s.service('delete-submit', { ...altered, acceptUnverifiedReferences: true })).status, 409);
+    s.live.shared = true; assert.equal((await s.service('delete-submit', { ...review, acceptUnverifiedReferences: true })).status, 409); s.live.shared = false;
+    assert.equal((await s.service('delete-submit', { ...review, acceptUnverifiedReferences: true })).json().status, 'deleted');
   } finally { await s.f.close(); }
 });

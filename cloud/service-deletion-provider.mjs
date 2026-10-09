@@ -29,7 +29,7 @@ function bindingIdentity(accountId, binding) {
 }
 // 只检查元数据；不读取数据库内容、KV 值或 Worker secret。
 export async function inspectDeletion(rows, tokens, transport = fetch) {
-  const result = [], storageIds = new Set(rows.filter(r => r.kind !== 'worker').map(r => `${r.kind}/${r.remoteId}`));
+  const result = [], unverifiedReferences = [], storageIds = new Set(rows.filter(r => r.kind !== 'worker').map(r => `${r.kind}/${r.remoteId}`));
   for (const accountId of [...new Set(rows.map(r => r.accountId))].sort()) {
     const token = tokens[accountId], own = rows.filter(r => r.accountId === accountId), keys = new Set(own.map(identity));
     const workers = await list(accountId, token, '/workers/scripts', transport);
@@ -55,12 +55,16 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
       }
     }
     // Pages 的当前配置和保留部署也可能继续引用同一存储，不能只看 Worker 列表。
-    const projects = await list(accountId, token, '/pages/projects?per_page=100&page=1', transport);
+    const projects = await list(accountId, token, '/pages/projects?page=1', transport);
     for (const project of projects) {
       requireSba(name(project.name) && project.deployment_configs && typeof project.deployment_configs === 'object');
-      const deployments = await list(accountId, token, `/pages/projects/${project.name}/deployments?per_page=100&page=1`, transport);
+      const deployments = await list(accountId, token, `/pages/projects/${project.name}/deployments?page=1`, transport);
       // 实际 API 可返回绑定字段，但 OpenAPI 未保证；Functions 部署缺少字段时不能当空绑定。
-      requireSba(deployments.every(d => d.uses_functions === false || Object.hasOwn(d, 'd1_databases') || Object.hasOwn(d, 'kv_namespaces')));
+      for (const [field, kind] of [['d1_databases', 'd1'], ['kv_namespaces', 'kv']]) {
+        const unknown = deployments.filter(d => d.uses_functions !== false && !Object.hasOwn(d, field));
+        requireSba(unknown.every(d => typeof d.id === 'string' && /^[a-f0-9-]{36}$/.test(d.id)));
+        if (rows.some(r => r.kind === kind) && unknown.length) unverifiedReferences.push({ accountId, project: project.name, kind, deploymentIds: unknown.map(d => d.id).sort() });
+      }
       for (const config of [...Object.values(project.deployment_configs), ...deployments]) {
         for (const [field, kind] of [['d1_databases', 'd1'], ['kv_namespaces', 'kv']]) {
           const bindings = config[field] ?? {}; requireSba(bindings && typeof bindings === 'object' && !Array.isArray(bindings));
@@ -76,7 +80,7 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
       result.push({ ...row, present: !!live, ...(row.kind === 'worker' && live ? { modifiedAt: live.modified_on ?? null } : {}) });
     }
   }
-  return sort(result);
+  return { resources: sort(result), unverifiedReferences };
 }
 export async function resourceAbsent(row, token, transport = fetch) {
   const path = { worker: '/workers/scripts', domain: '/workers/domains', d1: '/d1/database?per_page=1000&page=1', kv: '/storage/kv/namespaces?per_page=1000&page=1' }[row.kind];

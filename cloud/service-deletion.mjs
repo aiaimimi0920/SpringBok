@@ -46,13 +46,14 @@ export async function deletionPlan(vault, owner, input) {
   assertNotDeleting(vault, owner, input.instanceId);
   const current = await source(vault, owner, input), rows = deletionInventory(current.instance);
   const tokens = await credentials(vault, owner, current.instance, rows);
-  const resources = await inspectDeletion(rows, tokens);
+  const { resources, unverifiedReferences } = await inspectDeletion(rows, tokens);
   assertNotDeleting(vault, owner, input.instanceId);
-  const plan = { ...input, revision: current.revision, instance: current.instance, resources };
+  const plan = { ...input, revision: current.revision, instance: current.instance, resources, unverifiedReferences };
   return { ...plan, digest: await sbaDigest(plan) };
 }
 export async function deleteService(vault, owner, input) {
-  exactSba(input, ['operationId', 'plan', 'expiresAt']); connectedTaskId(input.operationId);
+  exactSba(input, ['operationId', 'plan', 'expiresAt', 'acceptUnverifiedReferences']); connectedTaskId(input.operationId);
+  requireSba(typeof input.acceptUnverifiedReferences === 'boolean' && (!input.plan.unverifiedReferences.length || input.acceptUnverifiedReferences));
   const existing = deletionRecord(vault, owner, input.plan.instanceId);
   if (existing) { requireSba(existing.operationId === input.operationId && existing.digest === input.plan.digest); return existing; }
   const { instanceId, previousTaskId } = input.plan;

@@ -10,7 +10,10 @@ try {
   const initial = (await service('plan', input)).json(); await submit(initial); receipt(await (await machine()).json());
   await service('service-state', { instanceId: initial.taskId, reconcile: true }); const live = deletionProvider(s);
   await ready(page); const remove = page.getByRole('button', { name: '删除', exact: true });
-  await remove.click(); await page.waitForFunction(() => !document.getElementById('service-delete-submit').disabled);
+  live.pagesDeployments = [{ id: '87654321-1234-1234-1234-123456789abc', uses_functions: true, kv_namespaces: {} }];
+  await remove.click(); await page.locator('#service-delete-risk-label').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#service-delete-submit').isDisabled(), true);
+  await page.locator('#service-delete-risk').check(); assert.equal(await page.locator('#service-delete-submit').isEnabled(), true);
   assert.match(await page.locator('#service-delete-resources').textContent(), /test-worker/);
   assert.match(await page.locator('#service-delete-resources').textContent(), /test-database/);
   assert.equal(live.deletes.length, 0);
@@ -20,9 +23,11 @@ try {
   }
   await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.getElementById('service-delete-dialog').open);
   assert.equal(await remove.evaluate(el => el === document.activeElement), true); assert.equal(live.deletes.length, 0);
-  live.shared = true; await remove.click(); await page.getByText('无法确认独占资源清单，请检查共享绑定、资源变更或连接权限', { exact: true }).waitFor();
+  live.shared = true; await remove.click(); await page.getByText('无法核对删除清单，请检查共享绑定、资源变更或连接权限', { exact: true }).waitFor();
   assert.equal(await page.locator('#service-delete-submit').isDisabled(), true); await page.locator('#service-delete-close').click(); live.shared = false;
-  await remove.click(); await page.waitForFunction(() => !document.getElementById('service-delete-submit').disabled);
+  await remove.click(); await page.locator('#service-delete-risk-label').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#service-delete-submit').isDisabled(), true);
+  await page.locator('#service-delete-risk').check();
   await page.locator('#service-delete-submit').click(); await page.waitForFunction(() => !document.getElementById('service-delete-dialog').open);
   await page.getByText('已删除', { exact: true }).waitFor(); assert.equal(live.deletes.length, 3);
   assert.equal(await remove.isDisabled(), true); assert.equal(await page.getByRole('button', { name: '升级', exact: true }).isDisabled(), true);

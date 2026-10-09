@@ -196,6 +196,7 @@ async function openDeleteService(state, trigger) {
   deletionFocus = trigger; deletionReview = null; deletionSubmitting = false;
   $('service-delete-title').textContent = '删除服务 · ' + (state.instance.environment ?? state.instance.application.name);
   $('service-delete-resources').replaceChildren(); $('service-delete-submit').disabled = true;
+  $('service-delete-risk-label').hidden = true; $('service-delete-risk').checked = false;
   $('service-delete-close').disabled = false; $('service-delete-notice').textContent = '正在核对关联资源';
   $('service-delete-dialog').showModal();
   try {
@@ -204,10 +205,14 @@ async function openDeleteService(state, trigger) {
     deletionReview = result;
     const list = element('dl');
     for (const row of result.plan.resources) list.append(element('dt', ({ worker: 'Worker', domain: '域名', d1: 'D1', kv: 'KV' })[row.kind]), element('dd', `${row.name} · ${row.remoteId} · ${row.accountId}${row.present ? '' : ' · 已不存在'}`));
-    $('service-delete-resources').append(list); $('service-delete-notice').textContent = ''; $('service-delete-submit').disabled = false;
-  } catch { if (version === deletionGeneration && current(pageVersion)) $('service-delete-notice').textContent = '无法确认独占资源清单，请检查共享绑定、资源变更或连接权限'; }
+    $('service-delete-resources').append(list);
+    for (const risk of result.plan.unverifiedReferences) $('service-delete-resources').append(element('p', `未核实历史 Pages 引用：${risk.project} · ${risk.kind.toUpperCase()} · ${risk.accountId} · ${risk.deploymentIds.join('、')}`));
+    $('service-delete-risk-label').hidden = !result.plan.unverifiedReferences.length;
+    $('service-delete-notice').textContent = ''; $('service-delete-submit').disabled = !!result.plan.unverifiedReferences.length;
+  } catch { if (version === deletionGeneration && current(pageVersion)) $('service-delete-notice').textContent = '无法核对删除清单，请检查共享绑定、资源变更或连接权限'; }
 }
 $('service-delete-close').addEventListener('click', () => $('service-delete-dialog').close());
+$('service-delete-risk').addEventListener('change', () => { $('service-delete-submit').disabled = !deletionReview || deletionSubmitting || !!deletionReview.plan.unverifiedReferences.length && !$('service-delete-risk').checked; });
 $('service-delete-dialog').addEventListener('cancel', event => { if (deletionSubmitting) event.preventDefault(); });
 $('service-delete-dialog').addEventListener('close', () => {
   deletionGeneration++; deletionReview = null;
@@ -220,7 +225,7 @@ $('service-delete-submit').addEventListener('click', async () => {
   const version = generation; deletionSubmitting = true; $('service-delete-submit').disabled = true; $('service-delete-close').disabled = true;
   $('service-delete-notice').textContent = '正在删除';
   try {
-    const result = await request(api + 'delete-submit', deletionReview);
+    const result = await request(api + 'delete-submit', { ...deletionReview, acceptUnverifiedReferences: $('service-delete-risk').checked });
     if (!current(version)) return;
     $('service-delete-dialog').close(); notice(result.status === 'deleted' ? '服务及关联数据已删除' : '删除结果未确认，请查看逐项回执', result.status === 'deleted' ? 'success' : 'warning');
   } catch { if (current(version)) { $('service-delete-notice').textContent = '删除请求未确认，请查看实例状态；不要重复提交'; } }

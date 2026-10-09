@@ -14,7 +14,7 @@ function publicValue(value, depth=0) {
 }
 export function deploymentDeclaration(value) {
   const automatic=value?.schemaVersion===2;
-  exact(value,['schemaVersion','target','accountPath','defaults','fields','resources','targets',...(automatic?['accountMode','accounts']:[])]);
+  exact(value,['schemaVersion','target','accountPath','defaults','fields','resources','targets',...(automatic?['accountMode','accounts']:[]),...(Object.hasOwn(value,'administrator')?['administrator']:[])]);
   requireValue([1,2].includes(value.schemaVersion) && value.target==='cloudflare-workers' && object(value.defaults));publicValue(value.defaults);
   if(automatic){
     requireValue(['single','multiple'].includes(value.accountMode)&&Array.isArray(value.accounts)&&value.accounts.length>0&&value.accounts.length<=12);
@@ -25,6 +25,7 @@ export function deploymentDeclaration(value) {
   }
   requireValue(Array.isArray(value.fields) && value.fields.length <= 32 && Array.isArray(value.resources) && value.resources.length <= 12);
   const paths=automatic?value.accounts.map(a=>a.path):[value.accountPath];
+  if(value.administrator){requireValue(automatic);exact(value.administrator,['emailPath','secret']);path(value.administrator.emailPath);paths.push(value.administrator.emailPath);requireValue(/^[A-Z][A-Z0-9_]{1,63}$/.test(value.administrator.secret)&&!value.accounts.some(a=>a.secret===value.administrator.secret));}
   const accountKey=k=>requireValue(value.accounts.some(a=>a.key===k));
   for(const field of value.fields){exact(field,['path','label','type','required',...(automatic?['template']:[])]);requireValue(['text','json'].includes(field.type)&&typeof field.required==='boolean');label(field.label);paths.push(field.path);if(automatic)requireValue(field.template===null||field.type==='text'&&validTemplate(field.template,value.accounts));}
   for(const resource of value.resources){exact(resource,['key','label','kind','idPath','namePath',...(automatic?['account','nativeAccount','nameTemplate']:[])]);requireValue(key(resource.key)&&['d1','kv','r2'].includes(resource.kind));label(resource.label);paths.push(resource.idPath);if(resource.namePath!==null)paths.push(resource.namePath);if(automatic){accountKey(resource.account);if(resource.nativeAccount!==null)accountKey(resource.nativeAccount);requireValue(validTemplate(resource.nameTemplate,value.accounts)&&resource.nameTemplate.includes('{instance}'));}}
@@ -38,7 +39,7 @@ export function deploymentDeclaration(value) {
 }
 function validTemplate(value,accounts){return typeof value==='string'&&value.length>0&&value.length<=256&&!/[\x00-\x1f]/.test(value)&&!value.replaceAll('{instance}','').replace(/\{subdomain:([A-Za-z][A-Za-z0-9_]*)\}/g,(all,key)=>accounts.some(a=>a.key===key)?'':all).match(/[{}]/);}
 export const deploymentValue=(root,parts)=>parts.reduce((v,k)=>v?.[k],root);
-export function deploymentSecrets(declaration){return declaration.schemaVersion===2?declaration.accounts.map(a=>a.secret):['CLOUDFLARE_API_TOKEN'];}
+export function deploymentSecrets(declaration){return declaration.schemaVersion===2?[...declaration.accounts.map(a=>a.secret),...(declaration.administrator?[declaration.administrator.secret]:[])]:['CLOUDFLARE_API_TOKEN'];}
 export function deploymentTemplate(template,environment,facts={}){return template.replaceAll('{instance}',environment).replace(/\{subdomain:([A-Za-z][A-Za-z0-9_]*)\}/g,(_,key)=>{const value=facts[key]?.subdomain;requireValue(typeof value==='string'&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value));return value;});}
 function label(value){requireValue(typeof value==='string'&&value.trim().length>0&&value.length<=100&&!/[\x00-\x1f]/.test(value));}
 export function connectionReference(value) {exact(value,['id','revision']);connectionId(value.id);requireValue(Number.isSafeInteger(value.revision)&&value.revision>0);return value;}
@@ -46,6 +47,7 @@ export function deploymentInput(input) {
   const keys=input.action==='application'?['action','github','sourceSha']:['action','github','sourceSha','cloudflare','environment','values','resources'];
   if(Object.hasOwn(input,'repository'))keys.push('repository');
   if(input.action==='preview'&&Object.hasOwn(input,'accounts'))keys.push('accounts');
+  if(input.action==='preview'&&Object.hasOwn(input,'administrator')){keys.push('administrator');exact(input.administrator,['profile',...(Object.hasOwn(input.administrator,'override')?['override']:[])]);connectionReference(input.administrator.profile);if(input.administrator.override)connectionReference(input.administrator.override);}
   if(input.action==='preview'&&Object.hasOwn(input,'domains')){keys.push('domains');requireValue(object(input.domains)&&Object.keys(input.domains).length<=8);for(const row of Object.values(input.domains)){exact(row,['resource','subdomain']);connectionReference(row.resource);requireValue(typeof row.subdomain==='string'&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(row.subdomain));}}
   if(input.action==='preview'&&Object.hasOwn(input,'instance')){keys.push('instance');exact(input.instance,['id','previousTaskId']);for(const value of Object.values(input.instance))requireValue(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));}
   exact(input,keys);

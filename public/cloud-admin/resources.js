@@ -37,7 +37,7 @@ const tree = createResourceTree($('resource-accounts'), {
 });
 function invalidate() {
   generation++;busy=false;session=null;connections=[];sources=[];budgetTarget=null;clearSecret();tree.clear();loading('');
-  $('resource-detail-dialog').close();$('resource-budget-dialog').close();$('resource-detail').replaceChildren();controls();
+  $('resource-detail-dialog').close();$('resource-budget-dialog').close();$('resource-detail').replaceChildren();$('admin-profiles-list').replaceChildren();$('admin-profiles-section').hidden=true;controls();
 }
 async function request(path, body) {
   const version=generation;
@@ -85,6 +85,9 @@ async function refresh() {
     const state=await request('/api/admin/state');if(version!==generation)return;
     if(!state.connectionsEnabled)throw new Error('连接管理尚未启用');session=state;
     const result=await request('/api/admin/connections');if(version!==generation)return;connections=result.connections;
+    const profiles=await request('/api/admin/resources');if(version!==generation)return;
+    $('admin-profiles-list').replaceChildren(...(profiles.adminProfiles??[]).map(row=>{const item=document.createElement('li');item.textContent=row.email;return item;}));
+    $('admin-profiles-section').hidden=!(profiles.adminProfiles??[]).length;
     sources=connections.filter(row=>!row.parentId).flatMap(row=>types(row).map(kind=>({row,kind,items:[],next:'',status:row.state==='verified'?'loading':'disabled',usage:null})));
     render();let next=0;const tasks=sources.filter(source=>source.row.state==='verified');
     const read=async()=>{while(next<tasks.length && version===generation){const source=tasks[next++];await readKind(source,version);if(version===generation)await readUsage(source,version);}};
@@ -97,7 +100,8 @@ async function save(event) {
   const body={action:'connect',id:createId,name:$('resource-name').value,provider:document.querySelector('[name="resource-brand"]:checked').value,token:$('resource-token').value,accountId:$('resource-account-id').value.trim()};
   const version=generation;busy=true;controls();clearSecret();notice('正在添加账户…');dialogNotice('添加中…');
   try {
-    await request('/api/admin/connections',body);if(version!==generation)return;
+    if(body.provider==='gmail')await request('/api/admin/resources',{action:'admin-profile',id:body.id,email:body.name.trim().toLowerCase(),password:body.token});
+    else await request('/api/admin/connections',body);if(version!==generation)return;
     createId=crypto.randomUUID();$('resource-form').reset();providerChanged();$('resource-dialog').close();
     busy=false;await refresh();
   }catch(error){if(version===generation){notice(error.message,'error');dialogNotice(error.message,'error');}}
@@ -133,7 +137,7 @@ async function useResource(row,kind,item,cursor,button) {
   }catch(error){if(version===generation)notice(error.message,'error');}
   finally{if(version===generation){busy=false;controls();button.disabled=false;}}
 }
-function providerChanged(){clearSecret();dialogNotice('');$('resource-account-id').value='';const github=document.querySelector('[name="resource-brand"]:checked').value==='github';$('resource-account-field').hidden=github;$('resource-account-id').disabled=github;$('resource-token-label').textContent=github?'GitHub PAT':'API Token';}
+function providerChanged(){clearSecret();dialogNotice('');$('resource-account-id').value='';const provider=document.querySelector('[name="resource-brand"]:checked').value,gmail=provider==='gmail',github=provider==='github';$('resource-account-field').hidden=github||gmail;$('resource-account-id').disabled=github||gmail;$('resource-token-label').textContent=gmail?'默认管理员密码':github?'GitHub PAT':'API Token';$('resource-token').minLength=gmail?12:20;$('resource-token').maxLength=gmail?72:512;$('resource-name-label').textContent=gmail?'Gmail 邮箱':'账号名';$('resource-name').type=gmail?'email':'text';$('resource-name').maxLength=gmail?74:64;}
 for(const radio of document.querySelectorAll('[name="resource-brand"]'))radio.addEventListener('change',providerChanged);
 for(const [id,mode] of [['resource-view-account','account'],['resource-view-kind','resource']])$(id).addEventListener('click',()=>{view=mode;$('resource-view-account').setAttribute('aria-pressed',String(mode==='account'));$('resource-view-kind').setAttribute('aria-pressed',String(mode==='resource'));render();});
 $('resource-add').addEventListener('click',()=>{if(!busy)dialogNotice(session?'':'身份验证失败，请重新登录',session?'info':'error');$('resource-dialog').showModal();($('resource-fields').disabled?$('resource-close'):document.querySelector('[name="resource-brand"]:checked')).focus();});

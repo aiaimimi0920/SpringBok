@@ -8,6 +8,8 @@ export class ConnectionVault extends Vault {
   }
   inspectBudgetTables() { return this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE name IN ('usage_budget_meta','usage_budgets') ORDER BY name").toArray(); }
   expireListing() { this.ctx.storage.sql.exec("UPDATE resource_lists SET listing=json_set(listing,'$.checkedAt',0)"); }
+  expireAdminOverrides() { this.ctx.storage.sql.exec("UPDATE admin_profiles SET metadata=json_set(metadata,'$.expiresAt',1) WHERE json_extract(metadata,'$.kind')='override'"); }
+  adminProfileCount() { return this.ctx.storage.sql.exec('SELECT count(*) AS n FROM admin_profiles').one().n; }
   legacyDeploymentIndex() { this.ctx.storage.sql.exec("UPDATE connection_deployments SET record=json_remove(record,'$.service')"); }
   breakStorage(kind) {
     if (kind === 'owner') this.ctx.storage.sql.exec('DELETE FROM connection_owner');

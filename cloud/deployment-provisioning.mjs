@@ -6,6 +6,7 @@ import { connectedStub } from './connected-store.mjs';
 import { serviceSummary } from './service-instance.mjs';
 import { finalizePreview } from './service-preview.mjs';
 import { resolveDeploymentDomains } from './deployment-domains.mjs';
+import { bootstrapConfiguration } from './admin-profiles.mjs';
 
 export async function automaticDraft(vault,owner,input,application){
   const declaration=application.declaration,accounts={},connections={github:input.github,cloudflare:input.cloudflare},credentials={},facts={};
@@ -17,7 +18,7 @@ export async function automaticDraft(vault,owner,input,application){
     connections[connectionKey]=reference;credentials[account.secret]=connectionKey;
     accounts[account.key]={accountId:row.target,connection:reference};
   }
-  let resources={},values=await resolveDeploymentDomains(vault,owner,input,declaration,accounts);
+  let resources={},previous=null,values=await resolveDeploymentDomains(vault,owner,input,declaration,accounts);
   for(const account of declaration.accounts){
     if(!input.instance&&(declaration.fields.some(f=>!Object.hasOwn(values,f.path.join('.'))&&f.template?.includes('{subdomain:'+account.key+'}'))||declaration.resources.some(resource=>resource.nameTemplate.includes('{subdomain:'+account.key+'}')))){
       const {row,sealed}=vault.activeConnection(accounts[account.key].connection.id,accounts[account.key].connection.revision);
@@ -28,6 +29,7 @@ export async function automaticDraft(vault,owner,input,application){
   }
   if(input.instance){
     const prior=await connectedStub(vault.env,input.instance.previousTaskId).bootstrap(owner);
+    previous=prior.plan.configuration;
     requireSba(prior.plan.application.declaration.schemaVersion===2);
     resources=structuredClone(prior.plan.resources);
     values={...Object.fromEntries(declaration.fields.map(field=>[field.path.join('.'),field.path.reduce((value,key)=>value?.[key],prior.plan.configuration)])),...input.values};
@@ -38,6 +40,7 @@ export async function automaticDraft(vault,owner,input,application){
   }
   for(const field of declaration.resources){const source=accounts[field.account],row=resources[field.key];requireSba(row&&row.accountId===source.accountId&&row.connectionId===source.connection.id);}
   const configuration=automaticConfiguration(declaration,values,resources,accounts,input.environment,facts);
+  bootstrapConfiguration(vault,owner,input,declaration,configuration,credentials,previous);
   for(const reference of Object.values(connections))vault.activeConnection(reference.id,reference.revision);
   return {accounts,connections,credentials,resources,configuration};
 }

@@ -68,6 +68,8 @@ jobs:
         run: node tests/browser/automatic-deployment.mjs
       - name: Check registered domain selection and exact subdomain deployment
         run: node tests/browser/domain-deployment.mjs
+      - name: Check Gmail bootstrap profiles and private password overrides
+        run: node tests/browser/admin-bootstrap.mjs
       - name: Check domain selection with a manual URL declaration
         run: node tests/browser/domain-deployment.mjs
         env:

@@ -10,7 +10,7 @@ let catalog = new Map(), scanning = false, scannedAt = 0, scanErrors = new Map()
 let catalogOrder = new Map();
 let scanProgress = null;
 let instances = new Map(), states = new Map(), usage = new Map(), historyRecords = new Map();
-let registeredResources = [];
+let registeredResources = [], adminProfiles = [], adminOverride = null;
 let selected = null, application = null, updateTarget = null, preview = null, busy = false, selectionBusy = false, submitting = false;
 let importing = false;
 let deletionReview = null, deletionGeneration = 0, deletionSubmitting = false, deletionFocus = null;
@@ -44,7 +44,7 @@ function invalidate() {
   deletionGeneration++; deletionReview = null; $('service-delete-dialog').close();
   generation++; dialogGeneration++; session = null; clearTimeout(pollTimer); loadingCount = 0; loading(0);
   catalog.clear(); catalogOrder.clear(); instances.clear(); states.clear(); usage.clear(); historyRecords.clear(); usagePending.clear();
-  registeredResources = [];
+  registeredResources = []; adminProfiles = []; adminOverride = null;
   application = null; preview = null; selectedResources = new Map(); busy = false; selectionBusy = false; submitting = false;
   $('service-list').replaceChildren(); $('service-tabs').replaceChildren(); $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); $('service-review').replaceChildren();
   $('service-dialog').close(); controls();
@@ -343,6 +343,7 @@ function syncDomainOptions() {
   }
 }
 function buildFields(data) {
+  adminOverride = null;
   $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
   if (data.status !== 'ready') return;
   const platform = element('output', 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
@@ -377,6 +378,18 @@ function buildFields(data) {
       addField($('service-resources'), 'service-resource-' + field.key, field.label + ' · ' + resourceLabels[field.kind], output);
     }
     domainFields(data);
+    if(data.declaration.administrator&&!updateTarget&&!rehearsing){
+      const select=element('select'),password=element('input'),mode=element('select');
+      fillOptions(select,adminProfiles.map(row=>[row.id,row.email]),'不初始化管理员');
+      if(adminProfiles.length===1)select.value=adminProfiles[0].id;
+      password.type='password';password.autocomplete='new-password';password.minLength=12;password.maxLength=72;
+      addField($('service-inputs'),'service-admin-profile','管理员邮箱',select);
+      fillOptions(mode,[['default','默认密码'],['override','本次密码']]);
+      addField($('service-inputs'),'service-admin-mode','管理员密码',mode);
+      addField($('service-inputs'),'service-admin-password','本次密码',password);
+      const sync=()=>{adminOverride=null;password.value='';password.placeholder='';mode.disabled=!select.value;password.disabled=!select.value||mode.value!=='override';password.required=!password.disabled;password.closest('.field').hidden=password.disabled;};
+      select.addEventListener('change',sync);mode.addEventListener('change',sync);sync();
+    }
     return;
   }
   for (const field of data.declaration.resources) {
@@ -541,14 +554,30 @@ async function prepare(event) {
       if (!zone) throw new Error('所选域名不可用');
       domains[select.dataset.domainPath] = { resource: { id: zone.id, revision: zone.revision }, subdomain: $('service-subdomain-' + index).value.trim() };
     }
+    let administrator;
+    if($('service-admin-profile')?.value){
+      const profile=adminProfiles.find(row=>row.id===$('service-admin-profile').value);if(!profile)throw new Error('管理员邮箱不可用');
+      administrator={profile:{id:profile.id,revision:profile.revision}};
+      const password=$('service-admin-password');
+      if($('service-admin-mode').value==='override'&&password.value){
+        const secretInput={action:'admin-override',id:crypto.randomUUID(),profile:administrator.profile,password:password.value};password.value='';
+        let result;try{result=await request('/api/admin/resources',secretInput);}finally{secretInput.password=undefined;}
+        if(!currentDialog(version,pageVersion))return;
+        adminOverride={id:result.profile.id,revision:result.profile.revision};
+        password.required=false;password.placeholder='已设置';
+      }
+      if($('service-admin-mode').value==='override'){if(!adminOverride)throw new Error('请输入本次管理员密码');administrator.override=adminOverride;}
+    }
     const body = { action: 'preview', github: data.github, repository: data.repository, sourceSha: data.sourceSha, cloudflare,
       environment: $('service-environment').value, values, resources: selections,
       ...(accounts ? { accounts } : {}),
       ...(Object.keys(domains).length ? { domains } : {}),
+      ...(administrator ? { administrator } : {}),
       ...(updateTarget ? { instance: { id: updateTarget.instance.id, previousTaskId: updateTarget.taskId } } : {}) };
     const result = await request(api + 'plan', body); if (!currentDialog(version, pageVersion)) return; preview = result;
     const details = element('dl');
     const plan = result.plan;
+    if(administrator)details.append(element('dt','管理员邮箱'),element('dd',adminProfiles.find(row=>row.id===administrator.profile.id).email),element('dt','管理员密码'),element('dd',administrator.override?'本次配置':'已保存的默认密码'));
     for (const [label, value] of [['服务', plan.application.manifest.name], ['版本', `v${plan.application.manifest.version} · ${plan.application.sourceSha}`], ['环境', plan.policy.environment], ['账户', connections.find(row => row.id === cloudflare.id)?.accountName ?? connections.find(row => row.id === cloudflare.id)?.target], ['绑定资源', Object.values(plan.resources).map(row => `${resourceLabels[row.kind]} · ${row.name}`).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
     if (automatic) {
       for (const account of data.declaration.accounts.slice(1)) details.append(element('dt', account.label), element('dd', plan.accounts[account.key].accountId));
@@ -641,7 +670,7 @@ async function initialize() {
   try {
     const auth = await request('/api/admin/state'); if (!current(version)) return; session = auth;
     const result = await request('/api/admin/connections'); if (!current(version)) return; connections = result.connections;
-    const resources = await request('/api/admin/resources'); if (!current(version)) return; registeredResources = resources.resources;
+    const resources = await request('/api/admin/resources'); if (!current(version)) return; registeredResources = resources.resources; adminProfiles = resources.adminProfiles??[];
     await refreshInstances(); if (!current(version)) return; controls();
     if (location.hash || $('service-dialog').open) await openDialog();
   } catch (error) { if (current(version)) { invalidate(); notice(error.message, 'error'); } }

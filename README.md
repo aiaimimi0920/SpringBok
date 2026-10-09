@@ -3,7 +3,7 @@
 ## 开发者文档
 
 - **让 AI 为你的服务接入 SBA**：[AI 接入入口](ai-docs/README.md)。
-- **人类阅读的开发者站**：[站点源码与本地预览](pages/README.md)，介绍项目、接入流程、每个 SBA 文件和可验证示例。
+- **人类阅读的开发者站**：[在线文档](https://aiaimimi0920.github.io/SpringBok/) · [站点源码与本地预览](pages/README.md)，介绍项目、接入流程、每个 SBA 文件和可验证示例。
 - **贡献代码**：提交前按 [AGENTS.md](AGENTS.md) 检查两种文档入口的影响；协议参考共用事实源。
 
 当前接入文档面向 manifest v3 与 deployment v2；下方保留历史开发切片，不作为最新字段参考。

@@ -1,5 +1,8 @@
 # 人类开发者文档站
 
+发布地址：https://aiaimimi0920.github.io/SpringBok/ 。由 main 的 Pages 工作流发布；
+本地构建、PR 检查通过并不等于网站已经更新，应另核对发布任务和实际页面。
+
 `site.json` 是显式页面清单。`content/` 放人类入口文章；逐文件参考与接入流程直接读取
 `../ai-docs/` 的对应 Markdown，示例读取同一份教学文件，不维护第二套协议字段。
 `build.mjs` 使用无第三方依赖的受限 Markdown 渲染器：标题、段落、列表、表格、代码块、

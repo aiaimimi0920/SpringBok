@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 3,
+  "taskId": "dc-00000000000000000000000000000001",
+  "action": "deploy",
+  "repository": "example/demo-service",
+  "sourceSha": "1111111111111111111111111111111111111111",
+  "applicationId": "demo-service",
+  "applicationVersion": "1.0.0",
+  "environment": "demo",
+  "configuration": { "accountId": "00000000000000000000000000000000", "server": { "name": "demo-server", "url": "https://demo.example.com" } },
+  "previous": null
+}

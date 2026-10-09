@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 3,
+  "id": "demo-service",
+  "name": "SBA teaching skeleton",
+  "version": "1.0.0",
+  "entrypoint": "springbok.ps1",
+  "runtime": { "runner": "windows-2025", "powershell": "5.1", "python": "3.12", "node": "22" },
+  "actions": {
+    "deploy": { "timeoutSeconds": 300 },
+    "update": { "timeoutSeconds": 300 },
+    "verify": { "timeoutSeconds": 60 },
+    "preview": { "timeoutSeconds": 300 },
+    "destroy-preview": { "timeoutSeconds": 300 }
+  },
+  "secrets": ["CLOUDFLARE_API_TOKEN"]
+}

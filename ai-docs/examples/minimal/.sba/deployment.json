@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "target": "cloudflare-workers",
+  "accountPath": ["accountId"],
+  "accountMode": "single",
+  "accounts": [{ "key": "runtime", "label": "Cloudflare", "path": ["accountId"], "secret": "CLOUDFLARE_API_TOKEN" }],
+  "defaults": { "server": {} },
+  "fields": [
+    { "path": ["server", "name"], "label": "Worker", "type": "text", "required": true, "template": "{instance}-server" },
+    { "path": ["server", "url"], "label": "HTTPS origin", "type": "text", "required": true, "template": null }
+  ],
+  "resources": [],
+  "targets": [
+    { "kind": "worker", "path": ["server", "name"], "account": "runtime" },
+    { "kind": "domain", "path": ["server", "url"], "account": "runtime" }
+  ]
+}

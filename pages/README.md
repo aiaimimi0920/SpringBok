@@ -7,6 +7,8 @@
 `../ai-docs/` 的对应 Markdown，示例读取同一份教学文件，不维护第二套协议字段。
 `build.mjs` 使用无第三方依赖的受限 Markdown 渲染器：标题、段落、列表、表格、代码块、
 链接、行内代码及加粗；HTML 一律转义，不执行远程 include 或 JavaScript。
+公开 Markdown、教学示例及样式通过同一已打开的普通文件句柄读取，拒绝链接来源；
+不以“先检查路径、随后重新打开”的方式读取已检查文件。
 
 ```sh
 node pages/check-example.mjs

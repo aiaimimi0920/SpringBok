@@ -1,15 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { build, renderMarkdown, safeHref } from './build.mjs';
+import { build, renderMarkdown, safeHref, readPublicFile } from './build.mjs';
 import { checkExample, root, exampleRoot } from './check-example.mjs';
 import { validateManifest, validateRequest, validateResult } from '../src/sba/contract.mjs';
 import { deploymentDeclaration, automaticConfiguration } from '../cloud/deployment-contract.mjs';
 const json = async path => JSON.parse(await readFile(resolve(root, path), 'utf8'));
 const temporary = () => mkdtemp(join(process.env.DOCS_TEST_TMP || tmpdir(), 'springbok-docs-'));
+
+test('public source reader uses a regular open file and rejects linked source directories', async () => {
+  const base = await temporary(), target = join(base,'public.md'), link = join(base,'linked');
+  await writeFile(target,'# Public\n','utf8');
+  assert.equal(await readPublicFile(target),'# Public\n');
+  await symlink(base,link,process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(readPublicFile(join(link,'public.md')),/Symlink source rejected/);
+  await assert.rejects(readPublicFile(base),/regular file/);
+});
 
 test('example uses actual v3/v2 contracts without claiming deployment', async () => {
   assert.deepEqual(await checkExample(), {application:'demo-service',manifest:3,deployment:2,execution:false});

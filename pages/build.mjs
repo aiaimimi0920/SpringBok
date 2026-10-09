@@ -1,4 +1,5 @@
-import { readFile, mkdir, writeFile, copyFile, lstat, readdir, realpath } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, open, readdir, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkExample, root } from './check-example.mjs';
@@ -68,13 +69,20 @@ const examples = {
   manifest: ['.sba/manifest.json', 'json'], deployment: ['.sba/deployment.json', 'json'],
   entrypoint: ['.sba/springbok.ps1', 'powershell'], request: ['request.json', 'json'],
 };
+export async function readPublicFile(path) {
+  if (resolve(await realpath(path)) !== resolve(path)) throw new Error('Symlink source rejected');
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    if (!(await handle.stat()).isFile()) throw new Error('Source must be a regular file');
+    return await handle.readFile('utf8');
+  } finally { await handle.close(); }
+}
 async function sourceFor(page) {
   if (!/^(ai-docs\/[a-z-]+\.md|pages\/content\/[a-z-]+\.md)$/.test(page.source)) throw new Error('Source not in public documentation allowlist');
   const path = resolve(root, page.source);
-  if ((await lstat(path)).isSymbolicLink() || resolve(await realpath(path)) !== path) throw new Error('Symlink source rejected');
-  let text = await readFile(path, 'utf8');
+  let text = await readPublicFile(path);
   for (const [name, [file, language]] of Object.entries(examples)) {
-    text = text.replaceAll(`{{example:${name}}}`, '```' + language + '\n' + (await readFile(resolve(root, 'ai-docs/examples/minimal', file), 'utf8')).trim() + '\n```');
+    text = text.replaceAll(`{{example:${name}}}`, '```' + language + '\n' + (await readPublicFile(resolve(root, 'ai-docs/examples/minimal', file))).trim() + '\n```');
   }
   if (text.includes('{{example:')) throw new Error('Unknown example');
   return text;
@@ -109,7 +117,7 @@ export async function build(output) {
   // No recursive copies: internal docs, vaults and deployment evidence cannot enter the artifact.
   await mkdir(out, { recursive: true });
   for (const [file, html] of documents) await writeFile(resolve(out, file), html, 'utf8');
-  await copyFile(resolve(root, 'pages/style.css'), resolve(out, 'style.css'));
+  await writeFile(resolve(out, 'style.css'), await readPublicFile(resolve(root, 'pages/style.css')), 'utf8');
   await writeFile(resolve(out, '.nojekyll'), '', 'utf8');
   return documents.map(([file]) => file);
 }

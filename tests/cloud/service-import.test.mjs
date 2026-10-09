@@ -23,7 +23,7 @@ test('import reads only provider metadata, preserves unknown version, commits on
   assert.deepEqual((await service('import-submit', p)).json(), record);
   const again = await preview(x); assert.deepEqual((await service('import-submit', again)).json(), record);
   await f.restart();
-  assert.deepEqual((await service('service-state', { instanceId: record.instance.id, reconcile: true })).json(), record);
+  assert.deepEqual((await service('service-state', { instanceId: record.instance.id, reconcile: true })).json(), { ...record, canDelete: true });
   assert.equal((await service('services')).json().services.length, 1);
   assert.deepEqual((await f.call('/api/admin/connections', session)).json(), before);
   assert.equal(state.dispatches, 0); assert.ok(state.requests.every(row => row.method === 'GET'));

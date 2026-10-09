@@ -64,7 +64,7 @@ try {
   assert.equal(await page.locator('#connection-save').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(9, 12, 17)');
   await page.screenshot({ path: join(directory, 'neuro-auth-error.png') });
   token = f.jwt(); await ready(page); await configureService(page,input,resource); await reviewService(page);
-  assert.equal(await page.locator('.service-form-scroll').evaluate(el => getComputedStyle(el).overflowY), 'auto');
+  assert.equal(await page.locator('#service-form .service-form-scroll').evaluate(el => getComputedStyle(el).overflowY), 'auto');
   await page.screenshot({ path: join(directory, 'neuro-deployment-review.png') });
   assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   assert.deepEqual(errors, []);

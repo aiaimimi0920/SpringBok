@@ -3,6 +3,14 @@ import { connectedStub, connectedTaskId } from './connected-store.mjs';
 import { serviceId, serviceEntries, serviceSummary } from './service-instance.mjs';
 import { exactSba, requireSba } from './sba-control.mjs';
 import { importedId } from './service-import.mjs';
+import { deletionInventory } from './service-deletion-provider.mjs';
+
+async function deletionState(env, vault, owner, state) {
+  const deletion = await vault.deletionRecord(owner, state.instance.id);
+  if (deletion) return { ...state, deletion, status: deletion.status === 'deleting' && Date.now() - deletion.updatedAt > 120000 ? 'delete-unknown' : deletion.status, canUpdate: false, canPreview: false, canDeletePreview: false, canDelete: false };
+  let supported = false; try { deletionInventory(state.instance); supported = !!state.instance.connections?.cloudflare; } catch { /* 未支持的资源不能部分销毁。 */ }
+  return { ...state, canDelete: connectedEnabled(env) && supported && !state.instance.previewOf && (state.status === 'imported' || ['succeeded', 'deployed-unverified'].includes(state.job?.status)) };
+}
 
 export function importedState(record) {
   const { candidate } = record;
@@ -21,7 +29,7 @@ export async function serviceIndex(vault, owner) {
 }
 export async function serviceState(env, vault, owner, input) {
   exactSba(input, ['instanceId', 'reconcile']); requireSba(typeof input.reconcile === 'boolean');
-  if (importedId(input.instanceId)) { const record = (await vault.importedIndex(owner)).find(row => row.id === input.instanceId); requireSba(record); return importedState(record); }
+  if (importedId(input.instanceId)) { const record = (await vault.importedIndex(owner)).find(row => row.id === input.instanceId); requireSba(record); return deletionState(env, vault, owner, importedState(record)); }
   connectedTaskId(input.instanceId);
   const entries = serviceEntries(await vault.deploymentIndex(owner), input.instanceId); requireSba(entries.length);
   const latest = entries[0], record = await connectedState(env, owner, latest.taskId, input.reconcile);
@@ -29,10 +37,10 @@ export async function serviceState(env, vault, owner, input) {
   if (record.status === 'preparation-unconfirmed') return { ...record, instance: latest.service ?? { id: input.instanceId }, history, canUpdate: false };
   const { plan } = await connectedStub(env, latest.taskId).bootstrap(owner);
   const terminal = ['succeeded', 'deployed-unverified'].includes(record.job?.status), previewInstance = !!plan.previewOf;
-  return { ...record, instance: serviceSummary(latest.taskId, plan), history, configuration: plan.configuration, declaration: plan.application.declaration,
+  return deletionState(env, vault, owner, { ...record, instance: serviceSummary(latest.taskId, plan), history, configuration: plan.configuration, declaration: plan.application.declaration,
     canUpdate: connectedEnabled(env) && terminal && !previewInstance,
     canPreview: connectedEnabled(env) && terminal && !previewInstance,
     canDeletePreview: connectedEnabled(env) && terminal && plan.operation?.action === 'preview',
     testUrls: plan.operation?.action === 'preview' && terminal ? record.job.result.lifecycle?.urls ?? [] : [],
-    ...(plan.operation?.action === 'destroy-preview' && record.job?.status === 'succeeded' ? { status: 'deleted' } : {}) };
+    ...(plan.operation?.action === 'destroy-preview' && record.job?.status === 'succeeded' ? { status: 'deleted' } : {}) });
 }

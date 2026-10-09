@@ -5,9 +5,10 @@ export const statusText = status => ({
   'dispatch-unknown': '派发未确认', running: '部署中', succeeded: '部署成功',
   'deployed-unverified': '已部署，待验证', failed: '部署失败', unknown: '结果未确认',
   'preparation-unconfirmed': '准备未确认', unavailable: '读取失败', imported: '已导入', deleted: '已删除',
+  deleting: '正在删除', 'delete-unknown': '删除未确认',
 }[status] ?? '状态未知');
 export const statusTone = status => status === 'succeeded' ? 'success' : status === 'failed' || status === 'unavailable' ? 'error' :
-  ['unknown', 'dispatch-unknown', 'deployed-unverified', 'preparation-unconfirmed'].includes(status) ? 'warning' : 'info';
+  ['unknown', 'dispatch-unknown', 'deployed-unverified', 'preparation-unconfirmed', 'delete-unknown'].includes(status) ? 'warning' : 'info';
 export const valueAt = (root, path) => path.reduce((value, key) => value && Object.hasOwn(value, key) ? value[key] : undefined, root);
 export function newerVersion(next, previous) {
   const valid = value => typeof value === 'string' && /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/.test(value);

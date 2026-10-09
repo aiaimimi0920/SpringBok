@@ -31,6 +31,26 @@ export class ConnectedDeployment extends SbaDeployment {
   async policyFor(actor){const record=await this.bootstrap(actor);return sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(record.plan.policy)});}
   async requestFor(policy,taskId,manifest){const record=await this.bootstrap();requireSba(record.taskId===taskId);return sbaRequest(policy,taskId,manifest,record.plan.operation??null);}
   async begin(actor,input){const record=await this.bootstrap(actor);requireSba(input.request.taskId===record.taskId);return super.begin(actor,input);}
+  async verification(actor) {
+    await this.bootstrap(actor);
+    const sql=this.ctx.storage.sql;
+    if(!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_verification'").toArray().length)return null;
+    return JSON.parse(sql.exec('SELECT record FROM connected_verification WHERE id=1').one().record);
+  }
+  async reserveVerification(actor) {
+    const parent=await this.bootstrap(actor),job=await this.inspect(actor);
+    requireSba(!parent.plan.verificationOf&&!parent.plan.previewOf&&['deploy','update'].includes(job?.request.action)&&
+      ['unknown','failed','succeeded','deployed-unverified'].includes(job.status)&&job.result!==null);
+    return this.ctx.storage.transactionSync(()=>{
+      const sql=this.ctx.storage.sql;
+      sql.exec('CREATE TABLE IF NOT EXISTS connected_verification (id INTEGER PRIMARY KEY CHECK(id=1), record TEXT NOT NULL)');
+      const prior=sql.exec('SELECT record FROM connected_verification WHERE id=1').toArray()[0];
+      if(prior)return {...JSON.parse(prior.record),dispatch:false};
+      const value={taskId:'dc-'+crypto.randomUUID().replaceAll('-',''),parentTaskId:parent.taskId,createdAt:Date.now()};
+      sql.exec('INSERT INTO connected_verification VALUES(1,?)',JSON.stringify(value));
+      return {...value,dispatch:true};
+    });
+  }
   recoverUnstarted(){throw new Error('connected recovery not authorized');}
   recoverAuthorized(){throw new Error('connected recovery not authorized');}
 }

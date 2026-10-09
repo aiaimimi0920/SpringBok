@@ -4,6 +4,7 @@ import { serviceId, serviceEntries, serviceSummary } from './service-instance.mj
 import { exactSba, requireSba } from './sba-control.mjs';
 import { importedId } from './service-import.mjs';
 import { deletionInventory } from './service-deletion-provider.mjs';
+import { canVerifyService, verificationState } from './service-verification.mjs';
 
 async function deletionState(env, vault, owner, state) {
   const deletion = await vault.deletionRecord(owner, state.instance.id);
@@ -36,8 +37,9 @@ export async function serviceState(env, vault, owner, input) {
   const history = entries.map(entry => ({ taskId: entry.taskId, createdAt: entry.createdAt, action: entry.service?.action ?? 'deploy', application: entry.service?.application ?? null }));
   if (record.status === 'preparation-unconfirmed') return { ...record, instance: latest.service ?? { id: input.instanceId }, history, canUpdate: false };
   const { plan } = await connectedStub(env, latest.taskId).bootstrap(owner);
+  const verification = await verificationState(env, owner, latest.taskId, input.reconcile);
   const terminal = ['succeeded', 'deployed-unverified'].includes(record.job?.status), previewInstance = !!plan.previewOf;
-  return deletionState(env, vault, owner, { ...record, instance: serviceSummary(latest.taskId, plan), history, configuration: plan.configuration, declaration: plan.application.declaration,
+  return deletionState(env, vault, owner, { ...record, verification, canVerify: connectedEnabled(env) && !verification && canVerifyService(plan, record.job), instance: serviceSummary(latest.taskId, plan), history, configuration: plan.configuration, declaration: plan.application.declaration,
     canUpdate: connectedEnabled(env) && terminal && !previewInstance,
     canPreview: connectedEnabled(env) && terminal && !previewInstance,
     canDeletePreview: connectedEnabled(env) && terminal && plan.operation?.action === 'preview',

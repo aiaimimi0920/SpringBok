@@ -100,7 +100,9 @@ function renderInstances() {
     if (instance?.action === 'update' && !['succeeded', 'deployed-unverified'].includes(status)) version.append(element('small', ' → v' + app.version));
     const target = element('div'); target.append(element('span', instance?.environment ?? '—'), element('small', connections.find(row => row.id === instance?.connections?.cloudflare.id)?.accountName ?? instance?.accountId ?? '—'));
     const label = instance?.action === 'destroy-preview' ? ({ running: '正在清理', failed: '清理失败', unknown: '清理结果未确认' })[status] : null;
-    const badge = element('span', label ?? statusText(status), 'service-status'); badge.dataset.tone = statusTone(status);
+    const availability = state?.verification?.status === 'succeeded' && !state?.deletion;
+    const verifying = ['dispatching','dispatched','running'].includes(state?.verification?.status);
+    const badge = element('span', availability ? '可用性已验证' : verifying ? '验证中' : label ?? statusText(status), 'service-status'); badge.dataset.tone = availability ? 'success' : statusTone(status);
     const resource = element('div', resourceCountText(instance), 'service-bindings');
     if (instance?.connections) {
       const bound = boundResources(instance), values = bound.slice(0, 2).map(item => `${item.name} ${resourceMetrics(instance, item, usage)[0].text}`);
@@ -122,6 +124,14 @@ function renderInstances() {
       test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
       const remove = focusKey(element('button', '删除', 'danger'), id + '/delete'); remove.type = 'button'; remove.disabled = !state?.canDelete || !session;
       remove.addEventListener('click', () => void openDeleteService(state, remove)); actions.append(remove);
+      if(state?.canVerify){
+        const verify=focusKey(element('button','验证可用性'),id+'/verify');verify.type='button';verify.disabled=!session;
+        verify.addEventListener('click',async()=>{
+          const version=generation;verify.disabled=true;
+          try{await request(api+'verify',{instanceId:id,previousTaskId:state.taskId});if(current(version))await refreshInstances();}
+          catch(error){if(current(version))notice(error.message,'error');}
+        });actions.append(verify);
+      }
     }
     row.append(title, version, target, badge, resource, actions); li.append(row);
     const detailPanel = element('div', undefined, 'service-details'); detailPanel.id = 'details-' + id; detailPanel.hidden = !expanded.has(id);
@@ -129,6 +139,12 @@ function renderInstances() {
       const info = element('dl');
       for (const [name, value] of [['实例', id], ['任务', state?.taskId ?? entry.taskId ?? '—'], ['目标版本', app?.version ? `v${app.version} · ${app.sourceSha}` : '—'], ['最近提交', new Date(entry.createdAt).toLocaleString()], ['错误代码', state?.job?.errorCode ?? state?.errorCode ?? '—']]) info.append(element('dt', name), element('dd', value));
       detailPanel.append(info);
+      if(state?.verification){
+        const verified=state.verification,proof=element('dl');
+        for(const [name,value] of [['部署结果',statusText(status)],['可用性验证',verified.status==='succeeded'?'通过':statusText(verified.status)],['验证任务',verified.taskId],['验证提交时间',new Date(verified.createdAt).toLocaleString()]])proof.append(element('dt',name),element('dd',value));
+        detailPanel.append(proof,fold(id+'/verification','验证回执',element('pre',JSON.stringify(verified.job?.result??{status:verified.status,errorCode:verified.errorCode??null},null,2))));
+        if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[0-9]+$/.test(verified.runUrl??'')){const link=element('a','验证记录');link.href=verified.runUrl;link.target='_blank';link.rel='noopener noreferrer';detailPanel.append(link);}
+      }
       if (state?.status === 'imported') detailPanel.append(importedDetails(state));
       for (const bound of boundResources(instance)) {
         const metrics = element('dl');
@@ -196,7 +212,7 @@ async function refreshInstances() {
   finally {
     if (current(version)) {
       listBusy = false; clearTimeout(pollTimer);
-      if ([...states.values()].some(state => state.status === 'deleting' || ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state.job?.status ?? state.status))) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(); }, 5000);
+      if ([...states.values()].some(state => state.status === 'deleting' || ['dispatching','dispatched','running'].includes(state.verification?.status) || ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state.job?.status ?? state.status))) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(); }, 5000);
     }
   }
 }

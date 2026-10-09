@@ -65,7 +65,7 @@ export async function connectedState(env,owner,taskId,reconcile=false){
     else if(outcome.status==='unknown')await stub.markUnknown(owner,taskId);
   }}
   const snapshot=await stub.snapshot(owner);
-  if(['succeeded','deployed-unverified'].includes(snapshot.job?.status)){
+  if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(snapshot.job?.status)){
     const index=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);
   }
   return {...snapshot,taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null};
@@ -85,12 +85,12 @@ export async function connectedMachineRouter(request,env,readBody){
     const executor=createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN});requireSba((await executor.inspectRun(identity.runId,job.request,job.manifest)).status==='pending');
     const vault=vaultFor(env,record.owner);
     if(url.pathname==='/sba/v2/source'){
-      const token=await vault.deploymentCredential(record.owner,input.taskId,'github'),bytes=await githubSourcePack(job.request.repository,job.request.sourceSha,token);
+      const token=await vault.deploymentCredential(record.owner,record.plan.verificationOf??input.taskId,'github'),bytes=await githubSourcePack(job.request.repository,job.request.sourceSha,token);
       return new Response(bytes,{headers:{'content-type':SOURCE_CONTENT_TYPE,'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
     }
     const mapping=record.plan.credentials??{CLOUDFLARE_API_TOKEN:'cloudflare'};
     requireSba(canonicalSba([...policy.secretNames].sort())===canonicalSba(Object.keys(mapping).sort()));
-    const secrets={};for(const name of policy.secretNames)secrets[name]=await vault.deploymentCredential(record.owner,input.taskId,mapping[name]);
+    const secrets={};for(const name of policy.secretNames)secrets[name]=record.plan.verificationOf?'verification-not-applicable':await vault.deploymentCredential(record.owner,input.taskId,mapping[name]);
     const permit=await stub.permit(input.taskId,input.requestDigest,identity.runId);
     return reply({...permit,secrets});
   }catch{return reply({error:'SBA_PERMIT_DENIED'},403);}

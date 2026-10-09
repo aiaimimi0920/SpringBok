@@ -5,8 +5,8 @@ import { manifest, sourceSha } from './sba-fixture.mjs';
 import { fakeToken } from './connections-fixture.mjs';
 
 export const updatedSha = 'c'.repeat(40), invalidSha = 'd'.repeat(40);
-export async function serviceFixture() {
-  const fixture = await connectedFixture(), { f, state, session } = fixture, prior = state.provider;
+export async function serviceFixture(overrides={}) {
+  const fixture = await connectedFixture(overrides), { f, state, session } = fixture, prior = state.provider;
   const metadata = repository => ({ id: repository === 'owner/repo' ? 2 : repository === 'owner/second' ? 3 : 4, full_name: repository, default_branch: 'main' });
   state.repositoryPages = [[...['owner/repo', 'owner/second', 'owner/empty', 'owner/broken'].map(metadata)]];
   state.tagPages = [[{ name: 'v2.0.0', commit: { sha: updatedSha } }, { name: 'v1.0.0', commit: { sha: sourceSha } }]];

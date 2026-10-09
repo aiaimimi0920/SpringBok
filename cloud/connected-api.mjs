@@ -27,7 +27,7 @@ export async function submitConnected(env,session,input){
     if(race){requireSba(race.digest===input.plan.digest);return connectedState(env,session.actor,input.taskId);}
     throw error;
   }
-  requireSba(['preview','rehearse','destroy-preview'].includes(input.draft.action)&&canonicalSba(plan)===canonicalSba(input.plan));
+  requireSba(['preview','rehearse','destroy-preview','repair'].includes(input.draft.action)&&canonicalSba(plan)===canonicalSba(input.plan));
   const accountId=plan.accounts?.runtime.accountId??plan.resources[Object.keys(plan.resources)[0]]?.accountId??(await vault.snapshot(session.actor)).connections.find(r=>r.id===plan.connections.cloudflare.id)?.target;
   requireSba(/^[a-f0-9]{32}$/.test(accountId));
   // 检查最终公开配置，而非只查资源声明；这是配置冲突保护，不是对应用代码的沙箱。
@@ -39,7 +39,9 @@ export async function submitConnected(env,session,input){
   for(const id of accountIds){
     const resources=Object.values(plan.resources).filter(row=>row.accountId===id);
     const keys=[...new Set([...resources.flatMap(row=>plan.accounts?[row.name]:[row.remoteId,row.name]),...targets.filter(t=>!t.accountId||t.accountId===id).map(t=>t.value)].map(value=>'identity:'+value))];
-    await accountStub(env,id).claim(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuesInstance(plan)?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null);
+    const continuation=continuesInstance(plan)?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null;
+    if(plan.operation?.action==='repair')await accountStub(env,id).claimRepair(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuation,plan.operation.context);
+    else await accountStub(env,id).claim(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuation);
   }
   if(createsResources(plan))plan=await vault.provisionDeployment(session.actor,input.taskId,plan);
   // Bind generated IDs as well as names before the runner can receive credentials.

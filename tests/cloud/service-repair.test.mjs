@@ -36,6 +36,7 @@ async function setup(enabled='yes',bootstrap=false) {
 test('repair preserves parent receipt, atomically continues held lane, uses one permit and survives restart',async()=>{
   const {f,state,service,submit,machine,receipt,api,first,original,body}=await setup();
   try{
+    assert.equal((await service('service-state',{instanceId:first.taskId,reconcile:false})).json().canRepair,true);
     const preview=await service('plan',body);assert.equal(preview.status,200,preview.text);const plan=preview.json();
     assert.equal(plan.plan.operation.context.resultDigest.length,64);assert.equal(plan.plan.credentials.CLOUDFLARE_API_TOKEN,'cloudflare');
     const replies=await Promise.all([submit(plan),submit(plan)]);assert.ok(replies.every(r=>r.status===200),JSON.stringify(replies));
@@ -46,14 +47,14 @@ test('repair preserves parent receipt, atomically continues held lane, uses one 
     await f.restart();
     receipt(permit,'succeeded',{checks:['repair-completed','data-preserved','unchanged-resources-verified','service-ready'].map(id=>({id,passed:true}))});
     const done=(await service('service-state',{instanceId:first.taskId,reconcile:true})).json();
-    assert.equal(done.job.status,'succeeded');assert.equal(done.history.length,2);assert.equal(done.instance.id,first.taskId);assert.equal(done.canUpdate,true);
+    assert.equal(done.job.status,'succeeded');assert.equal(done.history.length,2);assert.equal(done.instance.id,first.taskId);assert.equal(done.canUpdate,true);assert.equal(done.canRepair,false);
     assert.deepEqual((await api('state',{taskId:first.taskId})).json().job,original.job);
     assert.equal(state.dispatches,2);
   }finally{await f.close();}
 });
 
 test('repair refuses disabled feature, missing source evidence, undeclared scope and changed resource declaration',async()=>{
-  const disabled=await setup('no');try{assert.equal((await disabled.service('plan',disabled.body)).status,409);assert.equal(disabled.state.dispatches,1);}finally{await disabled.f.close();}
+  const disabled=await setup('no');try{assert.equal((await disabled.service('service-state',{instanceId:disabled.first.taskId,reconcile:false})).json().canRepair,false);assert.equal((await disabled.service('plan',disabled.body)).status,409);assert.equal(disabled.state.dispatches,1);}finally{await disabled.f.close();}
   const {f,state,service,body}=await setup();
   try{
     assert.equal((await service('plan',{...body,repairId:'other'})).status,409);

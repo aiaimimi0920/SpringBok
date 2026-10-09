@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { serviceFixture } from '../cloud/service-fixture.mjs';
 import { origin } from '../cloud/admin-fixture.mjs';
 
-export async function serviceBrowser() {
-  const fixture = await serviceFixture(), { f } = fixture;
+export async function serviceBrowser(overrides = {}) {
+  const fixture = await serviceFixture(overrides), { f } = fixture;
   const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' }), errors = [], requests = [];
   const auth = { token: f.jwt(), intercept: null };

@@ -14,7 +14,7 @@ let registeredResources = [], adminProfiles = [], adminOverride = null;
 let selected = null, application = null, updateTarget = null, preview = null, busy = false, selectionBusy = false, submitting = false;
 let importing = false;
 let deletionReview = null, deletionGeneration = 0, deletionSubmitting = false, deletionFocus = null;
-let rehearsing = false, deletingPreview = false, testEnvironment = null;
+let rehearsing = false, repairing = false, deletingPreview = false, testEnvironment = null;
 let returnFocus = null, pollTimer = null, listBusy = false, selectedResources = new Map();
 const expanded = new Set(), statistics = new Set(), usagePending = new Set();
 const notice = (text, tone = 'info') => { $('service-notice').textContent = text; $('service-notice').dataset.tone = tone; };
@@ -23,12 +23,13 @@ function loading(delta) { loadingCount = Math.max(0, loadingCount + delta); $('s
 const ref = id => { const row = connections.find(row => row.id === id && row.state === 'verified' && row.deploymentAvailable !== false); if (!row) throw new Error('连接不可用，请检查连接设置'); return { id: row.id, revision: row.revision }; };
 const current = version => version === generation;
 const currentDialog = (version, pageVersion) => version === dialogGeneration && current(pageVersion) && $('service-dialog').open;
+const repairOptions = data => data?.manifest?.repairs?.filter(row => row.fromErrorCodes.includes(updateTarget?.job?.errorCode)) ?? [];
 
 function controls() {
   $('service-fields').disabled = !session || busy || selectionBusy || submitting || deletingPreview;
   const versionReady = deletingPreview || (!updateTarget || newerVersion(application?.manifest?.version, updateTarget.instance.application.version)) && (!rehearsing || application?.manifest?.schemaVersion === 3 && application?.declaration?.schemaVersion === 2);
-  $('service-submit').disabled = !session || busy || selectionBusy || submitting || !application || application.status !== 'ready' || !versionReady || (!preview && !selectedResources.ready) || (preview && !importing && !preview.executionEnabled);
-  $('service-submit').textContent = deletingPreview ? '确认删除测试环境' : rehearsing ? (preview ? '确认预升级测试' : '预升级测试') : importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认升级' : '确认部署') : (updateTarget ? '升级' : '部署');
+  $('service-submit').disabled = !session || busy || selectionBusy || submitting || !application || application.status !== 'ready' || !versionReady || (repairing && !repairOptions(application).some(row => row.id === $('service-repair')?.value)) || (!preview && !selectedResources.ready) || (preview && !importing && !preview.executionEnabled);
+  $('service-submit').textContent = deletingPreview ? '确认删除测试环境' : repairing ? (preview ? '确认修复' : '预览修复') : rehearsing ? (preview ? '确认预升级测试' : '预升级测试') : importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认升级' : '确认部署') : (updateTarget ? '升级' : '部署');
   $('service-submit').classList.toggle('danger', deletingPreview); $('service-submit').classList.toggle('primary', !deletingPreview);
   $('service-back').hidden = !preview || deletingPreview; $('service-back').disabled = busy || submitting;
   $('service-edit').hidden = !!preview || application?.status !== 'ready'; $('service-review').hidden = !preview;
@@ -124,6 +125,10 @@ function renderInstances() {
       test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
       const remove = focusKey(element('button', '删除', 'danger'), id + '/delete'); remove.type = 'button'; remove.disabled = !state?.canDelete || !session;
       remove.addEventListener('click', () => void openDeleteService(state, remove)); actions.append(remove);
+      if(state?.canRepair){
+        const repair=focusKey(element('button','修复'),id+'/repair');repair.type='button';repair.disabled=!session;
+        repair.addEventListener('click',()=>void openDialog(state,repair,'repair'));actions.append(repair);
+      }
       if(state?.canVerify){
         const verify=focusKey(element('button','验证可用性'),id+'/verify');verify.type='button';verify.disabled=!session;
         verify.addEventListener('click',async()=>{
@@ -158,7 +163,7 @@ function renderInstances() {
       const records = element('div');
       for (const item of state?.history ?? []) {
         const itemRow = element('div', undefined, 'service-history-row');
-        const button = focusKey(element('button', `${({ update: '升级', preview: '预升级测试', 'destroy-preview': '删除测试环境' })[item.action] ?? '部署'} · ${item.application ? 'v' + item.application.version : item.taskId} · ${new Date(item.createdAt).toLocaleString()}`), id + '/task/' + item.taskId); button.type = 'button';
+        const button = focusKey(element('button', `${({ update: '升级', repair: '修复', preview: '预升级测试', 'destroy-preview': '删除测试环境' })[item.action] ?? '部署'} · ${item.application ? 'v' + item.application.version : item.taskId} · ${new Date(item.createdAt).toLocaleString()}`), id + '/task/' + item.taskId); button.type = 'button';
         const output = element('pre'), cached = historyRecords.get(item.taskId); if (cached) output.textContent = JSON.stringify(cached.job ?? cached, null, 2);
         button.addEventListener('click', async () => {
           if (historyRecords.has(item.taskId)) { historyRecords.delete(item.taskId); renderInstances(); return; }
@@ -206,7 +211,7 @@ async function refreshInstances() {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
         if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
-      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
+      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
     });
   } catch (error) { if (current(version)) notice(error.message, 'error'); }
   finally {
@@ -375,7 +380,7 @@ function buildFields(data) {
   const platform = element('output', 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
   const config = updateTarget?.configuration ?? data.declaration.defaults;
   const automatic = data.declaration.schemaVersion === 2;
-  for (const [index, field] of (importing || rehearsing ? [] : data.declaration.fields).entries()) {
+  for (const [index, field] of (importing || rehearsing || repairing ? [] : data.declaration.fields).entries()) {
     if (automatic && field.template !== null) continue;
     const input = element(field.type === 'json' ? 'textarea' : 'input'), initial = valueAt(config, field.path);
     input.required = field.required; input.value = field.type === 'json' ? JSON.stringify(initial ?? {}, null, 2) : String(initial ?? '');
@@ -389,6 +394,15 @@ function buildFields(data) {
   $('service-environment').value = rehearsing ? testEnvironment : updateTarget?.instance.environment ?? (automatic ? 'app-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : '');
   $('service-environment').closest('.field').hidden = importing; $('service-config-heading').hidden = importing || automatic;
   $('service-version-label').textContent = importing ? '声明版本' : '版本';
+  if (repairing) {
+    const select = element('select'), options = repairOptions(data); select.required = true;
+    fillOptions(select, options.map(row => [row.id, row.name]), options.length ? '请选择修复操作' : '无匹配修复操作');
+    if(options.length === 1)select.value = options[0].id;
+    select.addEventListener('change', () => { clearPreview(); controls(); });
+    addField($('service-inputs'), 'service-repair', '修复操作', select);
+    for(const [key, resource] of Object.entries(updateTarget.instance.resources))addField($('service-resources'), 'service-repair-resource-' + key, resourceLabels[resource.kind], element('output', resource.name + ' · ' + resource.remoteId));
+    return;
+  }
   if (importing) { importFields(data); return; }
   if (automatic) {
     for (const account of data.declaration.accounts.slice(1)) {
@@ -426,7 +440,7 @@ function buildFields(data) {
 async function loadResources(version, pageVersion) {
   selectedResources = new Map(); selectionBusy = false; const data = application, connectionId = $('service-cloudflare').value;
   if (!connectionId || data?.status !== 'ready') { controls(); return; }
-  if (rehearsing || !importing && data.declaration.schemaVersion === 2) { syncDomainOptions(); selectedResources.ready = true; controls(); return; }
+  if (repairing || rehearsing || !importing && data.declaration.schemaVersion === 2) { syncDomainOptions(); selectedResources.ready = true; controls(); return; }
   selectionBusy = true; controls();
   try {
     const reference = ref(connectionId), kinds = importing ? ['worker'] : [...new Set(data.declaration.resources.map(row => row.kind))];
@@ -495,16 +509,17 @@ async function changeVersion() {
     await loadResources(version, pageVersion);
     if (currentDialog(version,pageVersion) && updateTarget && !newerVersion(data.manifest.version,updateTarget.instance.application.version)) dialogNotice('版本必须高于 v' + updateTarget.instance.application.version,'warning');
     else if (currentDialog(version,pageVersion) && rehearsing && (data.manifest.schemaVersion !== 3 || data.declaration.schemaVersion !== 2)) dialogNotice('此版本未声明预升级测试与清理能力', 'warning');
+    else if (currentDialog(version,pageVersion) && repairing && !repairOptions(data).length) dialogNotice('此版本没有匹配当前错误的修复操作', 'warning');
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
   finally { if (currentDialog(version, pageVersion)) { selectionBusy = false; controls(); } }
 }
 async function openDialog(state = null, trigger = $('service-add'), mode = 'deploy') {
   if (busy || submitting) return;
   importing = mode === 'import';
-  rehearsing = mode === 'rehearse'; deletingPreview = false;
+  rehearsing = mode === 'rehearse'; repairing = mode === 'repair'; deletingPreview = false;
   testEnvironment = rehearsing ? 'test-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : null;
   updateTarget = state; returnFocus = trigger; selected = null; application = null; selectedResources = new Map(); dialogGeneration++; clearPreview();
-  $('service-dialog-title').textContent = state ? (rehearsing ? '预升级测试 · ' : '升级 · ') + state.instance.application.name : importing ? '导入服务' : '部署服务';
+  $('service-dialog-title').textContent = state ? (repairing ? '修复 · ' : rehearsing ? '预升级测试 · ' : '升级 · ') + state.instance.application.name : importing ? '导入服务' : '部署服务';
   $('service-selection').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); dialogNotice(session ? '' : '身份尚未就绪');
   $('service-dialog').showModal(); $('service-close').focus(); renderTabs();
   if (!session) return;
@@ -534,6 +549,16 @@ async function prepare(event) {
   const version = dialogGeneration, pageVersion = generation, data = application;
   busy = true; controls(); dialogNotice('正在校验部署计划…');
   try {
+    if (repairing) {
+      const repairId = $('service-repair').value;
+      if(!repairOptions(data).some(row => row.id === repairId))throw new Error('请选择匹配当前错误的修复操作');
+      const result = await request(api + 'plan', { action: 'repair', instanceId: updateTarget.instance.id, previousTaskId: updateTarget.taskId, sourceSha: data.sourceSha, repairId });
+      if(!currentDialog(version,pageVersion))return;
+      preview = result; const details = element('dl'), plan = result.plan;
+      for(const [label,value] of [['修复操作',plan.application.manifest.repairs.find(row=>row.id===repairId).name],['原任务',plan.operation.previousTaskId],['错误代码',plan.operation.context.errorCode],['目标版本',`v${plan.application.manifest.version} · ${plan.application.sourceSha}`],['环境',plan.policy.environment],['绑定资源',Object.values(plan.resources).map(row=>`${row.name} · ${row.remoteId}`).join('、') || '—'],['目标',updateTarget.instance.targets.map(row=>row.value).join('、') || '—']])details.append(element('dt',label),element('dd',value));
+      const risk = element('p','将运行所选版本的修复代码并修改目标云资源；失败可能留下部分变更，不会自动重试。');risk.dataset.tone='warning';
+      $('service-review').replaceChildren(details,risk);dialogNotice('');return;
+    }
     if (rehearsing) {
       const result = await request(api + 'plan', { action: 'rehearse', instanceId: updateTarget.instance.id, previousTaskId: updateTarget.taskId, sourceSha: data.sourceSha, environment: testEnvironment });
       if (!currentDialog(version, pageVersion)) return;
@@ -652,7 +677,7 @@ async function submitImport() {
 
 async function openDeletePreview(state, trigger) {
   if (busy || submitting || !session || !state.canDeletePreview) return;
-  importing = false; rehearsing = false; deletingPreview = true; updateTarget = state; returnFocus = trigger;
+  importing = false; rehearsing = false; repairing = false; deletingPreview = true; updateTarget = state; returnFocus = trigger;
   application = { status: 'ready' }; selected = null; preview = null; selectedResources = new Map(); selectedResources.ready = true;
   const version = ++dialogGeneration, pageVersion = generation; busy = true;
   $('service-dialog-title').textContent = '删除测试环境 · ' + state.instance.environment;

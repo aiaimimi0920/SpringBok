@@ -3,7 +3,27 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SV-07：快速管理员初始化、域名部署与加载修复（2026-10-09）
+## SV-08-S04：正式后台修复线上验收（2026-10-09）
+
+负责人主 AI，边界为用户确认的 `admin-publish`，不重新部署认证服务、不重建数据资源、
+不初始化账号、不改密码或关键密钥。SpringBok PR #95 已合并，控制面及固定执行器使用
+`264c5ee03a2d61d95eaab740c5cc3344a0125e77`；main 六工作流通过，线上修复开关已开启。
+NAccount PR #9 已合并，3.0.3 / `30c272b8306978b498030416c76b297cfd656100` 已固定发布。
+
+用户确认后沿正式页面只提交一次修复，任务 `dc-28f170961fce4c439a4616533397c819`，
+GitHub run `37951542789` attempt 1 成功。已下载并验证 artifact SHA-256，业务回执
+`action=repair/status=succeeded`，OIDC、JWKS、修复完成、数据保持、非修复资源不变、
+服务配置就绪共六项检查通过；控制台已显示 3.0.3「部署成功」。原部署记录保留，不重放。
+
+只读云端验收确认后台有真实 assets，版本 `eeaefa94-5a52-40a1-a84d-3f5ca8369762`，
+绑定 `naccount-admin.yamiyu.com`；认证域名仍为 `naccount-auth.aiaimimi.com`。
+认证 Worker deployment 和 Access 配置与发布前摘要一致，原 D1/KV 绑定保留，三个
+Workers 的 workers.dev/previews 均关闭。匿名后台访问仍进入 Access，不扩大公开访问。
+正常浏览器已通过 Access 到达应用登录页，实际 Dashboard 登录及首次加载仍待用户验收。
+证据位于 `linshi/springbok-rebuild-retry-20261009/`：`repair-business-receipt.json`、
+`repair-live-verified.json`、`repair-succeeded.png`。下一停点只核对登录结果，不再发布。
+
+## SV-07：快速管理员初始化、域名部署与加载修复（2026-10-09，以下为阶段历史）
 
 当前领取 `SV-08-S03-UI`，负责人主 AI：正式修复状态、固定版本选择、修复操作及预览确认。
 S02 已经 PR #94 合并至 `4d116591ed28087f15bccd5a5c5e4af08658ec49`，精确head与main

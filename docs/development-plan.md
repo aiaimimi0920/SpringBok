@@ -5,6 +5,12 @@
 
 ## SV-07：快速管理员初始化、域名部署与加载修复（2026-10-09）
 
+当前领取 `SV-07-S06`，负责人主 AI：首次 Access 登录回跳误拒绝修复。
+`/services` 与 `/history` 已是受保护页面，但遗漏在只读页面导航名单中，跨站登录回跳
+被当作 API 跨站请求拒绝；workerd 回归先复现 `/services` 403。仅补齐两条 GET 页面路径，
+保持 JWT/邮箱校验、来源与查询限制、API/写操作 CSRF 边界，不修改 Access 策略。
+验证、精确 PR/main 与发布证据记于 `linshi/springbok-sv-07-20261009/login-return/`。
+
 当前领取 `SV-07-S05`，负责人主 AI：独立只读可用性验证与服务状态展示。S04 已经由
 PR #90 发布；新实例 naccount-live 3.0.2 及管理员已创建，用户已确认能进入后台。
 部署任务 dc-1c6f7d3ef22b43fbafa158e2d887f522 原回执 unknown/NACCOUNT_READINESS_FAILED，

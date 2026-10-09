@@ -41,7 +41,7 @@ try{
     await page.locator('#service-zone-0').selectOption(zone.id);assert.equal(await field.isDisabled(),true);
   }
   for(const width of [1440,390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:join(directory,`domain-deploy-${width}.png`)});}
-  await reviewService(page);assert.match(await page.locator('#service-review').textContent(),/https:\/\/accounts\.example\.com/);assert.equal(creates,0);
+  await reviewService(page);assert.ok((await page.locator('#service-review dd').allTextContents()).includes('https://accounts.example.com'));assert.equal(creates,0);
   const planRequest=requests.findLast(row=>row.path.endsWith('/plan'));
   assert.deepEqual(planRequest.body.domains,{'server.url':{resource:{id:zone.id,revision:zone.revision},subdomain:'accounts'}});
   assert.equal(Object.hasOwn(planRequest.body.values,'server.url'),false);

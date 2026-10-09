@@ -45,6 +45,7 @@ Cloudflare Access 保护保留；仅 302 登录页不等于后台部署或用户
 
 云端读回确认 `naccount-admin` 有 assets 和新版本，域名 `naccount-admin.yamiyu.com`
 已绑定；认证 deployment、Access 配置未变，原 D1/KV 保留。匿名访问仍需 Access，
-workers.dev/previews 保持关闭。真实浏览器已进入 NAccount 登录流程；这不等于
-Dashboard 或管理员业务登录验收，后者待用户完成，不能将 service-ready 扩大解释。
+workers.dev/previews 保持关闭。真实浏览器已进入 NAccount 登录流程，用户随后明确确认
+已登录成功，管理员实际登录验收通过。此结论来自用户反馈，不以 service-ready 代替登录，
+也不表示全部业务页面或长期性能均已验收。
 证据目录与下一停点见 [开发计划](development-plan.md)。

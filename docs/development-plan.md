@@ -19,9 +19,11 @@ GitHub run `37951542789` attempt 1 成功。已下载并验证 artifact SHA-256�
 绑定 `naccount-admin.yamiyu.com`；认证域名仍为 `naccount-auth.aiaimimi.com`。
 认证 Worker deployment 和 Access 配置与发布前摘要一致，原 D1/KV 绑定保留，三个
 Workers 的 workers.dev/previews 均关闭。匿名后台访问仍进入 Access，不扩大公开访问。
-正常浏览器已通过 Access 到达应用登录页，实际 Dashboard 登录及首次加载仍待用户验收。
+正常浏览器已通过 Access 到达应用登录页；用户随后明确反馈“很好，我已经登录成功了”，
+管理员实际登录验收通过。该反馈不扩大为全部业务页面或长期性能验收。
 证据位于 `linshi/springbok-rebuild-retry-20261009/`：`repair-business-receipt.json`、
-`repair-live-verified.json`、`repair-succeeded.png`。下一停点只核对登录结果，不再发布。
+`repair-live-verified.json`、`repair-succeeded.png`。部署与登录闭环完成；本轮仅合并验收记录，
+不再发布控制面或应用，不重建资源。
 
 ## SV-07：快速管理员初始化、域名部署与加载修复（2026-10-09，以下为阶段历史）
 

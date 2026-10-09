@@ -54,7 +54,10 @@ async function domainFixture(){
     const url=new URL(request.url),zone={id:zoneId,name:'example.com',account:{id:state.zoneAccount},status:state.zoneStatus};
     if(url.origin==='https://api.cloudflare.com'&&url.pathname.startsWith('/client/v4/zones')){
       assert.equal(request.method,'GET');state.zoneReads++;
-      if(url.pathname.endsWith('/dns_records'))return Response.json({success:true,result:state.dnsOccupied?[{id:'existing'}]:[],result_info:{total_count:state.dnsOccupied?1:0}});
+      if(url.pathname.endsWith('/dns_records')){
+        if(state.dnsDenied)return Response.json({error:'synthetic-private-upstream-body'},{status:403});
+        return Response.json({success:true,result:state.dnsOccupied?[{id:'existing'}]:[],result_info:{total_count:state.dnsOccupied?1:0}});
+      }
       return Response.json({success:true,result:url.pathname.endsWith('/zones')?[zone]:zone});
     }
     return provider(request,context);
@@ -83,6 +86,7 @@ test('administrator profiles isolate encrypted defaults and overrides from publi
     await f.restart();const snapshot=await f.call('/api/admin/resources',session);assert.equal(snapshot.json().adminProfiles.length,1);assert.ok(!snapshot.text.includes(defaultValue)&&!snapshot.text.includes(overrideValue));
     const foreign=await f.call('/api/admin/resources',{token:f.jwt({sub:'foreign'})});assert.equal(foreign.json().adminProfiles.length,0);
     assert.equal((await submit(plan)).status,200);assert.equal(state.dispatches,1);
+    assert.equal(state.request.configuration.admin.bootstrapEmail,body.email);
     const ns=await f.mf.getDurableObjectNamespace('CONNECTIONS'),vault=ns.get(ns.idFromName('connections/v1/'+auth.ownerId));
     await vault.expireAdminOverrides();assert.equal((await api('plan',input)).status,409);
     const replacement=await f.call('/api/admin/resources',{...session,body:{action:'admin-override',id:randomUUID(),profile,password:'Synthetic-Replacement!44'}});
@@ -122,6 +126,18 @@ test('Zone ownership/status/DNS drift, arbitrary suffix and forged registration 
     const selected=input.domains['server.url'];
     for(const subdomain of ['other.example.net','../evil','-bad','bad-','a'.repeat(64)]){assert.equal((await api('plan',{...input,domains:{'server.url':{...selected,subdomain}}})).status,409);}
     assert.equal((await api('plan',{...input,domains:{'server.url':{...selected,resource:{...selected.resource,revision:999}}}})).status,409);
+    assert.equal(state.creates.length,0);assert.equal(state.dispatches,0);
+  }finally{await f.close();}
+});
+test('domain failures expose only fixed diagnostics and never provider bodies',async()=>{
+  const {f,state,input,api}=await domainFixture();
+  try{
+    state.dnsDenied=true;
+    const denied=await api('plan',input);assert.equal(denied.status,409);assert.equal(denied.json().error,'domain-dns-read-failed');assert.ok(!denied.text.includes('synthetic-private-upstream-body'));
+    state.dnsDenied=false;state.dnsOccupied=true;
+    assert.equal((await api('plan',input)).json().error,'domain-dns-not-empty');
+    state.dnsOccupied=false;state.zoneStatus='pending';
+    assert.equal((await api('plan',input)).json().error,'domain-zone-mismatch');
     assert.equal(state.creates.length,0);assert.equal(state.dispatches,0);
   }finally{await f.close();}
 });

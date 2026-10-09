@@ -1,4 +1,4 @@
-import { automaticConfiguration, connectionReference, deploymentTemplate } from './deployment-contract.mjs';
+import { automaticConfiguration, connectionReference, deploymentTemplate, deploymentValue, setDeploymentValue } from './deployment-contract.mjs';
 import { canonicalSba, exactSba, requireSba } from './sba-control.mjs';
 import { openToken } from './connections-crypto.mjs';
 import { readJson } from './connections-provider.mjs';
@@ -89,6 +89,12 @@ export async function provisionDeployment(vault,owner,taskId,plan){
     }
     const declaration=plan.application.declaration,values=Object.fromEntries(declaration.fields.map(f=>[f.path.join('.'),f.path.reduce((v,k)=>v[k],plan.configuration)]));
     const configuration=automaticConfiguration(declaration,values,resources,plan.accounts,plan.policy.environment);
+    // Preserve the approved public identity; never reopen a profile or its secret
+    // while replacing provision placeholders with provider resource IDs.
+    if(declaration.administrator){
+      const path=declaration.administrator.emailPath,email=deploymentValue(plan.configuration,path);
+      if(email!==undefined)setDeploymentValue(configuration,path,email);
+    }
     const finalized=finalizePreview({...plan,resources,configuration,policy:{...plan.policy,configuration}});
     vault.ctx.storage.transactionSync(()=>{const record=read();requireSba(record.preparation.phase==='creating');record.preparation.phase='ready';record.preparation.plan=finalized;record.service=serviceSummary(taskId,finalized);
       for(const row of Object.values(resources))sql.exec('INSERT INTO resources VALUES(?,?,?,?,?)',row.id,row.connectionId,row.kind,row.remoteId,JSON.stringify(row));write(record);});

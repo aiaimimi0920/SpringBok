@@ -66,6 +66,12 @@ jobs:
         run: node tests/browser/service-import.mjs
       - name: Check automatic resource creation and retained-resource service updates
         run: node tests/browser/automatic-deployment.mjs
+      - name: Check registered domain selection and exact subdomain deployment
+        run: node tests/browser/domain-deployment.mjs
+      - name: Check domain selection with a manual URL declaration
+        run: node tests/browser/domain-deployment.mjs
+        env:
+          DOMAIN_MANUAL_FIELD: '1'
       - name: Check isolated upgrade previews and explicit test environment cleanup
         run: node tests/browser/upgrade-preview.mjs
       - name: Check ordinary service deletion confirmation and persistent resource cleanup

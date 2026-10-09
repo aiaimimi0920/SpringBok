@@ -1,5 +1,5 @@
-export const resourceKinds = ['worker', 'd1', 'kv', 'r2', 'repository'];
-export const resourceLabels = { worker: 'Workers', d1: 'D1', kv: 'KV', r2: 'R2', repository: 'GitHub 仓库' };
+export const resourceKinds = ['worker', 'd1', 'kv', 'r2', 'zone', 'repository'];
+export const resourceLabels = { worker: 'Workers', d1: 'D1', kv: 'KV', r2: 'R2', zone: '域名', repository: 'GitHub 仓库' };
 export const brandName = provider => provider === 'cloudflare' ? 'Cloudflare' : 'GitHub';
 const validNumber = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
 const sum = values => { const result = values.reduce((total, value) => total + value, 0); return validNumber(result) ? result : null; };
@@ -47,7 +47,7 @@ function groupFor(account, kind, sources) {
   const items = new Map(), successful = sources.filter(source => source.usage?.status !== 'unavailable' && source.usage?.metrics?.length);
   successful.sort((a, b) => b.usage.checkedAt - a.usage.checkedAt);
   const usage = successful[0]?.usage;
-  const definitions = kind === 'repository' ? [] : usage?.metrics ?? [fallback(kind)];
+  const definitions = ['repository','zone'].includes(kind) ? [] : usage?.metrics ?? [fallback(kind)];
   const complete = sources.some(source => source.status === 'complete');
   for (const source of sources) for (const item of source.items) {
     const existing = items.get(item.id);

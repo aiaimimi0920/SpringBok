@@ -3,6 +3,27 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
+## SV-07：快速管理员初始化、域名部署与加载修复（2026-10-09）
+
+用户已要求两仓库实现，不以旧协议或历史数据兼容为前提。负责人主 AI。
+`SV-07-S01 / NA-07-S01`：修复 NAccount 刷新令牌固化旧角色、后台配置失败后无限加载。
+线上证据：管理员 userinfo 与刷新 access token 的空 roles 不一致，`/api/info` 返回 400 空响应，
+`Setup.tsx` 读取 undefined.configs 抛错。仅修当前角色刷新和有界加载/失败/重试，不放宽后台权限。
+后续独立子任务：关联管理员邮箱及密钥化默认/覆盖密码、Cloudflare Zone 资源与子域名选择。
+邮箱关联不等于 Google OAuth 授权；Zone 是共享父资源，不随服务删除。默认密码禁止硬编码及进入公开回执。
+证据目录 `linshi/springbok-sv-07-20261009/`。NA-07-S01 已通过 83 OAuth、16 后台、65 编排测试和双端 tsc，
+PR #7 正常合并 NAccount main `717e777fe8f433155851bd7302e300388281097f`，应用版本 3.0.1，部署另验。
+当前领取 `SV-07-S03`：Cloudflare Zone 资源目录与新建子域名选择，负责人主 AI。
+Zone 只读发现/登记；计划与提交重新核对账户、active Zone 与 DNS 占用，NAccount 复用已有 custom_domain 发布。
+共享 Zone 不加入服务资源清理。管理员邮箱/密钥配置 `SV-07-S02` 尚待实施。
+S03 已通过 44 项相关 Node/workerd、域名模板/手动字段两种 Chrome 流程、自动部署、生命周期、
+导入、预升级、删除、资源页及四页五宽度 Neuro 回归；actionlint 通过。只读审阅发现手动 URL
+与 Zone 同时提交的冲突，已按互斥输入修复并补测。显式 URL API 的既有能力保留，Zone 校验
+保证仅适用于登记选择路径。专题见 [域名资源](domain-resources.md)。PR/main/控制面发布另验。
+NAccount 3.0.1 已沿登录后的正常页面升级，任务 `dc-e0ebcca21ffe40f8874dd59e8debf94f`，
+GitHub run `37881759432` success；原实例、D1/KV 和 workers.dev URL 保留。
+用户报告升级前重新登录已恢复加载；升级后 Dashboard 已真实加载配置与 super_admin 菜单。
+
 ## SV-06-S01：普通服务删除（2026-10-08）
 
 负责人主 AI，分支 `feat/sv-06-service-delete`，基线 `1489362e67b67ebc3cb8d64b283840623d9f38dc`。

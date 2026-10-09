@@ -45,6 +45,49 @@ async function automaticFixture(multiple=false){
   return fixture;
 }
 
+async function domainFixture(){
+  const fixture=await automaticFixture(),{f,state,input,session}=fixture,provider=state.provider;
+  const zoneId='d'.repeat(32);state.zoneAccount=accountA;state.zoneStatus='active';state.dnsOccupied=false;state.zoneReads=0;
+  state.declaration.fields.push({path:['server','url'],label:'地址',type:'text',required:true,template:'https://{instance}.{subdomain:runtime}.workers.dev'});
+  state.declaration.targets.push({kind:'domain',path:['server','url'],account:'runtime'});
+  state.provider=async(request,context)=>{
+    const url=new URL(request.url),zone={id:zoneId,name:'example.com',account:{id:state.zoneAccount},status:state.zoneStatus};
+    if(url.origin==='https://api.cloudflare.com'&&url.pathname.startsWith('/client/v4/zones')){
+      assert.equal(request.method,'GET');state.zoneReads++;
+      if(url.pathname.endsWith('/dns_records'))return Response.json({success:true,result:state.dnsOccupied?[{id:'existing'}]:[],result_info:{total_count:state.dnsOccupied?1:0}});
+      return Response.json({success:true,result:url.pathname.endsWith('/zones')?[zone]:zone});
+    }
+    return provider(request,context);
+  };
+  const listing=await f.call('/api/admin/resources',{...session,body:{action:'discover',connectionId:input.cloudflare.id,kind:'zone',cursor:''}});assert.equal(listing.status,200);
+  const saved=await f.call('/api/admin/resources',{...session,body:{action:'register',connectionId:input.cloudflare.id,kind:'zone',listingId:listing.json().id,resourceId:zoneId}});assert.equal(saved.status,200);
+  const resource=saved.json().resource;
+  input.domains={'server.url':{resource:{id:resource.id,revision:resource.revision},subdomain:'accounts'}};
+  return fixture;
+}
+test('selected Zone resolves a signed subdomain, is rechecked at submit and never becomes an owned data resource',async()=>{
+  const {f,state,preview,submit,machine}=await domainFixture();
+  try{
+    const plan=await preview();assert.equal(plan.plan.configuration.server.url,'https://accounts.example.com');assert.equal(state.creates.length,0);
+    assert.equal(Object.values(plan.plan.resources).some(row=>row.kind==='zone'),false);
+    const reads=state.zoneReads;assert.equal((await submit(plan)).status,200);assert.ok(state.zoneReads>reads);
+    assert.equal(state.request.configuration.server.url,'https://accounts.example.com');assert.equal(state.dispatches,1);
+    const permit=await(await machine()).json();assert.deepEqual(permit.secrets,{CLOUDFLARE_API_TOKEN:fakeToken});
+    await f.restart();assert.equal((await submit(plan)).status,200);assert.equal(state.dispatches,1);
+  }finally{await f.close();}
+});
+test('Zone ownership/status/DNS drift, arbitrary suffix and forged registration reject before any provisioning',async()=>{
+  const {f,state,input,preview,submit,api}=await domainFixture();
+  try{
+    const plan=await preview();state.dnsOccupied=true;assert.equal((await submit(plan)).status,409);assert.equal(state.creates.length,0);state.dnsOccupied=false;
+    for(const [key,value] of [['zoneStatus','pending'],['zoneAccount',accountB]]){const old=state[key];state[key]=value;assert.equal((await api('plan',input)).status,409);state[key]=old;}
+    const selected=input.domains['server.url'];
+    for(const subdomain of ['other.example.net','../evil','-bad','bad-','a'.repeat(64)]){assert.equal((await api('plan',{...input,domains:{'server.url':{...selected,subdomain}}})).status,409);}
+    assert.equal((await api('plan',{...input,domains:{'server.url':{...selected,resource:{...selected.resource,revision:999}}}})).status,409);
+    assert.equal(state.creates.length,0);assert.equal(state.dispatches,0);
+  }finally{await f.close();}
+});
+
 test('automatic declaration preserves v1 and rejects invalid account topology and native cross-account binding',()=>{
   assert.equal(deploymentDeclaration(declaration).schemaVersion,1);
   const d=automaticDeclaration();assert.equal(deploymentDeclaration(d).schemaVersion,2);

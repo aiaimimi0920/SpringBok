@@ -62,7 +62,7 @@ export async function connectBrand(vault, owner, raw) {
 
 export async function inventory(vault, owner, input) {
   exact(input,['action','connectionId','kind','cursor']);requireValue(input.action === 'inventory');connectionId(input.connectionId);
-  requireValue(['d1','kv','r2','worker','repository'].includes(input.kind) && typeof input.cursor === 'string' && input.cursor.length <= 512);
+  requireValue(['d1','kv','r2','worker','repository','zone'].includes(input.kind) && typeof input.cursor === 'string' && input.cursor.length <= 512);
   vault.ctx.storage.transactionSync(() => vault.guard(owner));
   const {row,sealed} = vault.activeConnection(input.connectionId), token = await openToken(vault.env.CONNECTIONS_ENCRYPTION_KEY,owner,row,sealed);
   let result;

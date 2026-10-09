@@ -310,6 +310,38 @@ function fillOptions(select, values, placeholder = null) {
   select.replaceChildren(); if (placeholder !== null) select.append(new Option(placeholder, ''));
   for (const [value, label] of values) select.append(new Option(label, value));
 }
+function domainFields(data) {
+  if (updateTarget || importing || rehearsing || data.declaration.schemaVersion !== 2) return;
+  for (const [index, target] of data.declaration.targets.filter(row => row.kind === 'domain').entries()) {
+    const field = data.declaration.fields.find(row => row.path.join('.') === target.path.join('.'));
+    const select = element('select'), subdomain = element('input');
+    select.dataset.domainPath = target.path.join('.'); select.dataset.domainAccount = target.account;
+    select.dataset.defaultLabel = field.template === null ? '手动输入' : 'workers.dev';
+    select.dataset.fieldIndex = data.declaration.fields.indexOf(field);
+    subdomain.maxLength = 63; subdomain.pattern = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+    subdomain.value = $('service-environment').value + '-' + (index + 1); subdomain.disabled = true;
+    addField($('service-inputs'), 'service-zone-' + index, field.label + ' · 域名', select);
+    addField($('service-inputs'), 'service-subdomain-' + index, field.label + ' · 子域名', subdomain);
+    select.addEventListener('change', () => syncDomainControl(select, index));
+  }
+  syncDomainOptions();
+}
+function syncDomainControl(select, index) {
+  const chosen = !!select.value, subdomain = $('service-subdomain-' + index);
+  subdomain.disabled = !chosen; subdomain.required = chosen;
+  const manual = $('service-field-' + select.dataset.fieldIndex);
+  if (manual) manual.disabled = chosen;
+}
+function syncDomainOptions() {
+  for (const [index, select] of [...$('service-inputs').querySelectorAll('[data-domain-path]')].entries()) {
+    const account = select.dataset.domainAccount, connectionId = account === 'runtime' ? $('service-cloudflare').value : $('service-account-' + account)?.value;
+    const rows = registeredResources.filter(row => row.kind === 'zone' && row.available && row.connectionId === connectionId);
+    const previous = select.value || new URLSearchParams(location.hash.slice(1)).get('resource');
+    fillOptions(select, rows.map(row => [row.id, row.name]), select.dataset.defaultLabel);
+    if (rows.some(row => row.id === previous)) select.value = previous;
+    syncDomainControl(select, index);
+  }
+}
 function buildFields(data) {
   $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
   if (data.status !== 'ready') return;
@@ -336,6 +368,7 @@ function buildFields(data) {
       const select = element('select'); select.required = true; select.disabled = !!updateTarget;
       fillOptions(select, connections.filter(row => row.provider === 'cloudflare' && row.state === 'verified').map(row => [row.id, row.accountName || row.name]), '请选择账户');
       select.value = updateTarget?.instance.connections['cloudflare_' + account.key]?.id ?? $('service-cloudflare').value;
+      select.addEventListener('change', syncDomainOptions);
       addField($('service-inputs'), 'service-account-' + account.key, account.label, select);
     }
     for (const field of data.declaration.resources) {
@@ -343,6 +376,7 @@ function buildFields(data) {
       output.value = (rehearsing ? null : updateTarget?.instance.resources[field.key]?.name) ?? field.nameTemplate.replaceAll('{instance}', $('service-environment').value);
       addField($('service-resources'), 'service-resource-' + field.key, field.label + ' · ' + resourceLabels[field.kind], output);
     }
+    domainFields(data);
     return;
   }
   for (const field of data.declaration.resources) {
@@ -353,7 +387,7 @@ function buildFields(data) {
 async function loadResources(version, pageVersion) {
   selectedResources = new Map(); selectionBusy = false; const data = application, connectionId = $('service-cloudflare').value;
   if (!connectionId || data?.status !== 'ready') { controls(); return; }
-  if (rehearsing || !importing && data.declaration.schemaVersion === 2) { selectedResources.ready = true; controls(); return; }
+  if (rehearsing || !importing && data.declaration.schemaVersion === 2) { syncDomainOptions(); selectedResources.ready = true; controls(); return; }
   selectionBusy = true; controls();
   try {
     const reference = ref(connectionId), kinds = importing ? ['worker'] : [...new Set(data.declaration.resources.map(row => row.kind))];
@@ -479,6 +513,7 @@ async function prepare(event) {
     const automatic = data.declaration.schemaVersion === 2;
     for (const [index, field] of data.declaration.fields.entries()) {
       if (automatic && field.template !== null) continue;
+      if (!updateTarget && $('service-field-' + index).disabled) continue;
       const raw = $('service-field-' + index).value; values[field.path.join('.')] = field.type === 'json' ? JSON.parse(raw) : raw;
     }
     const wanted = (automatic ? [] : data.declaration.resources).map(field => {
@@ -500,9 +535,16 @@ async function prepare(event) {
       selections[field.key] = registered.get(key);
     }
     const accounts = automatic ? Object.fromEntries(data.declaration.accounts.slice(1).map(account => [account.key, ref($('service-account-' + account.key).value)])) : null;
+    const domains = {};
+    for (const [index, select] of [...$('service-inputs').querySelectorAll('[data-domain-path]')].entries()) if (select.value) {
+      const zone = registeredResources.find(row => row.id === select.value && row.kind === 'zone' && row.available);
+      if (!zone) throw new Error('所选域名不可用');
+      domains[select.dataset.domainPath] = { resource: { id: zone.id, revision: zone.revision }, subdomain: $('service-subdomain-' + index).value.trim() };
+    }
     const body = { action: 'preview', github: data.github, repository: data.repository, sourceSha: data.sourceSha, cloudflare,
       environment: $('service-environment').value, values, resources: selections,
       ...(accounts ? { accounts } : {}),
+      ...(Object.keys(domains).length ? { domains } : {}),
       ...(updateTarget ? { instance: { id: updateTarget.instance.id, previousTaskId: updateTarget.taskId } } : {}) };
     const result = await request(api + 'plan', body); if (!currentDialog(version, pageVersion)) return; preview = result;
     const details = element('dl');
@@ -599,7 +641,7 @@ async function initialize() {
   try {
     const auth = await request('/api/admin/state'); if (!current(version)) return; session = auth;
     const result = await request('/api/admin/connections'); if (!current(version)) return; connections = result.connections;
-    if (new URLSearchParams(location.hash.slice(1)).has('resource')) { const resources = await request('/api/admin/resources'); if (!current(version)) return; registeredResources = resources.resources; }
+    const resources = await request('/api/admin/resources'); if (!current(version)) return; registeredResources = resources.resources;
     await refreshInstances(); if (!current(version)) return; controls();
     if (location.hash || $('service-dialog').open) await openDialog();
   } catch (error) { if (current(version)) { invalidate(); notice(error.message, 'error'); } }

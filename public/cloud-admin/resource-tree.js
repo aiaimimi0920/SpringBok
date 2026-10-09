@@ -5,7 +5,7 @@ export const textNode = (tag, text, className) => {
   const node = document.createElement(tag); node.textContent = text;
   if (className) node.className = className; return node;
 };
-const icon = kind => ({ worker: 'deploy', d1: 'database', kv: 'keyvalue', r2: 'bucket', repository: 'github' })[kind];
+const icon = kind => ({ worker: 'deploy', d1: 'database', kv: 'keyvalue', r2: 'bucket', zone: 'cloud', repository: 'github' })[kind];
 function metricsBlock(metrics, compact = false) {
   const block = document.createElement('span'); block.className = 'usage-metrics';
   for (const metric of metrics) {

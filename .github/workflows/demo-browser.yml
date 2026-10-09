@@ -62,6 +62,8 @@ jobs:
         run: node tests/browser/service-lifecycle.mjs
       - name: Verify independent service availability
         run: node tests/browser/service-verification.mjs
+      - name: Service repair browser flow
+        run: node tests/browser/service-repair.mjs
       - name: Check bounded service discovery across slow repositories and pages
         run: node tests/browser/service-discovery.mjs
       - name: Check read-only service import and persistent imported instances

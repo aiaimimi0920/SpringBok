@@ -19,3 +19,8 @@ test('identical resource names and IDs in different accounts use separate usage 
   const usage=new Map([['storage/r2',{metrics:[{id:'storage',unit:'bytes'}],samples:{same:{storage:{value:2000000,complete:true}}}}]]);
   assert.equal(resourceMetrics(instance,bound[0],usage)[0].text,'—');assert.equal(resourceMetrics(instance,bound[1],usage)[0].text,'2 MB');
 });
+test('repair never promotes its failed parent to a confirmed version',()=>{
+  const instance={action:'repair',previous:{sourceSha:'old',applicationVersion:'1.0.0'}};
+  for(const status of ['running','unknown','failed'])assert.equal(confirmedVersion({instance,job:{status}}),null);
+  assert.deepEqual(confirmedVersion({instance,job:{status:'succeeded',request:{sourceSha:'new',applicationVersion:'2.0.0'}}}),{version:'2.0.0',sourceSha:'new'});
+});

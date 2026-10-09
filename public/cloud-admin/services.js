@@ -60,7 +60,17 @@ async function request(path, body, timeoutMs = 0) {
     if (current(version)) { invalidate(); notice('身份验证失败，请重新登录', 'error'); }
     throw new Error('身份验证失败，请重新登录');
   }
-  if (!response.ok) throw new Error(path.endsWith('/plan') ? '计划校验失败：检查版本兼容性、连接、资源与公开配置' : '读取或操作未确认，请检查连接权限与平台状态');
+  if (!response.ok) {
+    const messages = new Map([
+      ['domain-registration-stale', '域名登记已变化，请重新选用域名'],
+      ['domain-zone-read-failed', '无法读取所选域名，请检查 Cloudflare 连接的 Zone 读取权限'],
+      ['domain-zone-mismatch', '所选域名的账户、名称或启用状态已变化'],
+      ['domain-dns-read-failed', '无法核对 DNS，请检查 Cloudflare 连接的 DNS 读取权限'],
+      ['domain-dns-not-empty', '所选子域名已有 DNS 记录，请更换子域名']
+    ]);
+    const result = await response.json().catch(() => null);
+    throw new Error(messages.get(result?.error) ?? (path.endsWith('/plan') ? '计划校验失败：检查版本兼容性、连接、资源与公开配置' : '读取或操作未确认，请检查连接权限与平台状态'));
+  }
   return await response.json();
   } finally { if (timer) clearTimeout(timer); }
 }

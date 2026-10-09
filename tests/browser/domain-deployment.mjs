@@ -13,13 +13,13 @@ try{
   d.resources=d.resources.map(row=>({...row,account:'runtime',nativeAccount:'runtime',nameTemplate:'{instance}-db'}));
   d.targets=d.targets.map(target=>({...target,account:'runtime'}));d.targets.push({kind:'domain',path:['server','url'],account:'runtime'});
   state.declaration=d;state.resources=null;state.missingSba.add('owner/second');
-  const provider=state.provider,zoneId='d'.repeat(32),account='a'.repeat(32);let creates=0;
+  const provider=state.provider,zoneId='d'.repeat(32),account='a'.repeat(32);let creates=0,dnsDenied=true;
   state.provider=async(request,context)=>{
     const url=new URL(request.url);
     if(url.origin==='https://api.cloudflare.com'){
       if(url.pathname.startsWith('/client/v4/zones')){
         assert.equal(request.method,'GET');const zone={id:zoneId,name:'example.com',status:'active',account:{id:account}};
-        if(url.pathname.endsWith('/dns_records'))return Response.json({success:true,result:[],result_info:{total_count:0}});
+        if(url.pathname.endsWith('/dns_records'))return dnsDenied?Response.json({error:'private-upstream-diagnostic'},{status:403}):Response.json({success:true,result:[],result_info:{total_count:0}});
         return Response.json({success:true,result:url.pathname.endsWith('/zones')?[zone]:zone});
       }
       if(url.pathname.endsWith('/workers/subdomain'))return Response.json({success:true,result:{subdomain:'test'}});
@@ -41,6 +41,10 @@ try{
     await page.locator('#service-zone-0').selectOption(zone.id);assert.equal(await field.isDisabled(),true);
   }
   for(const width of [1440,390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:join(directory,`domain-deploy-${width}.png`)});}
+  await page.locator('#service-submit').click();
+  await page.getByText('无法核对 DNS，请检查 Cloudflare 连接的 DNS 读取权限',{exact:true}).waitFor();
+  assert.equal(creates,0);assert.equal(state.dispatches,0);assert.equal(await page.getByText('private-upstream-diagnostic',{exact:true}).count(),0);
+  dnsDenied=false;
   await reviewService(page);assert.equal(await page.getByText('https://accounts.example.com',{exact:true}).count(),1);assert.equal(creates,0);
   const planRequest=requests.findLast(row=>row.path.endsWith('/plan'));
   assert.deepEqual(planRequest.body.domains,{'server.url':{resource:{id:zone.id,revision:zone.revision},subdomain:'accounts'}});

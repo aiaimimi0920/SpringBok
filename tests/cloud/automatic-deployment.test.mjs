@@ -65,6 +65,44 @@ async function domainFixture(){
   input.domains={'server.url':{resource:{id:resource.id,revision:resource.revision},subdomain:'accounts'}};
   return fixture;
 }
+test('administrator profiles isolate encrypted defaults and overrides from public plans and preserve the single permit',async()=>{
+  const {f,state,input,session,preview,submit,machine,api,auth}=await automaticFixture();
+  const defaultValue='Synthetic-default-Only!42',overrideValue='Synthetic-override-Only!43';
+  try{
+    state.declaration.administrator={emailPath:['admin','bootstrapEmail'],secret:'ADMIN_BOOTSTRAP_PASSWORD'};
+    state.manifest={...manifest,secrets:['CLOUDFLARE_API_TOKEN','ADMIN_BOOTSTRAP_PASSWORD']};
+    const body={action:'admin-profile',id:randomUUID(),email:'fixture@gmail.com',password:defaultValue};
+    assert.equal((await f.call('/api/admin/resources',{token:session.token,body})).status,403);
+    const saved=await f.call('/api/admin/resources',{...session,body});assert.equal(saved.status,200);assert.ok(!saved.text.includes(defaultValue));
+    const profile={id:body.id,revision:1};input.administrator={profile};
+    let plan=await preview();assert.equal(plan.plan.configuration.admin.bootstrapEmail,body.email);assert.ok(!JSON.stringify(plan).includes(defaultValue));
+    const override=await f.call('/api/admin/resources',{...session,body:{action:'admin-override',id:randomUUID(),profile,password:overrideValue}});assert.equal(override.status,200);
+    input.administrator.override={id:override.json().profile.id,revision:1};
+    plan=await preview();assert.ok(!JSON.stringify(plan).includes(overrideValue));
+    assert.equal((await api('plan',{...input,administrator:{profile:{...profile,revision:999}}})).status,409);
+    await f.restart();const snapshot=await f.call('/api/admin/resources',session);assert.equal(snapshot.json().adminProfiles.length,1);assert.ok(!snapshot.text.includes(defaultValue)&&!snapshot.text.includes(overrideValue));
+    const foreign=await f.call('/api/admin/resources',{token:f.jwt({sub:'foreign'})});assert.equal(foreign.json().adminProfiles.length,0);
+    assert.equal((await submit(plan)).status,200);assert.equal(state.dispatches,1);
+    const ns=await f.mf.getDurableObjectNamespace('CONNECTIONS'),vault=ns.get(ns.idFromName('connections/v1/'+auth.ownerId));
+    await vault.expireAdminOverrides();assert.equal((await api('plan',input)).status,409);
+    const replacement=await f.call('/api/admin/resources',{...session,body:{action:'admin-override',id:randomUUID(),profile,password:'Synthetic-Replacement!44'}});
+    assert.equal(replacement.status,200);assert.equal(await vault.adminProfileCount(),2);
+    const permit=await(await machine()).json();assert.equal(permit.secrets.ADMIN_BOOTSTRAP_PASSWORD,overrideValue);
+    assert.equal((await machine()).status,403);
+    assert.ok(!JSON.stringify(state.request).includes(defaultValue)&&!JSON.stringify(state.request).includes(overrideValue));
+    const listing=await f.call('/api/admin/deployments/services',session);assert.ok(!listing.text.includes(defaultValue)&&!listing.text.includes(overrideValue));
+  }finally{await f.close();}
+});
+test('administrator declaration absent or unselected never grants stored passwords',async()=>{
+  const {f,state,input,preview,submit,machine,api}=await automaticFixture();
+  try{
+    assert.equal((await api('plan',{...input,administrator:{profile:{id:randomUUID(),revision:1}}})).status,409);
+    state.declaration.administrator={emailPath:['admin','bootstrapEmail'],secret:'ADMIN_BOOTSTRAP_PASSWORD'};
+    state.manifest={...manifest,secrets:['CLOUDFLARE_API_TOKEN','ADMIN_BOOTSTRAP_PASSWORD']};
+    const plan=await preview();assert.equal(plan.plan.configuration.admin,undefined);
+    assert.equal((await submit(plan)).status,200);assert.equal((await(await machine()).json()).secrets.ADMIN_BOOTSTRAP_PASSWORD,'bootstrap-not-applicable');
+  }finally{await f.close();}
+});
 test('selected Zone resolves a signed subdomain, is rechecked at submit and never becomes an owned data resource',async()=>{
   const {f,state,preview,submit,machine}=await domainFixture();
   try{

@@ -14,6 +14,7 @@ import { importInput, importedId, inspectImported, sameImport } from './service-
 import { automaticDraft, provisionDeployment } from './deployment-provisioning.mjs';
 import { servicePreviewDraft, continuesInstance, createsResources } from './service-preview.mjs';
 import { deletionPlan, deleteService, deletionRecord, assertNotDeleting } from './service-deletion.mjs';
+import { adminProfiles, saveAdminProfile, reserveBootstrap, bootstrapCredential } from './admin-profiles.mjs';
 
 export class ConnectionVault extends DurableObject {
   deletionPlan(owner, input) { return deletionPlan(this, owner, input); }
@@ -55,13 +56,14 @@ export class ConnectionVault extends DurableObject {
   resourceSnapshot(owner) {
     return this.ctx.storage.transactionSync(() => {
       this.resourceGuard(owner);
-      return { resources: this.ctx.storage.sql.exec('SELECT metadata FROM resources ORDER BY id').toArray().map(({metadata}) => {
+      return { adminProfiles: adminProfiles(this, owner), resources: this.ctx.storage.sql.exec('SELECT metadata FROM resources ORDER BY id').toArray().map(({metadata}) => {
         const resource = JSON.parse(metadata), connection = JSON.parse(this.row(resource.connectionId).metadata);
         return { ...resource, available: connection.state === 'verified' && connection.revision === resource.connectionRevision };
       }) };
     });
   }
   async resourceOperation(owner, raw) {
+    if (['admin-profile','admin-override'].includes(raw?.action)) return saveAdminProfile(this,owner,raw);
     if(raw?.action === 'inventory') return inventory(this,owner,raw);
     if(raw?.action === 'usage') return usageOperation(this,owner,raw);
     if(raw?.action === 'budget') return saveResourceBudget(this,owner,raw);
@@ -155,7 +157,7 @@ export class ConnectionVault extends DurableObject {
     const {row:cloudflare}=this.activeConnection(input.cloudflare.id,input.cloudflare.revision);requireSba(cloudflare.provider==='cloudflare');
     let resources={},automatic=null;
     if(declaration.schemaVersion===2){automatic=await automaticDraft(this,owner,input,application);resources=automatic.resources;}
-    else {requireSba(!Object.hasOwn(input,'accounts')&&!Object.hasOwn(input,'domains'));
+    else {requireSba(!Object.hasOwn(input,'accounts')&&!Object.hasOwn(input,'domains')&&!Object.hasOwn(input,'administrator'));
     for(const field of declaration.resources){const ref=connectionReference(input.resources[field.key]);const stored=this.ctx.storage.sql.exec('SELECT metadata FROM resources WHERE id=?',ref.id).toArray()[0];requireSba(stored);const row=JSON.parse(stored.metadata);
       requireSba(row.revision===ref.revision&&row.connectionId===cloudflare.id&&row.connectionRevision===cloudflare.revision&&Date.now()-row.checkedAt<=300000);resources[field.key]=row;}
     requireSba(Object.keys(input.resources).length===declaration.resources.length);}
@@ -188,6 +190,7 @@ export class ConnectionVault extends DurableObject {
       for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
       for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&(continuesInstance(plan)||Date.now()-row.checkedAt<=300000));}
       if(plan.accounts){record.accountIds=[...new Set(Object.values(plan.accounts).map(a=>a.accountId))].sort();record.credentials=plan.credentials;}
+      reserveBootstrap(this,owner,taskId,plan);
       if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
       requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
     });
@@ -196,7 +199,9 @@ export class ConnectionVault extends DurableObject {
   provisionDeployment(owner,taskId,plan){return provisionDeployment(this,owner,taskId,plan);}
   async deploymentCredential(owner,taskId,provider){
     this.ctx.storage.transactionSync(()=>this.deploymentGuard(owner));connectedTaskId(taskId);
-    const saved=this.ctx.storage.sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];requireSba(saved);const record=JSON.parse(saved.record),stored=this.row(record.connections[provider].id);requireSba(stored);
+    const saved=this.ctx.storage.sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];requireSba(saved);const record=JSON.parse(saved.record);
+    if(provider==='bootstrap-disabled'||provider.startsWith('bootstrap:'))return bootstrapCredential(this,owner,record,provider);
+    const stored=this.row(record.connections[provider].id);requireSba(stored);
     requireSba(provider==='github'||provider==='cloudflare'||Object.values(record.credentials??{}).includes(provider));
     const row=JSON.parse(stored.metadata);requireSba(row.provider===(provider==='github'?'github':'cloudflare'));return openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,row,stored.sealed);
   }

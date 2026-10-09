@@ -5,7 +5,7 @@ import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSba
 import { compareVersions } from '../src/sba/contract.mjs';
 import { resourceIdentity, validatePreviewInventory } from '../src/sba/preview.mjs';
 
-export const continuesInstance = plan => ['update', 'destroy-preview'].includes(plan.operation?.action);
+export const continuesInstance = plan => ['update', 'destroy-preview', 'repair'].includes(plan.operation?.action);
 export const createsResources = plan => !!plan.accounts && !continuesInstance(plan);
 export function previewInventory(plan) {
   const accountId = deploymentValue(plan.configuration, plan.application.declaration.accountPath);

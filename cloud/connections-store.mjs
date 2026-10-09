@@ -13,6 +13,7 @@ import { usageOperation, saveResourceBudget } from './resource-budgets.mjs';
 import { importInput, importedId, inspectImported, sameImport } from './service-import.mjs';
 import { automaticDraft, provisionDeployment } from './deployment-provisioning.mjs';
 import { servicePreviewDraft, continuesInstance, createsResources } from './service-preview.mjs';
+import { serviceRepairDraft } from './service-repair.mjs';
 import { deletionPlan, deleteService, deletionRecord, assertNotDeleting } from './service-deletion.mjs';
 import { adminProfiles, saveAdminProfile, reserveBootstrap, bootstrapCredential } from './admin-profiles.mjs';
 
@@ -143,6 +144,10 @@ export class ConnectionVault extends DurableObject {
   }
   async deploymentDraft(owner, raw) {
     if (raw?.instance?.id || raw?.instanceId) assertNotDeleting(this, owner, raw.instance?.id ?? raw.instanceId);
+    if (raw?.action === 'repair') {
+      this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
+      return serviceRepairDraft(this, owner, raw);
+    }
     if (['rehearse', 'destroy-preview'].includes(raw?.action)) {
       this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
       return servicePreviewDraft(this, owner, raw);
@@ -189,7 +194,8 @@ export class ConnectionVault extends DurableObject {
       if(plan.operation){const source=plan.operation.action==='preview'?plan.operation.context.source:{instanceId:plan.operation.instanceId,taskId:plan.operation.previousTaskId};assertNotDeleting(this,owner,source.instanceId);const entries=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),source.instanceId);requireSba(entries.length&&entries[0].taskId===source.taskId);}
       for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
       for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&(continuesInstance(plan)||Date.now()-row.checkedAt<=300000));}
-      if(plan.accounts){record.accountIds=[...new Set(Object.values(plan.accounts).map(a=>a.accountId))].sort();record.credentials=plan.credentials;}
+      if(plan.credentials)record.credentials=plan.credentials;
+      if(plan.accounts)record.accountIds=[...new Set(Object.values(plan.accounts).map(a=>a.accountId))].sort();
       reserveBootstrap(this,owner,taskId,plan);
       if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
       requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
@@ -200,6 +206,7 @@ export class ConnectionVault extends DurableObject {
   async deploymentCredential(owner,taskId,provider){
     this.ctx.storage.transactionSync(()=>this.deploymentGuard(owner));connectedTaskId(taskId);
     const saved=this.ctx.storage.sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];requireSba(saved);const record=JSON.parse(saved.record);
+    if(provider==='repair-disabled'){requireSba(record.service.action==='repair'&&Object.values(record.credentials??{}).includes(provider));return 'repair-not-applicable';}
     if(provider==='bootstrap-disabled'||provider.startsWith('bootstrap:'))return bootstrapCredential(this,owner,record,provider);
     const stored=this.row(record.connections[provider].id);requireSba(stored);
     requireSba(provider==='github'||provider==='cloudflare'||Object.values(record.credentials??{}).includes(provider));

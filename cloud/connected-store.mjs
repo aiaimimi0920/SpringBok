@@ -112,6 +112,20 @@ export class DeploymentLocks extends DurableObject {
     });
   }
   claim(owner,taskId,accountId,scope,resourceKeys,digest,observed=[],update=null){
+    return this.#claim(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,false);
+  }
+  async claimRepair(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,context){
+    requireSba(this.env.ENABLE_SERVICE_REPAIR==='yes');
+    exactSba(update,['instanceId','previousTaskId']);
+    exactSba(context,['repairId','parentTaskId','parentRunId','requestDigest','resultDigest','errorCode']);
+    requireSba(context.parentTaskId===update.previousTaskId);
+    const parent=connectedStub(this.env,update.previousTaskId),{plan}=await parent.bootstrap(owner),job=await parent.inspect(owner);
+    requireSba(!plan.previewOf&&!plan.verificationOf&&(plan.operation?.instanceId??update.previousTaskId)===update.instanceId&&
+      ['deploy','update','repair'].includes(job?.request.action)&&['unknown','failed'].includes(job?.status)&&job.result?.status===job.status&&!!job.permitId&&
+      job.runId===context.parentRunId&&job.requestDigest===context.requestDigest&&await sbaDigest(job.result)===context.resultDigest&&job.result.errorCode===context.errorCode);
+    return this.#claim(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,true);
+  }
+  #claim(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,repair){
     ownerId(owner);connectedTaskId(taskId);requireSba(/^[a-f0-9]{64}$/.test(digest)&&typeof scope==='string'&&scope.length<=300&&Array.isArray(resourceKeys)&&resourceKeys.length<=32&&Array.isArray(observed)&&observed.length<=256);
     requireSba(this.ctx.id.toString()===this.env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`).toString());
     if(update){exactSba(update,['instanceId','previousTaskId']);connectedTaskId(update.instanceId);connectedTaskId(update.previousTaskId);requireSba(taskId!==update.previousTaskId&&taskId!==update.instanceId);}
@@ -124,7 +138,7 @@ export class DeploymentLocks extends DurableObject {
       if (sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='import_keys'").toArray().length) {
         for (const key of [...keys, ...observed.map(value => 'identity:' + value)]) requireSba(!sql.exec('SELECT instance FROM import_keys WHERE key=?', key).toArray().length);
       }
-      requireSba(lane[0].task===null&&sql.exec('SELECT COUNT(*) AS n FROM deployment_claims').one().n<128);
+      requireSba((repair?lane[0].task===update.previousTaskId:lane[0].task===null)&&sql.exec('SELECT COUNT(*) AS n FROM deployment_claims').one().n<128);
       if(update){
         const claims=sql.exec('SELECT identity FROM deployment_claims ORDER BY rowid').toArray().map(r=>JSON.parse(r.identity));
         const chain=claims.filter(r=>(r.instanceId??r.taskId)===update.instanceId),head=chain.at(-1),root=chain[0];

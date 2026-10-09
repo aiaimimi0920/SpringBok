@@ -5,8 +5,8 @@ import { fakeToken } from './connections-fixture.mjs';
 import { policy, sha } from './sba-fixture.mjs';
 import { zip } from '../sba-zip-fixture.mjs';
 import { SOURCE_CONTENT_TYPE } from '../../src/sba/source.mjs';
-export async function connectedFixture(){
-  const fixture=await deploymentFixture({ENABLE_CONNECTED_DEPLOYMENTS:'yes'}),{f,state,session,post,input}=fixture,sourceProvider=state.provider;
+export async function connectedFixture(overrides={}){
+  const fixture=await deploymentFixture({ENABLE_CONNECTED_DEPLOYMENTS:'yes',...overrides}),{f,state,session,post,input}=fixture,sourceProvider=state.provider;
   Object.assign(state,{executorSha:sha,dispatches:0,runStatus:'in_progress',badTitle:false,dispatchLost:false});
   state.provider=async(request,context)=>{
     const url=request.url;if(url==='https://token.actions.githubusercontent.com/.well-known/jwks')return Response.json({keys:[context.jwk]});

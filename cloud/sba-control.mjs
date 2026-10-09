@@ -36,7 +36,7 @@ export function connectedSbaPolicy(env) {
 export function sbaRequest(policy, taskId, manifest, operation = null) {
   const app = validateManifest(manifest);
   requireSba(canonicalSba(app.secrets) === canonicalSba(policy.secretNames));
-  if (operation !== null) requireSba(['update', 'preview', 'destroy-preview', 'verify'].includes(operation.action));
+  if (operation !== null) requireSba(['update', 'preview', 'destroy-preview', 'verify', 'repair'].includes(operation.action));
   return validateRequest({ schemaVersion: app.schemaVersion, taskId, action: operation?.action ?? 'deploy', repository: policy.github.applicationRepository,
     sourceSha: policy.sourceSha, applicationId: app.id, applicationVersion: app.version, environment: policy.environment,
     configuration: policy.configuration, previous: operation?.previous ?? null, ...(operation?.context ? { context: operation.context } : {}) }, app);

@@ -20,7 +20,7 @@ export async function workflowInput(env) {
       !/^[a-f0-9]{64}$/.test(env.SBA_REQUEST_SHA256)) reject();
   if (await sbaDigest(env.SBA_REQUEST_JSON) !== env.SBA_REQUEST_SHA256) reject();
   const request = JSON.parse(env.SBA_REQUEST_JSON);
-  if (!['deploy', 'update', 'verify', 'preview', 'destroy-preview'].includes(request.action) || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(request.repository) ||
+  if (!['deploy', 'update', 'verify', 'preview', 'destroy-preview', 'repair'].includes(request.action) || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(request.repository) ||
       !/^[a-f0-9]{40}$/.test(request.sourceSha) || !/^[a-z][a-z0-9-]{1,62}$/.test(request.taskId)) reject();
   const origin = new URL(env.SBA_RUNNER_ORIGIN);
   if (origin.protocol !== 'https:' || origin.origin !== env.SBA_RUNNER_ORIGIN || origin.username || origin.password) reject();

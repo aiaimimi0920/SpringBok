@@ -1,6 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { adminFixture, origin } from './admin-fixture.mjs';
+test('Access login return can enter services and history without allowing cross-site APIs', async () => {
+  const f = await adminFixture();
+  try {
+    const headers = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+    for (const path of ['/services', '/history']) {
+      assert.equal((await f.call(path, { headers })).status, 200, path);
+      assert.equal((await f.call(path, { headers, token: null })).status, 403);
+      assert.equal((await f.call(path, { headers, token: f.jwt({ email: 'other@example.invalid' }) })).status, 403);
+      assert.equal((await f.call(path, { headers: { ...headers, origin: 'https://other.invalid' } })).status, 403);
+      assert.equal((await f.call(path + '?unexpected=1', { headers })).status, 403);
+    }
+    for (const path of ['/services.js', '/api/admin/state', '/api/admin/deployments']) assert.equal((await f.call(path, { headers })).status, 403, path);
+    assert.equal((await f.call('/api/admin/submit', { headers, body: {} })).status, 403);
+  } finally { await f.close(); }
+});
 test('actual workerd protects all static assets and admin APIs with verified Access identity', async () => {
   const f = await adminFixture();
   try {

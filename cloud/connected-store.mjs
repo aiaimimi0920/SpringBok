@@ -7,6 +7,9 @@ export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
 export const accountStub = (env,accountId) => {requireSba(/^[a-f0-9]{32}$/.test(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
 export class ConnectedDeployment extends SbaDeployment {
+  uninitialized() {
+    return this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND (name='connected_bootstrap' OR name LIKE 'sba_%')").toArray().length === 0;
+  }
   async initialize(owner,taskId,plan){
     ownerId(owner);connectedTaskId(taskId);requireSba(this.env.ENABLE_CONNECTED_DEPLOYMENTS==='yes');
     requireSba(this.ctx.id.toString()===this.env.CONNECTED_TASKS.idFromName(`connected/v1/${taskId}`).toString());
@@ -134,7 +137,7 @@ export class DeploymentLocks extends DurableObject {
       const sql=this.ctx.storage.sql,tables=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('deployment_claims','deployment_keys','deployment_lane')").toArray();
       if(!tables.length){sql.exec('CREATE TABLE deployment_claims (task TEXT PRIMARY KEY,identity TEXT NOT NULL)');sql.exec('CREATE TABLE deployment_keys (key TEXT PRIMARY KEY,task TEXT NOT NULL)');sql.exec('CREATE TABLE deployment_lane (id INTEGER PRIMARY KEY CHECK(id=1),task TEXT)');sql.exec('INSERT INTO deployment_lane VALUES(1,NULL)');}
       requireSba(tables.length===0||tables.length===3);const lane=sql.exec('SELECT * FROM deployment_lane').toArray();requireSba(lane.length===1&&lane[0].id===1);
-      const prior=sql.exec('SELECT identity FROM deployment_claims WHERE task=?',taskId).toArray()[0];if(prior){requireSba(prior.identity===identity);return {claimed:true};}
+      const prior=sql.exec('SELECT identity FROM deployment_claims WHERE task=?',taskId).toArray()[0];if(prior){requireSba(prior.identity===identity&&lane[0].task===taskId);return {claimed:true};}
       if (sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='import_keys'").toArray().length) {
         for (const key of [...keys, ...observed.map(value => 'identity:' + value)]) requireSba(!sql.exec('SELECT instance FROM import_keys WHERE key=?', key).toArray().length);
       }

@@ -1,6 +1,7 @@
 import { boundResources, confirmedVersion, newerVersion, resourceCountText, resourceMetrics, statusText, statusTone, valueAt } from './service-model.mjs';
 import { resourceLabels } from './resource-model.mjs';
 import { importFields, importWorkerOptions, importDraft, importReview, importedDetails } from './service-import.js';
+import { resumePreparation } from './preparation-recovery.js';
 
 const $ = id => document.getElementById(id);
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
@@ -125,6 +126,10 @@ function renderInstances() {
       test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
       const remove = focusKey(element('button', '删除', 'danger'), id + '/delete'); remove.type = 'button'; remove.disabled = !state?.canDelete || !session;
       remove.addEventListener('click', () => void openDeleteService(state, remove)); actions.append(remove);
+      if (state?.canResume) {
+        const resume = focusKey(element('button', '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
+        resume.addEventListener('click', () => { const version = generation; resume.disabled = true; void resumePreparation(state, resume, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }); }); actions.append(resume);
+      }
       if(state?.canRepair){
         const repair=focusKey(element('button','修复'),id+'/repair');repair.type='button';repair.disabled=!session;
         repair.addEventListener('click',()=>void openDialog(state,repair,'repair'));actions.append(repair);
@@ -211,7 +216,7 @@ async function refreshInstances() {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
         if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
-      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
+      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canResume: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
     });
   } catch (error) { if (current(version)) notice(error.message, 'error'); }
   finally {

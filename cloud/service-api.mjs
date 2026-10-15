@@ -6,6 +6,7 @@ import { importedId } from './service-import.mjs';
 import { deletionInventory } from './service-deletion-provider.mjs';
 import { canVerifyService, verificationState } from './service-verification.mjs';
 import { repairEnabled, repairableJob } from './service-repair.mjs';
+import { recoverablePreparation } from './preparation-recovery.mjs';
 
 async function deletionState(env, vault, owner, state) {
   const deletion = await vault.deletionRecord(owner, state.instance.id);
@@ -36,7 +37,7 @@ export async function serviceState(env, vault, owner, input) {
   const entries = serviceEntries(await vault.deploymentIndex(owner), input.instanceId); requireSba(entries.length);
   const latest = entries[0], record = await connectedState(env, owner, latest.taskId, input.reconcile);
   const history = entries.map(entry => ({ taskId: entry.taskId, createdAt: entry.createdAt, action: entry.service?.action ?? 'deploy', application: entry.service?.application ?? null }));
-  if (record.status === 'preparation-unconfirmed') return { ...record, instance: latest.service ?? { id: input.instanceId }, history, canUpdate: false };
+  if (record.status === 'preparation-unconfirmed') return { ...record, instance: latest.service ?? { id: input.instanceId }, history, canUpdate: false, canResume: connectedEnabled(env) && recoverablePreparation(latest) && await connectedStub(env, latest.taskId).uninitialized() };
   const { plan } = await connectedStub(env, latest.taskId).bootstrap(owner);
   const verification = await verificationState(env, owner, latest.taskId, input.reconcile);
   const terminal = ['succeeded', 'deployed-unverified'].includes(record.job?.status), previewInstance = !!plan.previewOf;

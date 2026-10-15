@@ -117,7 +117,7 @@ test('old index records remain readable and updatable; competing update confirma
 test('service pages and modules stay behind Access, root changes to services and history is retained without a navigation entry', async () => {
   const { f } = await serviceFixture();
   try {
-    for (const path of ['/', '/services', '/history', '/services.js', '/services.css', '/service-model.mjs']) {
+    for (const path of ['/', '/services', '/history', '/services.js', '/services.css', '/service-model.mjs', '/preparation-recovery.js']) {
       assert.equal((await f.call(path, { token: null })).status, 403);
       const page = await f.call(path); assert.equal(page.status, 200, path); assert.equal(page.headers.get('cache-control'), 'no-store');
     }

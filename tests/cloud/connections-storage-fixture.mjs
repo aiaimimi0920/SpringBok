@@ -1,6 +1,10 @@
 import { ConnectionVault as Vault } from '../../cloud/connections-store.mjs';
 export { default, TargetMailbox, OwnerCatalog, NodeMailbox, NodeTelemetry, SbaDeployment, ConnectedDeployment, DeploymentLocks } from '../../cloud/worker.mjs';
 export class ConnectionVault extends Vault {
+  patchPreparation(taskId, patch) {
+    const sql=this.ctx.storage.sql,record=JSON.parse(sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).one().record);
+    Object.assign(record.preparation,patch);sql.exec('UPDATE connection_deployments SET record=? WHERE task=?',JSON.stringify(record),taskId);
+  }
   inspectStorage() { return this.ctx.storage.sql.exec('SELECT * FROM connections').toArray(); }
   fillResourceCapacity(count) {
     const sql=this.ctx.storage.sql,row=JSON.parse(sql.exec('SELECT metadata FROM resources LIMIT 1').one().metadata);

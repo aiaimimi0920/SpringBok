@@ -69,13 +69,13 @@ export async function createCloudResource(row,token,transport=fetch,timeoutMs=10
   }finally{clearTimeout(timer);await reader?.cancel().catch(()=>{});}
 }
 
-export async function provisionDeployment(vault,owner,taskId,plan){
+export async function provisionDeployment(vault,owner,taskId,plan,recoveryId=null){
   const sql=vault.ctx.storage.sql;
   const read=()=>{vault.deploymentGuard(owner);const row=sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).one();const record=JSON.parse(row.record);requireSba(record.digest===plan.digest&&canonicalSba(record.preparation.intent)===canonicalSba(plan));return record;};
   const write=record=>sql.exec('UPDATE connection_deployments SET record=? WHERE task=?',JSON.stringify(record),taskId);
   // Taking this flag is synchronous and durable. A second caller, crash or unknown
   // response never takes ownership again, including when no resource was returned.
-  vault.ctx.storage.transactionSync(()=>{const record=read();requireSba(record.preparation.phase==='reserved');record.preparation.phase='creating';write(record);});
+  vault.ctx.storage.transactionSync(()=>{const record=read();requireSba(recoveryId===null?record.preparation.phase==='reserved'&&!record.preparation.recovery:record.preparation.phase==='resuming'&&record.preparation.recovery?.id===recoveryId);record.preparation.phase='creating';write(record);});
   let activeKey=null;
   try{
     const resources={};

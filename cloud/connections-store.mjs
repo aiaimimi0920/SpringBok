@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { beginPreparationRecovery } from './preparation-recovery.mjs';
 import { connectionInput, connectionMetadata, ownerId, validVaultKey } from './connections-contract.mjs';
 import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs';
 import { verifyConnection } from './connections-provider.mjs';
@@ -202,7 +203,8 @@ export class ConnectionVault extends DurableObject {
     });
   }
   deploymentIndex(owner){return this.ctx.storage.transactionSync(()=>{this.deploymentGuard(owner);return this.ctx.storage.sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record));});}
-  provisionDeployment(owner,taskId,plan){return provisionDeployment(this,owner,taskId,plan);}
+  beginPreparationRecovery(owner,taskId,digest,recoveryId){return beginPreparationRecovery(this,owner,taskId,digest,recoveryId);}
+  provisionDeployment(owner,taskId,plan,recoveryId=null){return provisionDeployment(this,owner,taskId,plan,recoveryId);}
   async deploymentCredential(owner,taskId,provider){
     this.ctx.storage.transactionSync(()=>this.deploymentGuard(owner));connectedTaskId(taskId);
     const saved=this.ctx.storage.sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];requireSba(saved);const record=JSON.parse(saved.record);

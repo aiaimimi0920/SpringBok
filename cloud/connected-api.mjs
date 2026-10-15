@@ -8,11 +8,11 @@ import { sbaMachineRequest } from './sba-api.mjs';
 import { signSession, sameProof } from './access.mjs';
 import { deploymentTargets } from './deployment-contract.mjs';
 import { continuesInstance, createsResources } from './service-preview.mjs';
+import { deploymentIdentities } from './deployment-ownership.mjs';
 export const connectedEnabled=env=>env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!!env.CONNECTED_TASKS&&!!env.DEPLOYMENT_LOCKS;
 const vaultFor=(env,owner)=>env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const reply=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
 const verifyOidc=createSbaOidcVerifier();
-function strings(value){return typeof value==='string'?[value]:value&&typeof value==='object'?Object.values(value).flatMap(strings):[];}
 function legacyIdentities(value){if(!value||typeof value!=='object')return [];return Object.entries(value).flatMap(([key,item])=>typeof item==='string'&&['name','url','id','kvId','databaseId','bucket','bucketName'].includes(key)?[item]:legacyIdentities(item));}
 export async function submitConnected(env,session,input){
   requireSba(connectedEnabled(env));exactSba(input,['taskId','draft','plan','expiresAt','confirmation']);connectedTaskId(input.taskId);
@@ -31,28 +31,33 @@ export async function submitConnected(env,session,input){
   const accountId=plan.accounts?.runtime.accountId??plan.resources[Object.keys(plan.resources)[0]]?.accountId??(await vault.snapshot(session.actor)).connections.find(r=>r.id===plan.connections.cloudflare.id)?.target;
   requireSba(/^[a-f0-9]{32}$/.test(accountId));
   // 检查最终公开配置，而非只查资源声明；这是配置冲突保护，不是对应用代码的沙箱。
-  const legacy=legacyIdentities(sbaPolicy(env).configuration),observed=[...new Set(strings(plan.configuration).filter(s=>s.length<=256))];
+  const legacy=legacyIdentities(sbaPolicy(env).configuration),observed=deploymentIdentities(plan);
   requireSba(observed.length<=256&&observed.every(value=>!legacy.includes(value)));
   const reservation=await vault.reserveDeployment(session.actor,input.taskId,plan);
   if(reservation.alreadyReserved)return connectedState(env,session.actor,input.taskId);
+  return executeReserved(env,session.actor,input.taskId,plan,reservation);
+}
+export async function executeReserved(env,owner,taskId,plan,reservation,recoveryId=null){
+  const vault=vaultFor(env,owner),accountId=reservation.accountId;
   const accountIds=reservation.accountIds??[accountId],targets=deploymentTargets(plan.application.declaration,plan.configuration);
   for(const id of accountIds){
     const resources=Object.values(plan.resources).filter(row=>row.accountId===id);
     const keys=[...new Set([...resources.flatMap(row=>plan.accounts?[row.name]:[row.remoteId,row.name]),...targets.filter(t=>!t.accountId||t.accountId===id).map(t=>t.value)].map(value=>'identity:'+value))];
     const continuation=continuesInstance(plan)?{instanceId:plan.operation.instanceId,previousTaskId:plan.operation.previousTaskId}:null;
-    if(plan.operation?.action==='repair')await accountStub(env,id).claimRepair(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuation,plan.operation.context);
-    else await accountStub(env,id).claim(session.actor,input.taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuation);
+    const observed=deploymentIdentities(plan,id);
+    if(plan.operation?.action==='repair')await accountStub(env,id).claimRepair(owner,taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuation,plan.operation.context);
+    else await accountStub(env,id).claim(owner,taskId,id,`${plan.application.repository}/${plan.policy.environment}`,keys,plan.digest,observed,continuation);
   }
-  if(createsResources(plan))plan=await vault.provisionDeployment(session.actor,input.taskId,plan);
+  if(createsResources(plan))plan=await vault.provisionDeployment(owner,taskId,plan,recoveryId);
   // Bind generated IDs as well as names before the runner can receive credentials.
-  if(plan.accounts)for(const id of accountIds)await accountStub(env,id).bindCreated(session.actor,input.taskId,plan.digest,Object.values(plan.resources).filter(row=>row.accountId===id).map(row=>'identity:'+row.remoteId),plan.operation?.instanceId??input.taskId);
-  const request=sbaRequest(plan.policy,input.taskId,plan.application.manifest,plan.operation??null);
-  const stub=connectedStub(env,input.taskId);await stub.initialize(session.actor,input.taskId,plan);
-  const claim=await stub.begin(session.actor,{request,manifest:plan.application.manifest});
-  if(!claim.dispatch)return {...claim.snapshot,taskId:input.taskId};
+  if(plan.accounts)for(const id of accountIds)await accountStub(env,id).bindCreated(owner,taskId,plan.digest,Object.values(plan.resources).filter(row=>row.accountId===id).map(row=>'identity:'+row.remoteId),plan.operation?.instanceId??taskId);
+  const request=sbaRequest(plan.policy,taskId,plan.application.manifest,plan.operation??null);
+  const stub=connectedStub(env,taskId);await stub.initialize(owner,taskId,plan);
+  const claim=await stub.begin(owner,{request,manifest:plan.application.manifest});
+  if(!claim.dispatch)return {...claim.snapshot,taskId};
   const executor=createGithubExecutor(plan.policy.github,{token:env.SBA_GITHUB_TOKEN});
   const outcome=await executor.dispatch(request,plan.application.manifest);
-  return {...await stub.attachRun(session.actor,input.taskId,outcome),taskId:input.taskId};
+  return {...await stub.attachRun(owner,taskId,outcome),taskId};
 }
 export async function connectedState(env,owner,taskId,reconcile=false){
   connectedTaskId(taskId);const stub=connectedStub(env,taskId);let record;

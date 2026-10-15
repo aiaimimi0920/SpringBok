@@ -44,4 +44,8 @@ Worker 名称匹配 `[a-z][a-z0-9-]{1,62}`。域名目标必须为 HTTPS origin�
 
 声明中列出所有实际写入的资源和目标；它不是不可信代码的沙箱。预览不执行部署，但用户确认后的资源创建与发布会产生真实副作用。
 
+v2 资源归属检查按所属账号核对 resources 的名称/真实 ID 和 targets 的解析值。
+配置中的外部身份 issuer、客户端 ID 等调用依赖不占用该服务的资源身份；多个应用可共享
+同一认证服务，但不能声明覆盖其 Worker 或域名。历史 v1 仍采用保守的配置检查。
+
 事实来源：[deployment-contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/deployment-contract.mjs)。

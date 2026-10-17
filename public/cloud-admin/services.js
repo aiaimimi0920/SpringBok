@@ -126,9 +126,9 @@ function renderInstances() {
       test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
       const remove = focusKey(element('button', '删除', 'danger'), id + '/delete'); remove.type = 'button'; remove.disabled = !state?.canDelete || !session;
       remove.addEventListener('click', () => void openDeleteService(state, remove)); actions.append(remove);
-      if (state?.canResume) {
-        const resume = focusKey(element('button', '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
-        resume.addEventListener('click', () => { const version = generation; resume.disabled = true; void resumePreparation(state, resume, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }); }); actions.append(resume);
+      if (state?.canResume || state?.canRestart) {
+        const resume = focusKey(element('button', state.canRestart ? '恢复升级' : '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
+        resume.addEventListener('click', () => { const version = generation; resume.disabled = true; void resumePreparation(state, resume, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }, !!state.canRestart); }); actions.append(resume);
       }
       if(state?.canRepair){
         const repair=focusKey(element('button','修复'),id+'/repair');repair.type='button';repair.disabled=!session;
@@ -216,7 +216,7 @@ async function refreshInstances() {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
         if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
-      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canResume: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
+      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canResume: false, canRestart: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
     });
   } catch (error) { if (current(version)) notice(error.message, 'error'); }
   finally {

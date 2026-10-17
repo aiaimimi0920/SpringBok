@@ -110,6 +110,45 @@ export class SbaDeployment extends DurableObject {
   #write(job) { this.ctx.storage.transactionSync(() => this.ctx.storage.sql.exec('UPDATE sba_deployment SET state=? WHERE id=1', JSON.stringify(job))); }
   snapshot(actor) { return this.#run(actor, (job, _save, _policy, history) => ({ ...sbaSummary(job), ...(history.length ? { history } : {}) })); }
   inspect(actor) { return this.#run(actor, job => job); }
+  authorizeUnstartedRestart() { throw new Error('restart not authorized'); }
+  unstartedAttempts(actor) {
+    return this.#run(actor, async job => {
+      const sql = this.ctx.storage.sql;
+      if (!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='sba_unstarted_attempts'").toArray().length) return [];
+      const rows = sql.exec('SELECT * FROM sba_unstarted_attempts ORDER BY rowid').toArray();
+      requireSba(rows.length <= 3);
+      return Promise.all(rows.map(async row => {
+        const record = JSON.parse(row.record);
+        requireSba(await sbaDigest(record) === row.digest && record.job.requestDigest === job.requestDigest &&
+          record.job.runId === row.run_id && record.job.permitId === null && record.job.result === null);
+        return { job: sbaSummary(record.job).job, proof: record.proof, outcome: 'not-executed' };
+      }));
+    });
+  }
+  async restartUnstarted(actor, proof) {
+    requireSba(typeof actor === 'string' && /^[a-f0-9]{64}$/.test(actor));
+    await this.authorizeUnstartedRestart(actor);
+    return this.#run(actor, async (job, _save, policy) => {
+      exactSba(proof, ['runId', 'requestDigest', 'executorSha', 'conclusion', 'verifiedAt']);
+      if (!job || job.runId !== proof.runId || !['dispatched', 'unknown'].includes(job.status)) return null;
+      requireSba(job && job.request.action === 'update' && ['dispatched', 'unknown'].includes(job.status) &&
+        job.permitId === null && job.permitAt === null && job.resultDeadline === null && job.result === null &&
+        id(job.runId) && proof.runId === job.runId && proof.requestDigest === job.requestDigest &&
+        proof.executorSha === policy.github.executorSha && ['failure', 'cancelled', 'timed_out'].includes(proof.conclusion) &&
+        id(proof.verifiedAt) && proof.verifiedAt <= Date.now() && proof.verifiedAt > Date.now() - 60000);
+      const record = { job, proof }, digest = await sbaDigest(record), now = Date.now();
+      const next = { ...job, status: 'dispatching', runId: null, submittedAt: now, permitDeadline: now + 900000, errorCode: null };
+      this.ctx.storage.transactionSync(() => {
+        const sql = this.ctx.storage.sql;
+        sql.exec('CREATE TABLE IF NOT EXISTS sba_unstarted_attempts (run_id INTEGER PRIMARY KEY, record TEXT NOT NULL, digest TEXT NOT NULL)');
+        requireSba(sql.exec('SELECT COUNT(*) AS n FROM sba_unstarted_attempts').one().n < 3);
+        sql.exec('INSERT INTO sba_unstarted_attempts VALUES(?,?,?)', job.runId, JSON.stringify(record), digest);
+        sql.exec('UPDATE sba_deployment SET state=? WHERE id=1', JSON.stringify(next));
+      });
+      // 持久化旧执行和撤销旧 run 绑定后，只交付一次新 dispatch 权；不释放账户锁。
+      return { request: next.request, manifest: next.manifest };
+    });
+  }
   begin(actor, input) {
     requireSba(typeof actor === 'string' && /^[a-f0-9]{64}$/.test(actor));
     return this.#run(actor, async (job, save, policy, history) => {
@@ -193,6 +232,9 @@ export class SbaDeployment extends DurableObject {
   permit(taskId, requestDigest, runId) {
     return this.#run(null, (job, save) => {
       requireSba(job && job.request.taskId === taskId && job.requestDigest === requestDigest && id(runId));
+      const sql = this.ctx.storage.sql;
+      if (sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='sba_unstarted_attempts'").toArray().length)
+        requireSba(!sql.exec('SELECT run_id FROM sba_unstarted_attempts WHERE run_id=?', runId).toArray().length);
       requireSba(['dispatching', 'dispatched', 'dispatch-unknown'].includes(job.status) && job.permitId === null && (job.runId === null || job.runId === runId));
       job.runId = runId; job.permitId = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
       job.permitAt = Date.now(); job.resultDeadline = job.permitAt + job.manifest.actions[job.request.action].timeoutSeconds * 1000 + 600000;

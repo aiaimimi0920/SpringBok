@@ -24,6 +24,16 @@ node pages/check-example.mjs /absolute/path/to/your-service
 - 在授权的独立环境验证实际 provider 绑定、域名、凭据权限和业务登录。
 - 只有实际验证过的层级才能标注通过；离线示例检查不检查网络或真实源码来源。
 
+## 源码授权失败诊断
+
+源码和一次性许可接口失败仍返回 HTTP 403 / `SBA_PERMIT_DENIED`。connected 和普通任务
+均使用 `x-sba-denied-phase`、`x-sba-denied-reason` 的固定枚举区分请求、OIDC、任务、
+GitHub run、源码传输和许可阶段；源码上游仅补充 HTTP 状态与 MIME 类别。
+这些头不包含 token、claims、上游正文或异常原文，也不会绕过权限检查。
+历史控制面可能未返回诊断头，缺失阶段不能作为鉴权失败原因的证据。
+源码读取失败不消费部署许可；Actions 失败本身也不是应用执行回执。保留任务和锁，
+不要重跑旧 run 或将其写成部署成功，恢复必须独立核实任务身份与许可状态。
+
 ## 常见误区
 
 | 现象 | 核查方向 |

@@ -9,6 +9,7 @@ import { signSession, sameProof } from './access.mjs';
 import { deploymentTargets } from './deployment-contract.mjs';
 import { continuesInstance, createsResources } from './service-preview.mjs';
 import { deploymentIdentities } from './deployment-ownership.mjs';
+import { sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
 export const connectedEnabled=env=>env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!!env.CONNECTED_TASKS&&!!env.DEPLOYMENT_LOCKS;
 const vaultFor=(env,owner)=>env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const reply=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
@@ -79,26 +80,42 @@ export async function connectedState(env,owner,taskId,reconcile=false){
 }
 export async function connectedMachineRouter(request,env,readBody){
   let input,bodyError;
+  let phase='body',reason='rejected',sourceFailure={};
   const url=new URL(request.url);
   if(request.method==='POST'&&['/sba/v2/permit','/sba/v2/source'].includes(url.pathname))try{input=await readBody(request);}catch(error){bodyError=error;}
   if(typeof input?.taskId!=='string'||!input.taskId.startsWith('dc-'))return sbaMachineRequest(request,env,async()=>{if(bodyError)throw bodyError;return input;});
   try{
     requireSba(connectedEnabled(env));exactSba(input,['taskId','requestDigest']);connectedTaskId(input.taskId);requireSba(typeof input.requestDigest==='string'&&/^[a-f0-9]{64}$/.test(input.requestDigest));
+    phase='pending';
     const stub=connectedStub(env,input.taskId),record=await stub.bootstrap(),policy=record.plan.policy;
+    phase='request';
     requireSba(url.origin===policy.runnerOrigin&&!url.search&&!request.headers.has('cookie')&&!request.headers.has('origin'));
     const auth=request.headers.get('authorization');requireSba(typeof auth==='string'&&auth.startsWith('Bearer '));
-    const identity=await verifyOidc(auth.slice(7),policy),job=await stub.pending(input.taskId,input.requestDigest);
+    phase='oidc';
+    const identity=await verifyOidc(auth.slice(7),policy,{onReject:value=>{reason=value;}});
+    phase='pending';
+    const job=await stub.pending(input.taskId,input.requestDigest);
     requireSba(job.permitId===null&&['dispatching','dispatched','dispatch-unknown'].includes(job.status)&&(job.runId===null||job.runId===identity.runId));
+    phase='run';
     const executor=createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN});requireSba((await executor.inspectRun(identity.runId,job.request,job.manifest)).status==='pending');
     const vault=vaultFor(env,record.owner);
     if(url.pathname==='/sba/v2/source'){
-      const token=await vault.deploymentCredential(record.owner,record.plan.verificationOf??input.taskId,'github'),bytes=await githubSourcePack(job.request.repository,job.request.sourceSha,token);
+      phase='secrets';
+      const token=await vault.deploymentCredential(record.owner,record.plan.verificationOf??input.taskId,'github');
+      phase='source';
+      const bytes=await githubSourcePack(job.request.repository,job.request.sourceSha,token,{onFailure:value=>{sourceFailure=value;reason=value.reason;}});
       return new Response(bytes,{headers:{'content-type':SOURCE_CONTENT_TYPE,'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
     }
+    phase='secrets';
     const mapping=record.plan.credentials??{CLOUDFLARE_API_TOKEN:'cloudflare'};
     requireSba(canonicalSba([...policy.secretNames].sort())===canonicalSba(Object.keys(mapping).sort()));
     const secrets={};for(const name of policy.secretNames)secrets[name]=record.plan.verificationOf?'verification-not-applicable':await vault.deploymentCredential(record.owner,input.taskId,mapping[name]);
+    phase='permit';
     const permit=await stub.permit(input.taskId,input.requestDigest,identity.runId);
     return reply({...permit,secrets});
-  }catch{return reply({error:'SBA_PERMIT_DENIED'},403);}
+  }catch{
+    const response=reply({error:'SBA_PERMIT_DENIED'},403);
+    for(const [key,value] of Object.entries(sbaDiagnosticHeaders({phase,reason,...sourceFailure})))response.headers.set(key,value);
+    return response;
+  }
 }

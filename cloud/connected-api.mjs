@@ -76,7 +76,7 @@ export async function connectedState(env,owner,taskId,reconcile=false){
   if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(snapshot.job?.status)){
     const index=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);
   }
-  return {...snapshot,taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null};
+  return {...snapshot,attempts:await stub.unstartedAttempts(owner),taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null};
 }
 export async function connectedMachineRouter(request,env,readBody){
   let input,bodyError;

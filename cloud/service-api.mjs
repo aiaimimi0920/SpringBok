@@ -7,6 +7,7 @@ import { deletionInventory } from './service-deletion-provider.mjs';
 import { canVerifyService, verificationState } from './service-verification.mjs';
 import { repairEnabled, repairableJob } from './service-repair.mjs';
 import { recoverablePreparation } from './preparation-recovery.mjs';
+import { canRestartUpdate } from './unstarted-update-recovery.mjs';
 
 async function deletionState(env, vault, owner, state) {
   const deletion = await vault.deletionRecord(owner, state.instance.id);
@@ -43,6 +44,7 @@ export async function serviceState(env, vault, owner, input) {
   const terminal = ['succeeded', 'deployed-unverified'].includes(record.job?.status), previewInstance = !!plan.previewOf;
   return deletionState(env, vault, owner, { ...record, verification, canVerify: connectedEnabled(env) && !verification && canVerifyService(plan, record.job), instance: serviceSummary(latest.taskId, plan), history, configuration: plan.configuration, declaration: plan.application.declaration,
     canUpdate: connectedEnabled(env) && terminal && !previewInstance,
+    canRestart: connectedEnabled(env) && canRestartUpdate(plan, record.job) && record.attempts.length < 3,
     canRepair: connectedEnabled(env) && repairEnabled(env) && repairableJob(plan, await connectedStub(env, latest.taskId).inspect(owner)),
     canPreview: connectedEnabled(env) && terminal && !previewInstance,
     canDeletePreview: connectedEnabled(env) && terminal && plan.operation?.action === 'preview',

@@ -99,6 +99,37 @@ test('dispatch uncertainty cannot replay; approved in-flight connection disable 
     assert.equal((await machine()).status,403);assert.equal((await api('reconcile',{taskId:plan.taskId})).json().job.status,'unknown');assert.equal(state.dispatches,1);
   }finally{await f.close();}
 });
+test('source failures expose only bounded diagnostics and never consume a permit',async()=>{
+  const {f,state,preview,submit,machine,api}=await connectedFixture();try{
+    const plan=await preview();await submit(plan);const original=state.provider;
+    for(const [status,type,body,reason] of [[403,'text/plain',fakeToken,'http'],[200,'text/html',fakeToken,'media'],[200,'application/x-git-upload-pack-result','','body-empty']]){
+      state.provider=(request,context)=>request.url.endsWith('/repo.git/git-upload-pack')?new Response(body,{status,headers:{'content-type':type}}):original(request,context);
+      const response=await machine('source');assert.equal(response.status,403);
+      assert.equal(response.headers.get('x-sba-denied-phase'),'source');
+      assert.equal(response.headers.get('x-sba-denied-reason'),reason);
+      assert.equal(response.headers.get('x-sba-upstream-status'),String(status));
+      assert.equal(await response.text(),JSON.stringify({error:'SBA_PERMIT_DENIED'}));
+      assert.ok(!JSON.stringify([...response.headers]).includes(fakeToken));
+      const job=(await api('state',{taskId:plan.taskId})).json().job;
+      assert.equal(job.permitAt,null);assert.equal(job.result,null);assert.equal(job.status,'dispatched');
+    }
+    state.provider=original;assert.equal((await machine('source')).status,200);
+    assert.equal((await machine()).status,200);assert.equal((await machine()).status,403);
+  }finally{await f.close();}
+});
+test('connected diagnostic stages distinguish rejected identity, request and exact run',async()=>{
+  const {f,state,preview,submit,machine,token}=await connectedFixture();try{
+    await submit(await preview());
+    for(const [patch,phase] of [[{run_attempt:'2'},'oidc']]){
+      const response=await machine('source',{headers:{authorization:`Bearer ${token(patch)}`,'content-type':'application/json'}});
+      assert.equal(response.status,403);assert.equal(response.headers.get('x-sba-denied-phase'),phase);
+    }
+    const origin=await machine('source',{headers:{authorization:`Bearer ${token()}`,'content-type':'application/json',origin:'https://evil.invalid'}});
+    assert.equal(origin.status,403);assert.equal(origin.headers.get('x-sba-denied-phase'),'request');
+    state.badTitle=true;const run=await machine('source');assert.equal(run.status,403);assert.equal(run.headers.get('x-sba-denied-phase'),'run');
+    state.badTitle=false;assert.equal((await machine()).status,200);
+  }finally{await f.close();}
+});
 test('machine bootstrap, OIDC, digest, browser context and exact GitHub run all fail closed',async()=>{
   const {f,state,preview,submit,machine,token}=await connectedFixture();try{
     const plan=await preview();await submit(plan);

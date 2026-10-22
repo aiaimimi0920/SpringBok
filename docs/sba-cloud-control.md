@@ -92,6 +92,16 @@ JSON。可禁用/撤销边缘 token，或撤下委托配置及 proof secret；�
 不能用浮动分支或通配符。完整 scope 加入 CSRF/confirmation 的签名上下文。
 旧四字段批准不获得新权限；新模式也不继承 legacy state/submit/recover/import 权限。
 
+另行批准的未接受任务取消可在 deployment 增加 `cancellation`，精确包含 `taskId` 与
+64hex `planDigest`。它是对原 server-issued plan 的单任务批准，不是客户端任选取消目标。
+完整 scope（包括 cancellation）绑定 proof，变更后旧 CSRF/confirmation 失效。
+只有该可选字段存在才开放 `cancel-unstarted`，旧批准及普通管理员路径不获得该操作。
+vault 必须在 reservation 同一同步事务内证明该 task 未保留、原实例 head 未变化并持久封闭
+迟到 reserve；Connected DO 必须在写入墓碑的同步事务内证明无 bootstrap/任意 SBA 表。
+initialize 在其持久事务内检查墓碑；bootstrap/begin 也拒绝取消槽。两份不可变记录一致后
+才可重新预览，取消返回丢失可以幂等核对，不会执行部署。已有 reservation、初始化或不一致
+一律失败关闭，不删除、解锁、转移或重放。共享 AI/Pages 入口见 integration 的取消小节。
+
 新模式仅允许 GET `/api/admin/sba/session`，以及 POST `/api/admin/deployments/` 下的
 `plan`、`submit`、`state`、`reconcile`、`verify`。session 从原 connected parent 核验 owner、
 实例和仓库，不拿 legacy owner 代替。机器 plan 输入只有 `instanceId`、`previousTaskId`；

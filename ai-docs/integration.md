@@ -42,6 +42,22 @@ deploy、update、verify、preview、destroy-preview 在 v3 中都必须声明�
 委托不是 CI 例外或业务验收。凭据仅放受控环境或 OS 加密存储，禁止进入源码、URL、
 日志及公开制品；无需继续使用时禁用专用 token，且不能自动续期。
 
+### 单个未接受任务的额外取消批准
+
+网络断开、计划过期、state 409 或没有 GitHub run 都不能证明请求未被接受。不得据此重发。
+仅在 owner 另行明确批准后，`deployment` 可增加 `cancellation: { taskId, planDigest }`，
+绑定精确的原 task 与 server-issued plan digest；原实例、parent、仓库、SHA、24 小时上限不变。
+该字段额外开放带 CSRF 的 `POST /api/admin/deployments/cancel-unstarted`，输入只有 taskId。
+
+取消先在原 owner vault 的 reservation 事务内要求该 task 无 reservation、实例最新头仍为
+批准 parent，再持久写入不可改写的 fence；随后在该 Connected DO 同步事务内要求无
+bootstrap 和任何 SBA 表并写同一记录。迟到 reserve/initialize/begin 均拒绝。两份 fence
+全部一致前，不能创建新计划；任一步不确定都保留已写记录，不自动回滚或继续更新。
+原 head 未变化时重复精确取消仅确认同一记录，不派发；新任务推进后仍可经 state 查询
+原取消记录。已存在 reservation 即停止，即使尚无 run/permit；
+不移交实例头、不释放锁、不删除历史，不扩展成一般 unknown 恢复。两侧完成后，仍须为
+同实例、同 SHA 从原 parent 新建短时计划，正常确认、一次派发并独立核验回执。
+
 ## 完成清单
 
 - 文件、字段及示例通过当前源码校验器。

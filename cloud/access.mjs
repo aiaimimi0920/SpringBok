@@ -14,7 +14,7 @@ export async function signSession(session, purpose, value) {
 }
 export function automationRoute(method, pathname, automation = null) {
   if (automation?.deployment) return (method === 'GET' && pathname === '/api/admin/sba/session') ||
-    (method === 'POST' && ['plan', 'submit', 'state', 'reconcile', 'verify'].some(route => pathname === '/api/admin/deployments/' + route));
+    (method === 'POST' && [...['plan', 'submit', 'state', 'reconcile', 'verify'], ...(automation.deployment.cancellation ? ['cancel-unstarted'] : [])].some(route => pathname === '/api/admin/deployments/' + route));
   return (method === 'GET' && ['/api/admin/sba/session', '/api/admin/sba/state'].includes(pathname)) ||
     (method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized', '/api/admin/sba/import-preview', '/api/admin/sba/import-submit'].includes(pathname));
 }
@@ -61,10 +61,17 @@ export async function accessSession(request, env) {
       !Number.isSafeInteger(a.expiresAt) || a.issuedAt > ms || a.expiresAt <= ms || a.expiresAt <= a.issuedAt || a.expiresAt > a.issuedAt + 86400000) throw new Error('automation not permitted');
     if (Object.hasOwn(a, 'deployment')) {
       const d = a.deployment, fields = ['instanceId', 'previousTaskId', 'repository', 'sourceSha'];
+      if (d && Object.hasOwn(d, 'cancellation')) fields.push('cancellation');
       if (!d || typeof d !== 'object' || Array.isArray(d) || Object.keys(d).length !== fields.length || !fields.every(key => Object.hasOwn(d, key)) ||
         ![d.instanceId, d.previousTaskId].every(value => typeof value === 'string' && /^dc-[a-f0-9]{32}$/.test(value)) ||
         typeof d.repository !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(d.repository) ||
         typeof d.sourceSha !== 'string' || !/^[a-f0-9]{40}$/.test(d.sourceSha)) throw new Error('automation not permitted');
+      if(Object.hasOwn(d,'cancellation')){
+        const c=d.cancellation;
+        if(!c||typeof c!=='object'||Array.isArray(c)||Object.keys(c).length!==2||
+          !Object.hasOwn(c,'taskId')||!Object.hasOwn(c,'planDigest')||typeof c.taskId!=='string'||!/^dc-[a-f0-9]{32}$/.test(c.taskId)||
+          [d.instanceId,d.previousTaskId].includes(c.taskId)||typeof c.planDigest!=='string'||!/^[a-f0-9]{64}$/.test(c.planDigest))throw new Error('automation not permitted');
+      }
     }
     if (!automationRoute(request.method, url.pathname, a)) throw new Error('automation not permitted');
     return { token, origin, actor: a.ownerActor, automation: a, proofKey: env.SBA_AUTOMATION_PROOF_KEY };

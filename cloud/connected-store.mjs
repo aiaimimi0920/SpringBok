@@ -3,12 +3,30 @@ import { SbaDeployment } from './sba-store.mjs';
 import { ownerId } from './connections-contract.mjs';
 import { sbaPolicy, connectedSbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba } from './sba-control.mjs';
 import { importedId } from './service-import.mjs';
+import { cancellationRecord } from './deployment-cancellation.mjs';
 export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));return value; };
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
 export const accountStub = (env,accountId) => {requireSba(/^[a-f0-9]{32}$/.test(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
 export class ConnectedDeployment extends SbaDeployment {
   uninitialized() {
-    return this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND (name='connected_bootstrap' OR name LIKE 'sba_%')").toArray().length === 0;
+    return this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND (name IN ('connected_bootstrap','connected_cancellation') OR name LIKE 'sba_%')").toArray().length === 0;
+  }
+  cancellation(owner,taskId){
+    ownerId(owner);connectedTaskId(taskId);requireSba(this.ctx.id.toString()===this.env.CONNECTED_TASKS.idFromName(`connected/v1/${taskId}`).toString());
+    const sql=this.ctx.storage.sql;
+    if(!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_cancellation'").toArray().length)return null;
+    const record=cancellationRecord(JSON.parse(sql.exec('SELECT record FROM connected_cancellation WHERE id=1').one().record));
+    requireSba(record.owner===owner&&record.taskId===taskId);return record;
+  }
+  cancelUninitialized(owner,record){
+    cancellationRecord(record);requireSba(record.owner===owner);
+    return this.ctx.storage.transactionSync(()=>{
+      const prior=this.cancellation(owner,record.taskId);
+      if(prior){requireSba(canonicalSba(prior)===canonicalSba(record));return prior;}
+      requireSba(this.uninitialized());
+      this.ctx.storage.sql.exec('CREATE TABLE connected_cancellation (id INTEGER PRIMARY KEY CHECK(id=1),record TEXT NOT NULL)');
+      this.ctx.storage.sql.exec('INSERT INTO connected_cancellation VALUES(1,?)',JSON.stringify(record));return record;
+    });
   }
   async initialize(owner,taskId,plan){
     ownerId(owner);connectedTaskId(taskId);requireSba(this.env.ENABLE_CONNECTED_DEPLOYMENTS==='yes');
@@ -17,6 +35,7 @@ export class ConnectedDeployment extends SbaDeployment {
     requireSba(canonicalSba({...policy.github,applicationRepository:current.github.applicationRepository})===canonicalSba(current.github)&&policy.runnerOrigin===current.runnerOrigin);
     const record={owner,taskId,plan},digest=await sbaDigest(record);
     return this.ctx.storage.transactionSync(()=>{
+      requireSba(!this.cancellation(owner,taskId));
       const exists=this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_bootstrap'").toArray();
       if(!exists.length){
         requireSba(this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'sba_%'").toArray().length===0);
@@ -27,6 +46,7 @@ export class ConnectedDeployment extends SbaDeployment {
     });
   }
   async bootstrap(actor=null){
+    requireSba(!this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_cancellation'").toArray().length);
     const rows=this.ctx.storage.sql.exec('SELECT * FROM connected_bootstrap').toArray();requireSba(rows.length===1&&rows[0].id===1);
     const record=JSON.parse(rows[0].record);exactSba(record,['owner','taskId','plan']);ownerId(record.owner);connectedTaskId(record.taskId);
     requireSba((actor===null||actor===record.owner)&&await sbaDigest(record)===rows[0].digest&&this.ctx.id.toString()===this.env.CONNECTED_TASKS.idFromName(`connected/v1/${record.taskId}`).toString());return record;

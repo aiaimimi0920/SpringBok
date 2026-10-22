@@ -3,6 +3,7 @@ import { connectedState, submitConnected } from './connected-api.mjs';
 import { serviceId } from './service-instance.mjs';
 import { exactSba, requireSba, canonicalSba } from './sba-control.mjs';
 import { startServiceVerification } from './service-verification.mjs';
+import { cancellationIdentity, sameCancellation } from './deployment-cancellation.mjs';
 
 const vaultFor = (env, owner) => env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const sameRepository = (left, right) => typeof left === 'string' && left.toLowerCase() === right.toLowerCase();
@@ -42,6 +43,7 @@ export async function automationTask(env, session, taskId) {
 // caller-selected configuration, administrator bootstrap, floating ref or new-instance path.
 async function updateDraft(env, session) {
   const { plan, vault } = await automationAnchor(env, session), scope = session.automation.deployment;
+  if(scope.cancellation)requireSba((await cancellationState(env,session)).status==='cancelled-before-reservation');
   const declaration = plan.application.declaration, automatic = declaration.schemaVersion === 2;
   const draft = { action: 'preview', github: plan.connections.github, cloudflare: plan.connections.cloudflare,
     repository: scope.repository, sourceSha: scope.sourceSha, environment: plan.policy.environment,
@@ -55,6 +57,16 @@ async function updateDraft(env, session) {
 export async function automationDeploymentRequest(env, session, route, input) {
   const scope = session.automation.deployment;
   requireSba(scope);
+  if(route==='cancel-unstarted'){
+    exactSba(input,['taskId']);requireSba(scope.cancellation&&input.taskId===scope.cancellation.taskId);
+    const {vault}=await automationAnchor(env,session),identity=cancelIdentity(session);
+    const record=await vault.cancelAbsentDeployment(session.actor,identity);
+    await connectedStub(env,identity.taskId).cancelUninitialized(session.actor,record);
+    return cancellationState(env,session);
+  }
+  if(['state','reconcile'].includes(route)&&scope.cancellation?.taskId===input?.taskId){
+    exactSba(input,['taskId']);return cancellationState(env,session);
+  }
   if (route === 'plan') {
     exactSba(input, ['instanceId', 'previousTaskId']);
     requireSba(input.instanceId === scope.instanceId && input.previousTaskId === scope.previousTaskId);
@@ -77,4 +89,18 @@ export async function automationDeploymentRequest(env, session, route, input) {
   requireSba(['state', 'reconcile'].includes(route)); exactSba(input, ['taskId']);
   await automationTask(env, session, input.taskId);
   return connectedState(env, session.actor, input.taskId, route === 'reconcile');
+}
+
+function cancelIdentity(session){
+  const s=session.automation.deployment,c=s.cancellation;requireSba(c);
+  return cancellationIdentity({owner:session.actor,taskId:c.taskId,instanceId:s.instanceId,previousTaskId:s.previousTaskId,
+    repository:s.repository,sourceSha:s.sourceSha,planDigest:c.planDigest});
+}
+async function cancellationState(env,session){
+  const identity=cancelIdentity(session),vault=vaultFor(env,session.actor);
+  const left=await vault.deploymentCancellation(session.actor,identity.taskId),right=await connectedStub(env,identity.taskId).cancellation(session.actor,identity.taskId);
+  requireSba((!left||sameCancellation(left,identity))&&(!right||sameCancellation(right,identity)));
+  const complete=!!left&&!!right&&canonicalSba(left)===canonicalSba(right);
+  return {taskId:identity.taskId,status:complete?'cancelled-before-reservation':'cancellation-unconfirmed',vaultFenced:!!left,taskFenced:!!right,
+    ...(complete?{reservationObserved:false,bootstrapObserved:false,cancelledAt:left.cancelledAt}:{})};
 }

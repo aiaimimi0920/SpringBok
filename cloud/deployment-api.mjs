@@ -10,9 +10,10 @@ import { domainPlanErrors } from './deployment-domains.mjs';
 import { startServiceVerification } from './service-verification.mjs';
 import { preparationRecoveryRequest } from './preparation-recovery.mjs';
 import { restartUpdateRequest } from './unstarted-update-recovery.mjs';
+import { automationDeploymentRequest } from './automation-deployment.mjs';
 const reply=(body,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
 export async function adminDeploymentRequest(request,env,session,readBody){
-  if(session.automation)return reply({error:'access-denied'},403);
+  if(session.automation&&!session.automation.deployment)return reply({error:'access-denied'},403);
   if(!connectionsEnabled(env)||!sbaEnabled(env))return reply({error:'deployment-disabled'},503);
   const url=new URL(request.url);
   const vault=env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${session.actor}`));
@@ -26,6 +27,12 @@ export async function adminDeploymentRequest(request,env,session,readBody){
   if(request.headers.get('origin')!==session.origin||!sameProof(request.headers.get('x-csrf-token'),await signSession(session,'csrf',null)))return reply({error:'refresh-session'},403);
   try{
     const input=await readBody(request,131072);
+    if(session.automation){
+      const route=url.pathname.split('/').at(-1),result=await automationDeploymentRequest(env,session,route,input);
+      if(route!=='plan')return reply(result);
+      const expiresAt=Date.now()+120000,taskId='dc-'+crypto.randomUUID().replaceAll('-','');
+      return reply({taskId,...result,expiresAt,confirmation:await signSession(session,'deployment-confirm',[taskId,result.draft,result.plan.digest,expiresAt]),executionEnabled:connectedEnabled(env)});
+    }
     if (['restart-plan','restart-submit'].some(route => url.pathname.endsWith('/' + route))) return reply(await restartUpdateRequest(env,vault,session,url.pathname.split('/').at(-1),input));
     if (['resume-plan','resume-submit'].some(route => url.pathname.endsWith('/' + route))) return reply(await preparationRecoveryRequest(env,vault,session,url.pathname.split('/').at(-1),input));
     if(url.pathname.endsWith('/verify')){if(!connectedEnabled(env))return reply({error:'deployment-disabled'},503);return reply(await startServiceVerification(env,vault,session.actor,input));}

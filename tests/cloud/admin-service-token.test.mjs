@@ -3,11 +3,93 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { adminFixture, issuer } from './admin-fixture.mjs';
 import { sbaFixture } from './sba-fixture.mjs';
+import { serviceFixture, updatedSha } from './service-fixture.mjs';
 const clientId = `${'c'.repeat(32)}.access`;
 const ownerActor = createHash('sha256').update(JSON.stringify([issuer, 'owner-subject'])).digest('hex');
 const approval = () => ({ clientId, ownerActor, issuedAt: Date.now() - 1000, expiresAt: Date.now() + 3600000 });
 const bindings = a => ({ SBA_AUTOMATION_ACCESS: JSON.stringify(a), SBA_AUTOMATION_PROOF_KEY: 'd'.repeat(64) });
 const claims = extra => ({ sub: '', email: undefined, common_name: clientId, ...extra });
+
+async function scopedFixture(t) {
+  const x = await serviceFixture(), { f, service, input, github, submit, machine, receipt, auth } = x;
+  t.after(() => f.close());
+  const first = (await service('plan', { ...input, github, repository: 'owner/repo' })).json();
+  assert.equal((await submit(first)).status, 200); receipt(await (await machine()).json(), 'deployed-unverified');
+  await service('reconcile', { taskId: first.taskId });
+  const a = { ...approval(), ownerActor: auth.ownerId, deployment: { instanceId: first.taskId, previousTaskId: first.taskId, repository: 'owner/repo', sourceSha: updatedSha } };
+  Object.assign(f.bindings, bindings(a)); await f.restart();
+  const token = f.jwt(claims()), session = (await f.call('/api/admin/sba/session', { token })).json();
+  const call = (route, body, extra = {}) => f.call('/api/admin/deployments/' + route, { token, headers: { 'x-csrf-token': session.csrf }, body, ...extra });
+  const plan = () => call('plan', { instanceId: first.taskId, previousTaskId: first.taskId });
+  return { ...x, first, a, token, machineSession: session, call, plan };
+}
+
+test('bounded connected delegation defaults closed and grants no catalogue, legacy, resource or other operations', async t => {
+  const x = await scopedFixture(t), { f, token, call, a, machineSession } = x;
+  assert.equal(machineSession.ownerId, a.ownerActor); assert.deepEqual(machineSession.authentication.deployment, a.deployment);
+  for (const path of ['/api/admin/deployments', '/api/admin/deployments/services', '/api/admin/connections', '/api/admin/resources', '/api/admin/sba/state', '/services'])
+    assert.equal((await f.call(path, { token })).status, 403, path);
+  for (const route of ['catalog', 'versions', 'application', 'service-state', 'delete-plan', 'delete-submit', 'resume-plan', 'restart-plan', 'import-preview'])
+    assert.equal((await call(route, {})).status, 403, route);
+  for (const route of ['preview', 'submit', 'reconcile', 'recover-unstarted', 'recover-authorized', 'import-preview', 'import-submit'])
+    assert.equal((await f.call('/api/admin/sba/' + route, { token, body: {}, headers: { 'x-csrf-token': machineSession.csrf } })).status, 403, route);
+  assert.equal((await call('plan', { ...a.deployment })).status, 409);
+  assert.equal((await call('plan', { instanceId: a.deployment.instanceId, previousTaskId: a.deployment.previousTaskId }, { headers: {} })).status, 403);
+  for (const deployment of [null, { ...a.deployment, extra: true }, { ...a.deployment, sourceSha: 'main' }, { ...a.deployment, instanceId: 'other' }]) {
+    f.bindings.SBA_AUTOMATION_ACCESS = JSON.stringify({ ...a, deployment }); await f.restart();
+    assert.equal((await f.call('/api/admin/sba/session', { token })).status, 403);
+  }
+  f.bindings.SBA_AUTOMATION_ACCESS = JSON.stringify({ ...a, deployment: { ...a.deployment, instanceId: 'dc-' + '9'.repeat(32) } }); await f.restart();
+  assert.equal((await f.call('/api/admin/sba/session', { token })).status, 409);
+  f.bindings.SBA_AUTOMATION_ACCESS = JSON.stringify(approval()); await f.restart();
+  for (const route of ['plan', 'submit', 'state', 'reconcile', 'verify']) assert.equal((await call(route, {})).status, 403);
+});
+
+test('fixed-source connected update and verify preserve one-time dispatch, owner, data and exact parent lineage', async t => {
+  const x = await scopedFixture(t), { f, state, call, plan, first, a, machine, receipt, token, machineSession } = x;
+  const response = await plan(); assert.equal(response.status, 200, response.text);
+  const next = response.json(), { executionEnabled, ...body } = next;
+  assert.equal(next.plan.operation.action, 'update'); assert.equal(next.plan.application.sourceSha, updatedSha);
+  assert.equal(next.draft.instance.id, first.taskId);
+  for (const patch of [{ instanceId: 'dc-' + '9'.repeat(32), previousTaskId: first.taskId }, { instanceId: first.taskId, previousTaskId: 'dc-' + '9'.repeat(32) }, { action: 'preview' }])
+    assert.equal((await call('plan', patch)).status, 409);
+  const refreshed = f.jwt(claims({ iat: Math.floor(Date.now() / 1000) - 2 }));
+  assert.equal((await f.call('/api/admin/sba/session', { token: refreshed })).json().csrf, machineSession.csrf);
+  const changed = { ...a, deployment: { ...a.deployment, sourceSha: 'e'.repeat(40) } };
+  f.bindings.SBA_AUTOMATION_ACCESS = JSON.stringify(changed); await f.restart();
+  assert.notEqual((await f.call('/api/admin/sba/session', { token })).json().csrf, machineSession.csrf);
+  assert.equal((await call('submit', body)).status, 403, 'old scope proof must not survive changed source');
+  f.bindings.SBA_AUTOMATION_ACCESS = JSON.stringify(a); await f.restart();
+  for (const route of ['state', 'reconcile']) for (const taskId of [first.taskId, 'dc-' + '9'.repeat(32)])
+    assert.equal((await call(route, { taskId })).status, 409);
+  assert.equal((await call('verify', { instanceId: first.taskId, previousTaskId: first.taskId })).status, 409);
+  const outcomes = await Promise.all([call('submit', body), call('submit', body)]);
+  assert.ok(outcomes.every(row => row.status === 200), JSON.stringify(outcomes)); assert.equal(state.dispatches, 2);
+  assert.equal(state.request.action, 'update');
+  receipt(await (await machine()).json(), 'deployed-unverified');
+  const done = (await call('reconcile', { taskId: next.taskId })).json(); assert.equal(done.job.status, 'deployed-unverified');
+  assert.equal((await call('submit', body)).status, 200); assert.equal(state.dispatches, 2);
+  const verify = { instanceId: first.taskId, previousTaskId: next.taskId };
+  assert.equal((await call('verify', verify)).status, 200); assert.equal(state.dispatches, 3);
+  const child = state.request.taskId; assert.equal(state.request.action, 'verify');
+  receipt(await (await machine()).json());
+  assert.equal((await call('reconcile', { taskId: child })).json().job.status, 'succeeded');
+  assert.equal((await call('verify', verify)).status, 200); assert.equal(state.dispatches, 3);
+  assert.equal((await call('state', { taskId: next.taskId })).json().job.status, 'deployed-unverified');
+  assert.equal((await plan()).status, 409, 'cannot fork the original parent');
+  f.bindings.SBA_AUTOMATION_ACCESS = ''; await f.restart();
+  assert.equal((await call('state', { taskId: child })).status, 403);
+});
+
+test('two distinct delegated update confirmations cannot fork the approved original parent', async t => {
+  const { call, plan, state } = await scopedFixture(t);
+  const left = (await plan()).json(), right = (await plan()).json(); assert.notEqual(left.taskId, right.taskId);
+  const submit = ({ executionEnabled, ...body }) => call('submit', body);
+  const results = await Promise.all([submit(left), submit(right)]);
+  assert.deepEqual(results.map(row => row.status).sort(), [200, 409]); assert.equal(state.dispatches, 2);
+  const loser = results[0].status === 409 ? left : right;
+  assert.equal((await call('reconcile', { taskId: loser.taskId })).status, 409);
+});
 
 test('service access defaults closed, strictly validates signed shape and never accepts raw client headers', async t => {
   const f = await adminFixture(); t.after(() => f.close());

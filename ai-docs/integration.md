@@ -26,6 +26,22 @@ deploy、update、verify、preview、destroy-preview 在 v3 中都必须声明�
 
 检查执行 run 的业务回执、实际云资源和用户登录，不只看 Actions conclusion。测试未覆盖的部分必须列明；不能拿空数据库更新代替真实有数据的迁移验收。
 
+## 固定实例的限时机器更新委托
+
+默认仍要求正常管理员身份。经 owner 明确批准，可为已有成功部署的单实例启用最长
+24 小时的 Access Service Token 委托。批准精确绑定实例、原 parent task、仓库与完整
+新 commit SHA；不接受浮动引用。机器 plan 仅提交实例与原 parent，平台从原任务复用
+配置、资源和连接，再按正常确认、一次性派发/许可、业务回执执行 update。
+
+该模式只包含 session、本次更新计划/提交/结果查询及独立 verify；不包含全量索引、
+源码目录、连接/资源管理、新部署、预升级、删除、repair、导入或 unknown 恢复。
+同一实例的其他历史任务也不在查询权限内。旧版 SBA 委托不会自动获得这些新权限。
+完整 scope 绑定 CSRF/confirmation；刷新有效 Access JWT 不改变 proof，修改批准使旧 proof
+失效。原 owner、邮箱策略和 Access 验签保持；撤销或到期后旧 proof 不独立授权。
+
+委托不是 CI 例外或业务验收。凭据仅放受控环境或 OS 加密存储，禁止进入源码、URL、
+日志及公开制品；无需继续使用时禁用专用 token，且不能自动续期。
+
 ## 完成清单
 
 - 文件、字段及示例通过当前源码校验器。

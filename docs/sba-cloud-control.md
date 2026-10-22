@@ -66,12 +66,12 @@ SQLite 同事务保存完整旧 unknown、已消费许可、原 policy、批准�
 及 [Application token](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)。
 
 默认没有 `SBA_AUTOMATION_ACCESS` 和 `SBA_AUTOMATION_PROOF_KEY` 时服务身份拒绝。
-前者只含 `clientId`、`ownerActor`、`issuedAt`、`expiresAt`，最长 24 小时，时间用 epoch
+前者默认只含 `clientId`、`ownerActor`、`issuedAt`、`expiresAt`，最长 24 小时，时间用 epoch
 milliseconds；后者是 Worker secret，64hex。ownerActor 是显式机器委托的原操作者，不能
 由客户端选择或从 service 空 sub 推导。真实启用后先调用 session/state 核对持久任务
 owner；若身份不匹配即失败关闭，不改账本来迁就配置。
 
-服务身份只允许 GET `/api/admin/sba/session`、`/api/admin/sba/state` 及既有五个 POST
+旧四字段服务身份只允许 GET `/api/admin/sba/session`、`/api/admin/sba/state` 及既有精确 POST
 SBA 操作的精确路径，不能读取管理静态页面、fixture/catalog/node 等接口；查询参数和
 跨域请求拒绝。Access 可能向服务请求附加 Cookie，因此 Cookie 不参与认证或 owner 判定，
 不能替代或覆盖已验签的 `cf-access-jwt-assertion`；没有有效 assertion 仍拒绝。遵循官方
@@ -84,6 +84,26 @@ SBA 操作的精确路径，不能读取管理静态页面、fixture/catalog/nod
 凭据应只放受控环境变量或 OS 加密存储，不进入 Git、URL、日志、浏览器 storage 或普通
 JSON。可禁用/撤销边缘 token，或撤下委托配置及 proof secret；凭据过期不自动续期。
 机器访问不是人类邮箱登录，也不是 CI 例外、业务验收或 unknown 恢复的单独批准。
+
+#### SV-11：固定实例更新模式
+
+显式批准可增加唯一可选字段 `deployment`，其中精确包含 `instanceId`、`previousTaskId`、
+`repository`、`sourceSha`。两项任务 ID 是完整 connected ID，SHA 是完整固定 commit；
+不能用浮动分支或通配符。完整 scope 加入 CSRF/confirmation 的签名上下文。
+旧四字段批准不获得新权限；新模式也不继承 legacy state/submit/recover/import 权限。
+
+新模式仅允许 GET `/api/admin/sba/session`，以及 POST `/api/admin/deployments/` 下的
+`plan`、`submit`、`state`、`reconcile`、`verify`。session 从原 connected parent 核验 owner、
+实例和仓库，不拿 legacy owner 代替。机器 plan 输入只有 `instanceId`、`previousTaskId`；
+服务端从可信原任务复用 configuration/resources/connections，固定批准源码，构造 update。
+返回普通短时确认计划，submit 继续使用原一次性派发、许可及真实回执检查。
+
+state/reconcile 只能查询本次 update 及 parent 持久引用的独立 verification child，不能读取
+其他实例或历史任务。verify 只能验证该 update，不能重放、恢复或改写原结果。原 parent
+成为非 latest 后不能再派生竞争更新；重复 submit/verify 不重复派发。没有 catalogue、
+全量服务索引、连接/资源管理、首次部署、预升级、删除、repair/restart/resume/import 权限。
+期限、Access 验签、原邮箱策略、Origin、撤销与秘密保管规则完全保留。共享操作边界见
+`ai-docs/integration.md`，Pages 使用同一参考源；线上启用和实际业务验收必须另外记录。
 
 制品回收先核验 run/artifact 关联，下载跳转只接受受限 Azure Blob HTTPS 主机，绝不转发 GitHub bearer。ZIP 限 64 KiB、解压限 32 KiB，只接收一个 receipt.json，并验证 SHA-256、CRC、envelope 和应用结果。应用报告成功不等于用户业务验收。
 

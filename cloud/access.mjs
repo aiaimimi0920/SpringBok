@@ -9,9 +9,12 @@ export async function signSession(session, purpose, value) {
   const key = await crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', encode(session.proofKey ?? session.token)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const context = [purpose, session.origin, session.actor, value];
   if (session.automation) context.push(['access-service-token', session.automation.clientId, session.automation.issuedAt, session.automation.expiresAt]);
+  if (session.automation?.deployment) context.push(session.automation.deployment);
   return hex(await crypto.subtle.sign('HMAC', key, encode(JSON.stringify(context))));
 }
-export function automationRoute(method, pathname) {
+export function automationRoute(method, pathname, automation = null) {
+  if (automation?.deployment) return (method === 'GET' && pathname === '/api/admin/sba/session') ||
+    (method === 'POST' && ['plan', 'submit', 'state', 'reconcile', 'verify'].some(route => pathname === '/api/admin/deployments/' + route));
   return (method === 'GET' && ['/api/admin/sba/session', '/api/admin/sba/state'].includes(pathname)) ||
     (method === 'POST' && ['/api/admin/sba/preview', '/api/admin/sba/submit', '/api/admin/sba/reconcile', '/api/admin/sba/recover-unstarted', '/api/admin/sba/recover-authorized', '/api/admin/sba/import-preview', '/api/admin/sba/import-submit'].includes(pathname));
 }
@@ -47,15 +50,23 @@ export async function accessSession(request, env) {
   if (payload.sub === '') {
     // 这是明确限时的机器委托，不是邮箱登录，也不能降级为不验签的 API key。
     // Access 可转发冗余 Cookie；身份只取已验签的 assertion，Cookie 不参与认证。
-    if (Object.hasOwn(payload, 'email') || typeof env.SBA_AUTOMATION_ACCESS !== 'string' || env.SBA_AUTOMATION_ACCESS.length > 1024 ||
-      typeof env.SBA_AUTOMATION_PROOF_KEY !== 'string' || !/^[a-f0-9]{64}$/.test(env.SBA_AUTOMATION_PROOF_KEY) ||
-      !automationRoute(request.method, url.pathname)) throw new Error('automation not permitted');
+    if (Object.hasOwn(payload, 'email') || typeof env.SBA_AUTOMATION_ACCESS !== 'string' || env.SBA_AUTOMATION_ACCESS.length > 2048 ||
+      typeof env.SBA_AUTOMATION_PROOF_KEY !== 'string' || !/^[a-f0-9]{64}$/.test(env.SBA_AUTOMATION_PROOF_KEY)) throw new Error('automation not permitted');
     const a = JSON.parse(env.SBA_AUTOMATION_ACCESS), keys = ['clientId', 'ownerActor', 'issuedAt', 'expiresAt'];
+    if (a && Object.hasOwn(a, 'deployment')) keys.push('deployment');
     const ms = Date.now();
     if (!a || typeof a !== 'object' || Array.isArray(a) || Object.keys(a).length !== keys.length || !keys.every(key => Object.hasOwn(a, key)) ||
       typeof a.clientId !== 'string' || !/^[a-f0-9]{32}\.access$/.test(a.clientId) || payload.common_name !== a.clientId ||
       typeof a.ownerActor !== 'string' || !/^[a-f0-9]{64}$/.test(a.ownerActor) || !Number.isSafeInteger(a.issuedAt) || a.issuedAt <= 0 ||
       !Number.isSafeInteger(a.expiresAt) || a.issuedAt > ms || a.expiresAt <= ms || a.expiresAt <= a.issuedAt || a.expiresAt > a.issuedAt + 86400000) throw new Error('automation not permitted');
+    if (Object.hasOwn(a, 'deployment')) {
+      const d = a.deployment, fields = ['instanceId', 'previousTaskId', 'repository', 'sourceSha'];
+      if (!d || typeof d !== 'object' || Array.isArray(d) || Object.keys(d).length !== fields.length || !fields.every(key => Object.hasOwn(d, key)) ||
+        ![d.instanceId, d.previousTaskId].every(value => typeof value === 'string' && /^dc-[a-f0-9]{32}$/.test(value)) ||
+        typeof d.repository !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(d.repository) ||
+        typeof d.sourceSha !== 'string' || !/^[a-f0-9]{40}$/.test(d.sourceSha)) throw new Error('automation not permitted');
+    }
+    if (!automationRoute(request.method, url.pathname, a)) throw new Error('automation not permitted');
     return { token, origin, actor: a.ownerActor, automation: a, proofKey: env.SBA_AUTOMATION_PROOF_KEY };
   }
   if (typeof payload.sub !== 'string' || payload.sub.length < 1 || payload.sub.length > 128 || typeof payload.email !== 'string' || payload.email.toLowerCase() !== allowed[0]) throw new Error('admin not permitted');

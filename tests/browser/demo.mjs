@@ -16,6 +16,7 @@ try {
   app = await startDemo({ directory, port: 0 });
   browser = await chromium.launch({ channel: 'chrome' });
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  page.setDefaultTimeout(30_000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(app.origin);
@@ -61,7 +62,7 @@ try {
   await check(gateway, '已模拟回滚');
   await approve(forum); await forum.getByRole('button', { name: '模拟晋级', exact: true }).click(); await check(forum, '模拟版本已晋级');
   // Independent tab captures an old revision; only the first transition may commit.
-  const second = await browser.newPage(); await second.goto(app.origin);
+  const second = await browser.newPage(); second.setDefaultTimeout(30_000); await second.goto(app.origin);
   const game = page.getByRole('article', { name: '在线游戏', exact: true });
   await game.getByRole('button', { name: '模拟测试通过', exact: true }).click(); await check(game, '待模拟验收');
   await second.getByRole('article', { name: '在线游戏', exact: true }).getByRole('button', { name: '模拟测试失败', exact: true }).click();

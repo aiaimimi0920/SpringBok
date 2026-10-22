@@ -31,10 +31,16 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/demo-fonts" "$HOME/.local/share/fonts/springbok-demo"
           cd "$RUNNER_TEMP/demo-fonts"
-          apt-get download fonts-noto-cjk
-          packages=(fonts-noto-cjk_*.deb)
-          [[ ${#packages[@]} == 1 ]]
-          dpkg-deb --extract "${packages[0]}" extracted
+          metadata="$(apt-cache show --no-all-versions fonts-noto-cjk)"
+          filename="$(awk '/^Filename: / { print $2; exit }' <<< "$metadata")"
+          sha256="$(awk '/^SHA256: / { print $2; exit }' <<< "$metadata")"
+          [[ "$filename" =~ ^pool/main/f/fonts-noto-cjk/fonts-noto-cjk_[A-Za-z0-9.+~-]+_all\.deb$ ]]
+          [[ "$sha256" =~ ^[a-f0-9]{64}$ ]]
+          curl --fail --location --proto '=https' --proto-redir '=https' \
+            --connect-timeout 10 --max-time 90 --retry 1 --retry-max-time 150 \
+            --output fonts-noto-cjk.deb "https://archive.ubuntu.com/ubuntu/$filename"
+          printf '%s  fonts-noto-cjk.deb\n' "$sha256" | sha256sum --check --strict
+          dpkg-deb --extract fonts-noto-cjk.deb extracted
           cp extracted/usr/share/fonts/opentype/noto/*.ttc "$HOME/.local/share/fonts/springbok-demo/"
           fc-cache -f "$HOME/.local/share/fonts/springbok-demo"
           fc-list :lang=zh family | grep -q 'Noto Sans CJK'

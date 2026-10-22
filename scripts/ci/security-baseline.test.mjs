@@ -71,6 +71,20 @@ test("Dependabot tracks Actions with bounded pull requests", () => {
   assert.match(config, /open-pull-requests-limit: [1-5]/);
 });
 
+test("browser fonts use bounded official HTTPS transport and trusted apt checksums", () => {
+  const workflow = read(".github/workflows/demo-browser.yml");
+  assert.match(workflow, /apt-cache show --no-all-versions fonts-noto-cjk/);
+  assert.match(workflow, /\^Filename: /);
+  assert.match(workflow, /\^SHA256: /);
+  assert.match(workflow, /https:\/\/archive\.ubuntu\.com\/ubuntu\/\$filename/);
+  assert.match(workflow, /--proto '=https' --proto-redir '=https'/);
+  assert.match(workflow, /--connect-timeout 10 --max-time 90 --retry 1 --retry-max-time 150/);
+  assert.match(workflow, /sha256sum --check --strict/);
+  assert.ok(workflow.indexOf("sha256sum --check --strict") < workflow.indexOf("dpkg-deb --extract"));
+  assert.match(workflow, /fc-list :lang=zh family \| grep -q 'Noto Sans CJK'/);
+  assert.doesNotMatch(workflow, /apt-get download|continue-on-error|\|\| true/);
+});
+
 test("browser test dependency audit covers the committed lock without executing packages", () => {
   const quality = read(".github/workflows/repository-quality.yml");
   assert.match(quality, /name: Audit committed browser test dependencies\n\s+timeout-minutes: 5\n\s+working-directory: tests\/browser\n\s+run: python3 \.\.\/\.\.\/scripts\/run_dependency_audit\.py npm --output \.\.\/\.\.\/\.tmp\/security-reports\/browser -- npm audit --package-lock-only --include=dev --include=optional --include=peer --audit-level=low/);

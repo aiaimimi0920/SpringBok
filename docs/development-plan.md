@@ -3,7 +3,7 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SV-11：单实例固定版本限时更新委托（兼容修复已上线，应用更新未确认，2026-10-23）
+## SV-11：单实例固定版本限时更新委托（已上线，应用更新及独立验证完成，2026-10-23）
 
 当前领取 SV-11-CANCEL，负责人主 AI。用户另行明确批准仅本次中断 task 的未派发核对与
 取消栅栏；只实现 vault 无 reservation、原 head 不变及 Connected DO 无任何 bootstrap/SBA
@@ -12,7 +12,31 @@
 46 项委托/connected/生命周期/准备恢复/独立验证回归通过，包括孤立 SBA 表、初始化
 异步竞争和畸形 cancellation 批准；文档/安全 18 项、示例与九页站点构建通过。
 只读交叉审阅未发现阻断。初次新增测试的两项失败是
-fixture 重启后复用失效 RPC stub，修正测试重取 stub 后全部通过。生产栅栏尚未执行。
+fixture 重启后复用失效 RPC stub，修正测试重取 stub 后全部通过。
+
+PR #103 精确 head `faa83094aaa2e6ebec2cd7d327ddf18d67142596` 检查通过后正常合并；
+main `96be4b2cfa30cfc789bedfde119ba1c9a7c57cd8` 全部检查通过并已发布控制 Worker。
+主干首次 Windows 合成任务有两项原生 PowerShell 超时；本地同套 36 通过、1 项平台跳过，
+精确失败 job 重跑一次后成功，未绕检查。上传 bundle 绑定 main 与 SHA-256，回读确认
+其他 bindings、原 proof secret、assets 和运行配置保持；原 token 仅重启用，没有续期。
+
+精确中断任务 `dc-f1f53848ca524dd38fa6eb5707666823` 真实取消并独立回读为
+`cancelled-before-reservation`：vaultFenced/taskFenced 均为 true，无 reservation/bootstrap。
+原 marker、计划和取消记录保留。随后从原 parent 重新预览，同实例/固定 NAccount 3.2.5
+SHA 的唯一新 submit 为 `dc-26a817db585145d8bdacac1882c1607f` / run `39823532120`。
+下载 artifact 并核对 SHA-256/task/source；原 update 回执 `deployed-unverified`，备份、
+数据保留、OIDC、JWKS、后台 HTTP 五项均通过。独立 verify
+`dc-123d1756fbca45f1a63a334a1ef31c0d` / run `39824371418` 返回 succeeded，三项探针通过；
+不改写 update 原回执。云端回读双 Worker 新版本，原 bindings/运行配置/D1/KV/域名不变。
+专用 token 已立即禁用；独立 GET 确认 disabled、到期时间未延长，等待 Access 传播后
+无 Cookie 负向请求 302 到组织登录，原 owner 邮箱 policies 保留。
+
+应用前后各 24 个匿名请求全部 200；直连四样本中位数 account/config/discovery 总耗时
+约 1991/1713/1865ms → 1790/1381/1492ms。网络/TLS 波动明显，代理路线并非全数改善；
+不能将这些样本写成登录或验证码送达保证。真实收件、账户登录、短信/外部 OAuth 未验。
+证据保留在 `linshi/naccount-na13-performance-20261022/`，不提交凭据或私密运行日志。
+
+### 首轮兼容修复与提交中断历史（以下保留当时停点）
 
 负责人：主 AI。用户已明确批准本次 NAccount 更新所需的最小兼容修复及控制面发布。
 新委托必须绑定 instanceId、原 previousTaskId、repository、完整 sourceSha，最长 24 小时；

@@ -82,6 +82,8 @@ test("browser fonts use bounded official HTTPS transport and trusted apt checksu
   assert.match(workflow, /sha256sum --check --strict/);
   assert.ok(workflow.indexOf("sha256sum --check --strict") < workflow.indexOf("dpkg-deb --extract"));
   assert.match(workflow, /fc-list :lang=zh family \| grep -q 'Noto Sans CJK'/);
+  assert.match(workflow, /timeout 120s node tests\/browser\/demo.mjs/);
+  assert.match(read('tests/browser/demo.mjs'), /page.setDefaultTimeout\(30_000\)/);
   assert.doesNotMatch(workflow, /apt-get download|continue-on-error|\|\| true/);
 });
 

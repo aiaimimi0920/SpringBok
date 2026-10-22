@@ -45,7 +45,9 @@ jobs:
           fc-cache -f "$HOME/.local/share/fonts/springbok-demo"
           fc-list :lang=zh family | grep -q 'Noto Sans CJK'
       - name: Exercise the loopback-only demo in the runner's Chrome
-        run: node tests/browser/demo.mjs
+        run: timeout 120s node tests/browser/demo.mjs
+        env:
+          DEBUG: pw:api
       - name: Exercise execution confirmation with a fake backend (no containers or credentials)
         run: node tests/browser/execution-review.mjs
       - name: Check local user configuration UI without deployment or credentials

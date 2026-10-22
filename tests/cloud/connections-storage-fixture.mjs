@@ -1,5 +1,15 @@
 import { ConnectionVault as Vault } from '../../cloud/connections-store.mjs';
-export { default, TargetMailbox, OwnerCatalog, NodeMailbox, NodeTelemetry, SbaDeployment, ConnectedDeployment, DeploymentLocks } from '../../cloud/worker.mjs';
+import { ConnectedDeployment as ConnectedStore } from '../../cloud/connected-store.mjs';
+export { default, TargetMailbox, OwnerCatalog, NodeMailbox, NodeTelemetry, SbaDeployment, DeploymentLocks } from '../../cloud/worker.mjs';
+export class ConnectedDeployment extends ConnectedStore {
+  seedOrphanSba() { this.ctx.storage.sql.exec('CREATE TABLE sba_orphan (id INTEGER PRIMARY KEY)'); }
+  async raceInitialization(owner, taskId, plan, record) {
+    const pending = this.initialize(owner, taskId, plan);
+    this.cancelUninitialized(owner, record);
+    try { await pending; return { rejected: false }; }
+    catch { return { rejected: true, cancellation: this.cancellation(owner, taskId) }; }
+  }
+}
 export class ConnectionVault extends Vault {
   patchPreparation(taskId, patch) {
     const sql=this.ctx.storage.sql,record=JSON.parse(sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).one().record);

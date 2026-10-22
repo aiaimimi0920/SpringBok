@@ -24,6 +24,96 @@ async function scopedFixture(t) {
   return { ...x, first, a, token, machineSession: session, call, plan };
 }
 
+const object = async (f, binding, name) => { const ns=await f.mf.getDurableObjectNamespace(binding);return ns.get(ns.idFromName(name)); };
+async function cancellationScope(x,next){
+  const {f,a,token}=x;
+  a.deployment.cancellation={taskId:next.taskId,planDigest:next.plan.digest};
+  Object.assign(f.bindings,bindings(a));await f.restart();
+  const response=await f.call('/api/admin/sba/session',{token});assert.equal(response.status,200,response.text);
+  const session=response.json();
+  return {session,call:(route,body)=>f.call('/api/admin/deployments/'+route,{token,headers:{'x-csrf-token':session.csrf},body})};
+}
+
+test('explicit exact-task cancellation fences absent reservation and task slot before a fresh fixed-source update',async t=>{
+  const x=await scopedFixture(t),{f,a,token,plan,state,first}=x,next=(await plan()).json();
+  assert.equal((await x.call('cancel-unstarted',{taskId:next.taskId})).status,403,'no implicit cancellation grant');
+  const {call,session}=await cancellationScope(x,next),input={taskId:next.taskId};
+  assert.notEqual(session.csrf,x.machineSession.csrf,'new scope invalidates old proof');
+  assert.equal((await x.call('submit',(({executionEnabled,...body})=>body)(next))).status,403);
+  const draft={instanceId:first.taskId,previousTaskId:first.taskId};
+  assert.equal((await call('plan',draft)).status,409,'no new preview before both fences');
+  assert.equal((await call('state',input)).json().status,'cancellation-unconfirmed');
+  assert.equal((await call('cancel-unstarted',{taskId:'dc-'+'9'.repeat(32)})).status,409);
+  assert.equal((await f.call('/api/admin/deployments/cancel-unstarted',{token,body:input})).status,403);
+  assert.equal((await x.service('cancel-unstarted',input)).status,403,'no general human recovery API');
+  const response=await call('cancel-unstarted',input);assert.equal(response.status,200,response.text);
+  const cancelled=response.json();assert.equal(cancelled.status,'cancelled-before-reservation');
+  assert.equal(cancelled.reservationObserved,false);assert.equal(cancelled.bootstrapObserved,false);
+  assert.deepEqual((await call('cancel-unstarted',input)).json(),cancelled,'repeat only confirms immutable fences');
+  assert.deepEqual((await call('state',input)).json(),cancelled);
+  const vault=await object(f,'CONNECTIONS','connections/v1/'+a.ownerActor),stub=await object(f,'CONNECTED_TASKS','connected/v1/'+next.taskId);
+  await assert.rejects(vault.reserveDeployment(a.ownerActor,next.taskId,next.plan),'late original request cannot reserve');
+  await assert.rejects(stub.initialize(a.ownerActor,next.taskId,next.plan),'late initialize cannot revive slot');
+  await assert.rejects(stub.begin(a.ownerActor,{}));assert.equal(await stub.uninitialized(),false);
+  const record=await vault.deploymentCancellation(a.ownerActor,next.taskId);
+  await assert.rejects(stub.cancelUninitialized(a.ownerActor,{...record,planDigest:'f'.repeat(64)}));
+  await assert.rejects(vault.cancelAbsentDeployment(a.ownerActor,(({cancelledAt,...identity})=>({...identity,owner:'f'.repeat(64)}))(record)));
+  assert.equal(state.dispatches,1);
+  const fresh=(await call('plan',draft)).json();assert.notEqual(fresh.taskId,next.taskId);
+  assert.equal(fresh.plan.operation.previousTaskId,first.taskId);assert.equal(fresh.plan.application.sourceSha,updatedSha);
+  assert.equal((await call('submit',(({executionEnabled,...body})=>body)(fresh))).status,200);assert.equal(state.dispatches,2);
+});
+
+test('reservation winning cancellation race stays closed without deleting, transferring or releasing the task',async t=>{
+  const x=await scopedFixture(t),next=(await x.plan()).json();let vault=await object(x.f,'CONNECTIONS','connections/v1/'+x.a.ownerActor);
+  await vault.reserveDeployment(x.a.ownerActor,next.taskId,next.plan);
+  const {call}=await cancellationScope(x,next);
+  vault=await object(x.f,'CONNECTIONS','connections/v1/'+x.a.ownerActor);
+  assert.equal((await call('cancel-unstarted',{taskId:next.taskId})).status,409);
+  assert.equal(await vault.deploymentCancellation(x.a.ownerActor,next.taskId),null);
+  assert.equal((await vault.deploymentIndex(x.a.ownerActor))[0].taskId,next.taskId);
+  assert.equal((await call('plan',{instanceId:x.first.taskId,previousTaskId:x.first.taskId})).status,409);
+  assert.equal(x.state.dispatches,1);
+});
+
+test('partial dual-DO cancellation never opens re-preview and cannot cancel an initialized task',async t=>{
+  const x=await scopedFixture(t),next=(await x.plan()).json();let stub=await object(x.f,'CONNECTED_TASKS','connected/v1/'+next.taskId);
+  await stub.initialize(x.a.ownerActor,next.taskId,next.plan);
+  const {call}=await cancellationScope(x,next);
+  stub=await object(x.f,'CONNECTED_TASKS','connected/v1/'+next.taskId);
+  assert.equal((await call('cancel-unstarted',{taskId:next.taskId})).status,409);
+  const state=(await call('state',{taskId:next.taskId})).json();
+  assert.equal(state.status,'cancellation-unconfirmed');assert.equal(state.vaultFenced,true);assert.equal(state.taskFenced,false);
+  assert.equal((await call('plan',{instanceId:x.first.taskId,previousTaskId:x.first.taskId})).status,409);
+  assert.equal((await stub.bootstrap(x.a.ownerActor)).taskId,next.taskId);assert.equal(x.state.dispatches,1);
+});
+
+test('orphan SBA tables fail closed and cancellation wins during asynchronous initialization',async t=>{
+  const x=await scopedFixture(t),next=(await x.plan()).json(),{call}=await cancellationScope(x,next);
+  const stub=await object(x.f,'CONNECTED_TASKS','connected/v1/'+next.taskId);
+  await stub.seedOrphanSba();
+  assert.equal((await call('cancel-unstarted',{taskId:next.taskId})).status,409);
+  const partial=(await call('state',{taskId:next.taskId})).json();
+  assert.equal(partial.vaultFenced,true);assert.equal(partial.taskFenced,false);
+  assert.equal((await call('plan',{instanceId:x.first.taskId,previousTaskId:x.first.taskId})).status,409);
+  const other='dc-'+'8'.repeat(32),clean=await object(x.f,'CONNECTED_TASKS','connected/v1/'+other);
+  const record={owner:x.a.ownerActor,taskId:other,...x.a.deployment,planDigest:next.plan.digest,cancelledAt:Date.now()};
+  delete record.cancellation;
+  const raced=await clean.raceInitialization(x.a.ownerActor,other,next.plan,record);
+  assert.equal(raced.rejected,true);assert.deepEqual(raced.cancellation,record);
+  await assert.rejects(clean.bootstrap(x.a.ownerActor));await assert.rejects(clean.begin(x.a.ownerActor,{}));
+  assert.equal(x.state.dispatches,1);
+});
+
+test('cancellation approval rejects malformed identities instead of widening access',async t=>{
+  const x=await scopedFixture(t),good={taskId:'dc-'+'8'.repeat(32),planDigest:'a'.repeat(64)};
+  for(const cancellation of [null,[],{}, {...good,extra:true},{...good,taskId:x.first.taskId},
+    {...good,taskId:'other'},{...good,planDigest:'main'},{...good,planDigest:0}]){
+    x.f.bindings.SBA_AUTOMATION_ACCESS=JSON.stringify({...x.a,deployment:{...x.a.deployment,cancellation}});
+    await x.f.restart();assert.equal((await x.f.call('/api/admin/sba/session',{token:x.token})).status,403);
+  }
+});
+
 test('bounded connected delegation defaults closed and grants no catalogue, legacy, resource or other operations', async t => {
   const x = await scopedFixture(t), { f, token, call, a, machineSession } = x;
   assert.equal(machineSession.ownerId, a.ownerActor); assert.deepEqual(machineSession.authentication.deployment, a.deployment);

@@ -3,7 +3,16 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SV-11：单实例固定版本限时更新委托（进行中，2026-10-22）
+## SV-11：单实例固定版本限时更新委托（兼容修复已上线，应用更新未确认，2026-10-23）
+
+当前领取 SV-11-CANCEL，负责人主 AI。用户另行明确批准仅本次中断 task 的未派发核对与
+取消栅栏；只实现 vault 无 reservation、原 head 不变及 Connected DO 无任何 bootstrap/SBA
+表的双侧取消。已有 reservation 即停止，不转移/释放锁、不改历史、不重发原 submit。
+可选 cancellation 精确绑定 task/digest，变更使旧 proof 失效；两侧记录一致前禁止新计划。
+46 项委托/connected/生命周期/准备恢复/独立验证回归通过，包括孤立 SBA 表、初始化
+异步竞争和畸形 cancellation 批准；文档/安全 18 项、示例与九页站点构建通过。
+只读交叉审阅未发现阻断。初次新增测试的两项失败是
+fixture 重启后复用失效 RPC stub，修正测试重取 stub 后全部通过。生产栅栏尚未执行。
 
 负责人：主 AI。用户已明确批准本次 NAccount 更新所需的最小兼容修复及控制面发布。
 新委托必须绑定 instanceId、原 previousTaskId、repository、完整 sourceSha，最长 24 小时；
@@ -21,6 +30,18 @@
 该 CI 传输修正不改变 SBA 字段、用户操作或权限；AI/Pages 接口参考无需额外复制定义。
 字体步骤已通过，后续 demo 浏览器检查暴露静默等待；为真实浏览器操作增加 30 秒上限，
 首脚本增加两分钟进程上限与 Playwright API 日志，定位失败而不跳过任何业务断言。
+PR #102 精确 head `ad306d4b57661693492fb2aeae9ee9ede235d78b` 全部检查通过后正常合并；
+main `76506322e93dee02f1686b38417b5ead871fe38c` 全部检查通过。主干浏览器首轮
+仅官方字体网络下载超时，精确失败 job 重跑一次后全步骤与最终结论均成功；未绕门禁。
+该 main 的控制 Worker 已构建、绑定 SHA-256 provenance 并发布，原 bindings 与运行配置
+回读不变。专用 Access policy 会话缩短为 23 小时以避免 provider 签发的 24 小时 JWT
+出现一秒舍入差；批准本身仍严格不超过 24 小时，未放宽 JWT guard 或原邮箱策略。
+真实 scoped session 已核对原 owner、实例、parent 与固定 NAccount 3.2.5 SHA。
+原实例计划核对通过，但唯一一次 submit 遇网络中断；state 409，暂未发现对应 run，
+这不能证明未接受或可重试。保留本地 marker 与原计划，不重发、不新建任务、不恢复 unknown。
+本次专用 token 已禁用，独立 GET 回读和无 Cookie 负向请求确认失效，原 Access policies
+保留。应用实际更新与独立 verify 尚未完成；用户已额外明确批准精确中断任务的未派发
+核对与取消栅栏，正在按本节 SV-11-CANCEL 边界实施，不授权一般 unknown 恢复。
 
 ## SV-10：connected 源码拒绝诊断与许可前失败恢复（2026-10-17）
 

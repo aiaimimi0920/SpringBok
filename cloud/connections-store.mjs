@@ -17,6 +17,7 @@ import { servicePreviewDraft, continuesInstance, createsResources } from './serv
 import { serviceRepairDraft } from './service-repair.mjs';
 import { deletionPlan, deleteService, deletionRecord, assertNotDeleting } from './service-deletion.mjs';
 import { adminProfiles, saveAdminProfile, reserveBootstrap, bootstrapCredential } from './admin-profiles.mjs';
+import { cancellationIdentity, cancellationRecord, sameCancellation } from './deployment-cancellation.mjs';
 
 export class ConnectionVault extends DurableObject {
   deletionPlan(owner, input) { return deletionPlan(this, owner, input); }
@@ -188,6 +189,7 @@ export class ConnectionVault extends DurableObject {
   reserveDeployment(owner,taskId,plan){
     connectedTaskId(taskId);return this.ctx.storage.transactionSync(()=>{
       this.deploymentGuard(owner);const sql=this.ctx.storage.sql,prior=sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];
+      requireSba(!this.deploymentCancellation(owner,taskId));
       const record={taskId,digest:plan.digest,connections:plan.connections,accountId:null,createdAt:Date.now(),service:serviceSummary(taskId,plan)};
       // 声明路径可能嵌套；账号身份以已核验的 Cloudflare 连接为准。
       const cloudflare=this.row(plan.connections.cloudflare.id);requireSba(cloudflare);record.accountId=JSON.parse(cloudflare.metadata).target;
@@ -203,6 +205,30 @@ export class ConnectionVault extends DurableObject {
     });
   }
   deploymentIndex(owner){return this.ctx.storage.transactionSync(()=>{this.deploymentGuard(owner);return this.ctx.storage.sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record));});}
+  deploymentCancellation(owner,taskId){
+    ownerId(owner);connectedTaskId(taskId);const sql=this.ctx.storage.sql;
+    requireSba(sql.exec('SELECT owner FROM connection_owner WHERE id=1').one().owner===owner);
+    if(!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connection_cancelled_deployments'").toArray().length)return null;
+    const row=sql.exec('SELECT record FROM connection_cancelled_deployments WHERE task=?',taskId).toArray()[0];
+    if(!row)return null;const record=cancellationRecord(JSON.parse(row.record));requireSba(record.owner===owner&&record.taskId===taskId);return record;
+  }
+  cancelAbsentDeployment(owner,identity){
+    cancellationIdentity(identity);requireSba(identity.owner===owner);
+    return this.ctx.storage.transactionSync(()=>{
+      this.deploymentGuard(owner);const sql=this.ctx.storage.sql;
+      // Absence and the fence are decided in the same transaction as reservation.
+      // A prior reservation may already hold account claims; never erase or transfer it.
+      requireSba(!sql.exec('SELECT task FROM connection_deployments WHERE task=?',identity.taskId).toArray().length);
+      const head=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),identity.instanceId)[0];
+      requireSba(head?.taskId===identity.previousTaskId);
+      const prior=this.deploymentCancellation(owner,identity.taskId);
+      if(prior){requireSba(sameCancellation(prior,identity));return prior;}
+      sql.exec('CREATE TABLE IF NOT EXISTS connection_cancelled_deployments (task TEXT PRIMARY KEY,record TEXT NOT NULL)');
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_cancelled_deployments').one().n<32);
+      const record={...identity,cancelledAt:Date.now()};
+      sql.exec('INSERT INTO connection_cancelled_deployments VALUES(?,?)',identity.taskId,JSON.stringify(record));return record;
+    });
+  }
   beginPreparationRecovery(owner,taskId,digest,recoveryId){return beginPreparationRecovery(this,owner,taskId,digest,recoveryId);}
   provisionDeployment(owner,taskId,plan,recoveryId=null){return provisionDeployment(this,owner,taskId,plan,recoveryId);}
   async deploymentCredential(owner,taskId,provider){

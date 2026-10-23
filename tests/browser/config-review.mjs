@@ -14,6 +14,7 @@ try {
   page.on('pageerror', error => errors.push(error.message)); page.on('request', request => requests.push({ url: request.url(), method: request.method() }));
   page.on('download', download => downloads.push(download));
   await page.goto(app.origin);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(6, 8, 13)');
   const input = page.getByLabel('JSON文件 · UTF-8 · 最大64KiB');
   const download = page.getByRole('button', { name: '下载校验草稿', exact: true });
   await page.waitForFunction(() => !document.querySelector('#config-file').disabled);
@@ -114,7 +115,7 @@ try {
   assert.deepEqual(errors, []);
   for (const request of requests) {
     const url = new URL(request.url); assert.equal(url.origin, app.origin);
-    assert.ok(['/', '/app.js', '/style.css', '/api/session', '/api/validate', '/api/compare'].includes(url.pathname));
+    assert.ok(['/', '/app.js', '/style.css', '/neuro.css', '/local-neuro.css', '/api/session', '/api/validate', '/api/compare'].includes(url.pathname));
     if (request.method !== 'GET') { assert.equal(request.method, 'POST'); assert.ok(['/api/validate', '/api/compare'].includes(url.pathname)); }
   }
   console.log('PASS config UI: shared compiler, explicit download, invalid replacement revocation, oversize, cancel/reset/keyboard/late replacement/Back/Forward/repeat/390px and loopback-only requests; no deployment or credentials');

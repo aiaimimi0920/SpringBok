@@ -7,6 +7,8 @@ const assets = new Map([
   ['/history.mjs', ['history.mjs', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+  ['/neuro.css', ['../cloud-admin/tokens.css', 'text/css; charset=utf-8']],
+  ['/local-neuro.css', ['../local-neuro.css', 'text/css; charset=utf-8']],
 ]);
 export async function startTestConsole({ controller, port = 0 }) {
   const store = controller;

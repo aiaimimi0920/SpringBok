@@ -1,0 +1,76 @@
+/* Shared Neuro surface mapping for isolated local workbenches. */
+:root {
+  color-scheme: dark;
+  --neuro-muted: var(--neuro-text-muted);
+  --neuro-yellow: var(--neuro-signal-yellow);
+  --neuro-green: var(--neuro-signal-green);
+  --neuro-info: var(--neuro-info-blue);
+  --neuro-danger: var(--neuro-danger-red);
+  color: var(--neuro-text);
+  background: var(--neuro-bg);
+}
+body { color: var(--neuro-text); background: var(--neuro-bg); }
+header { color: var(--neuro-text); background: var(--neuro-surface); border-bottom: 1px solid var(--neuro-line); }
+header span, header .brand span { color: var(--neuro-muted); }
+main { color: var(--neuro-text); }
+:is(p, li, dd, .muted, .service-id) { color: var(--neuro-muted); }
+:is(article, .card, .preview, .upload, #readiness, #execution-review, .diagnostic), .targets section {
+  color: var(--neuro-text);
+  background: var(--neuro-panel);
+  border-color: var(--neuro-line);
+  box-shadow: none;
+}
+:is(.flow, .phase, .preview-boundary, .review-boundary, .readiness-list li, .diagnostic, .boundary) {
+  color: var(--neuro-text);
+  background: var(--neuro-control);
+  border-color: var(--neuro-line);
+}
+:is(button, select, input, textarea, input::file-selector-button) {
+  color: var(--neuro-text);
+  background: var(--neuro-control);
+  border: 1px solid var(--neuro-line);
+  border-radius: 4px;
+}
+:is(button, input::file-selector-button):hover:not(:disabled) {
+  background: var(--neuro-control-hover);
+  border-color: var(--neuro-muted);
+}
+button.primary, #download {
+  color: var(--neuro-on-yellow);
+  background: var(--neuro-yellow);
+  border-color: var(--neuro-yellow);
+  font-weight: 650;
+}
+button.primary:hover:not(:disabled), #download:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--neuro-yellow) 86%, white);
+}
+:is(button, input, select, textarea, a, summary):focus-visible {
+  outline: 2px solid var(--neuro-yellow);
+  outline-offset: 3px;
+}
+a, .eyebrow { color: var(--neuro-info); }
+.brand { color: var(--neuro-green); }
+.badge { color: var(--neuro-green); background: color-mix(in srgb, var(--neuro-green) 14%, var(--neuro-panel)); border-color: color-mix(in srgb, var(--neuro-green) 42%, var(--neuro-line)); }
+:is(.error, .change-warning, #preview-status.error) { color: color-mix(in srgb, var(--neuro-danger) 78%, white); }
+:is(dialog, #execution-review) { color: var(--neuro-text); background: var(--neuro-panel); border: 1px solid var(--neuro-line); }
+:is(.plan-diff th, .plan-diff td) { color: var(--neuro-text); border-color: var(--neuro-line); }
+.plan-diff th { background: var(--neuro-control); }
+.details dd, .preview-controls > div { color: var(--neuro-text); }
+.details dt, .actions label { color: var(--neuro-muted); }
+.history ol, #changes pre {
+  color: var(--neuro-text);
+  background: var(--neuro-control);
+  border-color: var(--neuro-line);
+}
+.phase.bad {
+  color: var(--neuro-danger);
+  background: color-mix(in srgb, var(--neuro-danger) 12%, var(--neuro-panel));
+}
+header > span {
+  color: var(--neuro-green);
+  background: color-mix(in srgb, var(--neuro-green) 14%, var(--neuro-surface));
+}
+#changes details { border-color: var(--neuro-line); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

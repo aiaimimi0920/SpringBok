@@ -17,8 +17,8 @@ function readBody(req, limit) {
 }
 export async function startConfigReview({ port = 0 } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
-  const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']], ['/app.js', ['app.js', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]
-    .map(([path, [file, type]]) => [path, { type, body: readFileSync(new URL(`../../public/config/${file}`, import.meta.url)) }]));
+  const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']], ['/app.js', ['app.js', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']], ['/neuro.css', ['tokens.css', 'text/css; charset=utf-8']], ['/local-neuro.css', ['local-neuro.css', 'text/css; charset=utf-8']]]
+    .map(([path, [file, type]]) => [path, { type, body: readFileSync(new URL(file === 'tokens.css' ? `../../public/cloud-admin/${file}` : file === 'local-neuro.css' ? `../../public/${file}` : `../../public/config/${file}`, import.meta.url)) }]));
   const csrf = randomBytes(32).toString('hex'); let origin;
   const server = http.createServer(async (req, res) => {
     req.on('error', () => {}); // A disconnected upload cannot become an unhandled process error.

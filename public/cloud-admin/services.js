@@ -205,14 +205,19 @@ async function loadUsage(instance, version) {
     finally { if (current(version)) usagePending.delete(key); }
   }
 }
-async function refreshInstances() {
+function activeInstance(state) {
+  return state?.status === 'deleting' || ['dispatching','dispatched','running'].includes(state?.verification?.status) || ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state?.job?.status ?? state?.status);
+}
+async function refreshInstances(activeOnly = false) {
   if (listBusy || !session) return;
   const version = generation; listBusy = true;
   try {
-    const result = await request(api + 'services'); if (!current(version)) return;
-    for (const entry of result.services) instances.set(entry.id, entry);
+    if (!activeOnly) {
+      const result = await request(api + 'services'); if (!current(version)) return;
+      for (const entry of result.services) instances.set(entry.id, entry);
+    }
     instances = new Map([...instances].sort((a, b) => b[1].createdAt - a[1].createdAt)); renderInstances();
-    await pool([...instances.keys()], async id => {
+    await pool([...instances.keys()].filter(id => !activeOnly || activeInstance(states.get(id))), async id => {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
         if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
@@ -222,7 +227,7 @@ async function refreshInstances() {
   finally {
     if (current(version)) {
       listBusy = false; clearTimeout(pollTimer);
-      if ([...states.values()].some(state => state.status === 'deleting' || ['dispatching','dispatched','running'].includes(state.verification?.status) || ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state.job?.status ?? state.status))) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(); }, 5000);
+      if ([...states.values()].some(activeInstance)) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(true); }, 5000);
     }
   }
 }

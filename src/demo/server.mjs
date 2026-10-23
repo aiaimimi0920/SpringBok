@@ -9,6 +9,8 @@ const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+  ['/neuro.css', ['../cloud-admin/tokens.css', 'text/css; charset=utf-8']],
+  ['/local-neuro.css', ['../local-neuro.css', 'text/css; charset=utf-8']],
   ['/preview.js', ['preview.js', 'text/javascript; charset=utf-8']],
 ]);
 export async function startDemo({ directory = join(process.cwd(), '.springbok-demo'), port = 3210 } = {}) {

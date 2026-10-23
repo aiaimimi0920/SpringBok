@@ -1,6 +1,6 @@
 # UI-06 全界面主题与状态请求预算
 
-2026-10-23，本地实现及验证通过，主 AI 负责；发布进行中，尚未部署。用户授权覆盖 SpringBok、AssetLibrary、NAccount 全界面，并已明确授权提交推送及升级。
+2026-10-23，主 AI 负责；代码、全套新静态资产与 Pages 已上线。用户授权覆盖 SpringBok、AssetLibrary、NAccount 全界面，并已明确授权提交推送及升级。
 
 正式管理后台继续使用原 cloud-admin tokens、布局和权限流程。本地 demo、配置审阅和执行控制台新增两个固定静态路径
 `/neuro.css`、`/local-neuro.css`，只映射现有文件，未放宽 CSP、同源检查或路径白名单。历史列表、字段值、错误 phase、
@@ -35,3 +35,28 @@ Pages 文档 6 项、示例校验及隔离静态构建通过；实际静态产�
 
 双入口影响：没有 SBA 清单/字段、CLI 或生命周期合同变更，因此不修改 ai-docs 协议说明；人类入口补充实际控制台刷新方式。
 发布仍需原精确版本和独立 verify；UI 与本地请求减少不等于部署成功，也不承诺云费用下降的实测比例。
+
+## 实际发布与生产核验
+
+- PR #105 正常合并，代码 main `5b7d21e355a4f916f7d7c71acdd016c658c82828` 的全部 CI 成功，Pages publish 成功。
+  PR 首轮 synthetic sba-windows 有一次 60 秒原生 PowerShell 超时，本地同套 4/4 通过，精确失败 job 重跑一次后成功；
+  main 首轮即全通过。未改测试/超时边界，未重跑生产任务。
+- 使用 exact-main bundle，SHA-256 `7504c467c7e94dd73dfea6337d2a936f4fc4364ee42bef9153a60fbbf0273f5b`，
+  上传 26 个本轮静态资产；初次 UI 发布 Worker version `261d5d4a-03ce-43b5-b8e5-9823b759d4b4` /
+  deployment `6c44a8b6-574a-42ac-90ac-dc14c1fcbb0c`。不是只更新 Worker 而用 keep_assets 留旧 UI。
+  33 个 bindings、运行设置、资源 namespaces 和原 Access policies 保留。
+- NAccount 旧 UI submit 未确认，未重放。用户另行明确批准后，仅建立两小时、原实例/parent/3.2.7 完整 SHA
+  绑定的临时维护授权。既有双侧栅栏确认无 reservation/bootstrap 才继续；未删除数据、解锁、转移锁或改历史。
+  临时 token 已禁用，原控制 bindings 恢复、旧 policies 不变、独立无 Cookie 探针 302。
+  最终 settings-only version `68ca8567-4379-409a-8290-46d068a8d2ec` /
+  deployment `ff6ff7ed-7f79-4b43-9a0d-7c24825010a0` 的实际控制代码摘要与上述 bundle 一致，static assets/runtime 配置保持。
+- AssetLibrary 原实例 0.4.14：update run `39948275033` 为 `deployed-unverified`、七检查通过；独立 verify
+  run `39948761193` 为 `succeeded`、四检查通过。NAccount 原实例 3.2.7：update run `39949925541`
+  为 `deployed-unverified`、五检查通过；独立 verify run `39950926985` 为 `succeeded`、三检查通过。
+  每个 artifact 的 ZIP digest、run/task/source 独立核对。原 update 回执不改写。
+- 实际 Edge 正式控制台显示两个新版本“可用性已验证”。活动期间前台 51.644 秒捕获到 7 次 service-state，
+  全部仅查询活动 NAccount；没有重复 services 列表查询或对终态 AssetLibrary 的状态轮询。既有资源 usage 仍按一分钟缓存
+  到期读取，本窗口有三次，不将状态轮询优化说成所有周期请求均消失。
+  两实例均终态后，前台连续 145.407 秒捕获到零请求，观测未截断、无后续分页。
+- 生产证据位于 `linshi/asset-store-ui-20261023/`，凭据和私密配置仅 DPAPI 保存，不进入公开文档或 Git。
+  本轮没有重新执行所有应用业务、Linux 持久化或负载/费用验收。

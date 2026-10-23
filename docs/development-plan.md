@@ -3,14 +3,19 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## UI-06：全界面 Neuro 与活动实例请求预算（本地增量，2026-10-23）
+## UI-06：全界面 Neuro 与活动实例请求预算（已上线，2026-10-23）
 
 负责人主 AI；用户明确授权三个项目完整界面统一。正式 cloud-admin 保持原 Neuro 共享组件，
 本地 demo/config/test-console 通过同一 tokens 与 local-neuro.css 映射深色表面，Pages 中性色归一。
 服务页每五秒只查询已知活动实例，不重复拉 services，不查终态；初始化、操作后及恢复可见仍全量刷新。
 真实 Chrome 已验证活动/终态/验证任务、隐藏恢复、无重复列表请求及零派发；既有连接执行、独立 verify、
 config-review 和四页 Neuro 回归通过。Windows 的 demo 持久化及两项 config CLI/Linux 检查未通过平台前置，未放宽保护。
-详见 [全界面主题与请求优化](ui-request-efficiency.md)。用户已授权提交推送及升级，正在执行精确 head 发布门禁，尚未部署，不影响下述既有上线回执。
+PR #105 正常合并，精确 head/main 全部 CI 成功；代码 SHA `5b7d21e355a4f916f7d7c71acdd016c658c82828`
+已发布正式控制 Worker 与 26 个新静态资产，不沿用旧 keep_assets 发布路径。33 个原 bindings、运行配置及原 owner policies 保留。
+同轮 AssetLibrary 0.4.14 和 NAccount 3.2.7 均在原实例升级并独立 verify 通过。NAccount 未确认旧任务
+在用户另行批准后经既有双侧无预留/未启动栅栏关闭，才生成新计划；没有重放、解锁或删除数据。
+两小时临时精确维护 token 已禁用、原控制 bindings 恢复，无 Cookie 负向探针 302，控制代码/新资产配置未回退。
+正式 UI 已显示两个新版本“可用性已验证”；详见 [全界面主题与请求优化](ui-request-efficiency.md)。
 
 ## SV-11：单实例固定版本限时更新委托（已上线，应用更新及独立验证完成，2026-10-23）
 

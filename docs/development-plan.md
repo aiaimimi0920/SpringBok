@@ -17,6 +17,17 @@ whitespace 检查通过；只读交叉审阅无阻断。精确 PR/main CI 和本
 详见 [资源只读请求性能与生命周期](resource-read-performance.md)。
 证据目录：`linshi/springbok-perf01-20261025/`。
 
+### PERF-01-SEC：发布前测试传输依赖修复（进行中）
+
+负责人主 AI。PERF-01 PR #107 的精确 head `b82d7596201f281adb6c5fe2744e5eba8583704f`
+通过全部七个 CI 工作流并正常合并为 `0a323ed02c6902d1e4354ab1d514ff47e05086e7`。
+main 上的动态 Dependabot 安全更新发现 Miniflare 固定 `undici 7.29.1`，自动升级失败；
+联网 npm audit 复核为高危，因此暂停发布，不忽略检查。范围仅为 tests/cloud 的 Miniflare
+传递依赖精确覆盖到官方 `7.30.1` 和对应 lock；不升级 workerd/Miniflare 或更改生产依赖。
+隔离目录 npm ci 成功，实际解析为 `undici 7.30.1`，联网 audit 为零漏洞；使用该隔离运行时的
+聚焦 39 项和读取预算/资源/用量/四页 Neuro 浏览器四套全部通过，Pages 6 项、示例及九页构建通过。
+新精确 PR/main 门禁待完成。此时生产版本仍未改变。
+
 ## UI-06：全界面 Neuro 与活动实例请求预算（已上线，2026-10-23）
 
 负责人主 AI；用户明确授权三个项目完整界面统一。正式 cloud-admin 保持原 Neuro 共享组件，

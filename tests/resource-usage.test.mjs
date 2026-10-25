@@ -95,3 +95,65 @@ test('Workers historical unknown groups remain unattributed without discarding l
   assert.equal(result.status, 'partial'); assert.equal(result.unattributed.requests, 22);
   assert.equal(result.samples['current-worker'].requests.value, 31); assert.equal(result.samples.__unknown__, undefined);
 });
+
+test('PERF-01 D1/KV analytics start without waiting for optional subscriptions', async () => {
+  for (const kind of ['d1', 'kv']) for (const failedPlan of [false, true]) {
+    let release, subscribed, analyticsStarted = false;
+    const blocked = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { subscribed = resolve; });
+    const id = kind === 'd1' ? database : '1'.repeat(32), dimension = kind === 'd1' ? 'databaseId' : 'namespaceId';
+    const field = kind === 'd1' ? 'databaseSizeBytes' : 'byteCount';
+    const transport = async url => {
+      if (url.endsWith('/subscriptions')) {
+        subscribed(); await blocked;
+        return failedPlan ? new Response('', { status: 403 }) : Response.json({ success: true, result: subscriptions('workers') });
+      }
+      analyticsStarted = true;
+      return response([{ max: { [field]: 123 }, dimensions: { [dimension]: id, date: '2026-10-02' } }]);
+    };
+    const pending = readResourceUsage(account, 'synthetic', kind, transport, now);
+    await started;
+    try { assert.equal(analyticsStarted, true, `${kind} must not serialize analytics behind optional subscriptions`); }
+    finally { release(); await pending; }
+    const result = await pending;
+    assert.equal(result.status, 'available'); assert.equal(result.samples[id].storage.value, 123);
+    assert.equal(result.metrics[0].allowance?.value ?? null, failedPlan ? null : kind === 'd1' ? 5e9 : 1e9);
+    assert.equal(result.plan, failedPlan ? null : 'workers_paid');
+  }
+});
+
+test('PERF-01 Workers windows use at most two reads and retain partial results out of order', async () => {
+  for (const failed of [[], [1], [0, 1, 2, 3]]) {
+    const late = Date.parse('2026-10-23T12:00:00Z'), ranges = [], releases = [], starts = [];
+    const ready = Array.from({ length: 4 }, (_, i) => new Promise(resolve => { starts[i] = resolve; }));
+    const gates = Array.from({ length: 4 }, (_, i) => new Promise(resolve => { releases[i] = resolve; }));
+    let active = 0, maximum = 0;
+    const { transport } = transportFor('worker', async body => {
+      const i = ranges.length; ranges.push(body.variables); active++; maximum = Math.max(maximum, active); starts[i]();
+      try {
+        await gates[i];
+        return failed.includes(i) ? new Response('', { status: 403 }) : response([
+          { dimensions: { scriptName: '__proto__' }, sum: { requests: i + 1 } },
+          { dimensions: { scriptName: '__unknown__' }, sum: { requests: 2 } },
+        ]);
+      } finally { active--; }
+    });
+    const pending = readResourceUsage(account, 'synthetic', 'worker', transport, late);
+    await ready[0];
+    try {
+      assert.equal(ranges.length, 2, 'start two independent windows before either finishes');
+      releases[1](); await ready[2]; releases[2](); await ready[3]; releases[3](); releases[0]();
+    } finally { for (const release of releases) release(); await pending; }
+    const result = await pending;
+    assert.equal(maximum, 2); assert.equal(ranges.length, 4);
+    for (let i = 1; i < ranges.length; i++) assert.equal(ranges[i].start, ranges[i - 1].end);
+    if (failed.length === 4) { assert.equal(result.status, 'unavailable'); assert.deepEqual(result.samples, {}); }
+    else {
+      assert.equal(result.status, 'partial');
+      assert.equal(result.samples.__proto__.requests.value, failed.length ? 8 : 10);
+      assert.equal(result.samples.__proto__.requests.complete, failed.length === 0);
+      assert.equal(result.unattributed.requests, failed.length ? 6 : 8);
+    }
+    assert.equal(Object.prototype.requests, undefined);
+  }
+});

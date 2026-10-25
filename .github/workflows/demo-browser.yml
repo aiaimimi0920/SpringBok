@@ -62,6 +62,8 @@ jobs:
         run: node tests/browser/resources.mjs
       - name: Check dual resource views, usage aggregation and planning without cloud writes
         run: node tests/browser/resource-usage.mjs
+      - name: Check resource read deadlines and page lifecycle without cancelling mutations
+        run: node tests/browser/resource-read-budget.mjs
       - name: Check declaration-driven deployment planning without dispatch
         run: node tests/browser/deployment-plan.mjs
       - name: Check connected deployment execution with synthetic GitHub and actual workerd

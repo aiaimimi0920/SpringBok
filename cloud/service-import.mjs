@@ -18,6 +18,7 @@ export function importInput(value) {
 const at = (value, path) => path.reduce((current, key) => current?.[key], value);
 export function importComponents(application) {
   const declaration=deploymentDeclaration(application.declaration);
+  requireSba(declaration.target!=='cloudflare-suite');
   // Import currently verifies one provider account, never infer other accounts.
   requireSba(declaration.schemaVersion===1||declaration.accountMode==='single');
   return declaration.targets.filter(target => target.kind === 'worker')

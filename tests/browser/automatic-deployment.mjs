@@ -10,6 +10,13 @@ try{
   d.fields=d.fields.map(field=>({...field,template:field.type==='text'?'{instance}-worker':null}));
   d.resources=d.resources.map(row=>({...row,account:'runtime',nativeAccount:'runtime',nameTemplate:'{instance}-db'}));
   d.targets=d.targets.map(target=>({...target,account:'runtime'}));state.declaration=d;state.resources=null;
+  if(process.env.SUITE_TARGETS==='1'){
+    d.target='cloudflare-suite';d.github={repositoryPath:['automation','repository'],secret:'DEPLOY_GITHUB_TOKEN'};
+    d.fields.push({path:['pages'],label:'Pages',type:'text',required:true,template:'{instance}-pages'},
+      {path:['workflow'],label:'Actions',type:'text',required:true,template:'.github/workflows/refresh.yml@{instance}'});
+    d.targets.push({kind:'pages',path:['pages'],account:'runtime'},{kind:'github-actions',path:['workflow'],account:null});
+    state.manifestOverride={secrets:['CLOUDFLARE_API_TOKEN','DEPLOY_GITHUB_TOKEN']};
+  }
   state.missingSba.add('owner/second');const provider=state.provider;let creates=0;
   state.provider=async(request,context)=>{
     if(request.url==='https://api.cloudflare.com/client/v4/accounts/'+'a'.repeat(32)+'/d1/database'&&request.method==='POST'){
@@ -18,6 +25,7 @@ try{
     return provider(request,context);
   };
   await ready(page);await page.locator('#service-add').click();await page.locator('[role=tab][data-repository="owner/repo"]').click();
+  if(process.env.SUITE_TARGETS==='1')assert.equal(await page.locator('#service-platform').textContent(),'Cloudflare · GitHub Actions');
   assert.match(await page.locator('#service-environment').inputValue(),/^app-[a-f0-9]{12}$/);
   assert.equal(await page.locator('#service-inputs input, #service-resources select').count(),0);
   assert.equal(await page.locator('#service-inputs textarea').count(),1);
@@ -39,6 +47,11 @@ try{
   await page.locator('#service-submit').click();await page.waitForFunction(()=>!document.getElementById('service-dialog').open);
   assert.equal(creates,1);assert.equal(state.dispatches,1);assert.equal(state.request.configuration.database.id,'87654321-1234-1234-1234-123456789abc');
   assert.deepEqual(state.request.configuration.vars,publicVars);
+  if(process.env.SUITE_TARGETS==='1'){
+    assert.equal(state.request.configuration.pages,'my-instance-pages');
+    assert.equal(state.request.configuration.workflow,'.github/workflows/refresh.yml@my-instance');
+    assert.equal(state.request.configuration.automation.repository,'owner/repo');
+  }
   receipt(await(await machine()).json());await ready(page);await page.getByText('部署成功',{exact:true}).waitFor();
   await page.getByRole('button',{name:'升级',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#service-version option[value="'+'c'.repeat(40)+'"]'));

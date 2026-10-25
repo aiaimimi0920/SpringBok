@@ -17,6 +17,7 @@ SpringBok 是 Cloudflare Workers 上的部署控制平台。当前代码提供�
 3. 阅读 [manifest](manifest.md) 与 [deployment](deployment.md)，它们使用不同的 schemaVersion。
 4. 实现 [请求、回执与生命周期](lifecycle.md)，尤其是数据保留和 unknown。
 5. 按 [本地验证与排错](validation.md) 检查；示例是失败关闭的教学骨架，不是已实现的部署器。
+6. 应用包含 Pages 或长期 GitHub Actions 时，阅读 [混合云套件](cloud-suite.md)，不要将它们隐藏为普通 Worker 配置。
 
 ## 给 AI 的硬约束
 

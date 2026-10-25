@@ -82,6 +82,10 @@ jobs:
         run: node tests/browser/service-import.mjs
       - name: Check automatic resource creation and retained-resource service updates
         run: node tests/browser/automatic-deployment.mjs
+      - name: Check Pages and repository-scoped Actions suite planning and retained updates
+        run: node tests/browser/automatic-deployment.mjs
+        env:
+          SUITE_TARGETS: '1'
       - name: Check registered domain selection and exact subdomain deployment
         run: node tests/browser/domain-deployment.mjs
       - name: Check Gmail bootstrap profiles and private password overrides

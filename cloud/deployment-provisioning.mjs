@@ -10,6 +10,7 @@ import { bootstrapConfiguration } from './admin-profiles.mjs';
 
 export async function automaticDraft(vault,owner,input,application){
   const declaration=application.declaration,accounts={},connections={github:input.github,cloudflare:input.cloudflare},credentials={},facts={};
+  if(declaration.github){facts.github={repository:application.repository};credentials[declaration.github.secret]='github';}
   exactSba(input.resources,[]);exactSba(input.accounts??{},declaration.accounts.slice(1).map(a=>a.key));
   for(const account of declaration.accounts){
     const reference=connectionReference(account.key==='runtime'?input.cloudflare:input.accounts[account.key]);
@@ -88,7 +89,7 @@ export async function provisionDeployment(vault,owner,taskId,plan,recoveryId=nul
       vault.ctx.storage.transactionSync(()=>{const record=read();requireSba(record.preparation.resources[key].status==='creating');record.preparation.resources[key]={status:'created',resource:created};write(record);});
     }
     const declaration=plan.application.declaration,values=Object.fromEntries(declaration.fields.map(f=>[f.path.join('.'),f.path.reduce((v,k)=>v[k],plan.configuration)]));
-    const configuration=automaticConfiguration(declaration,values,resources,plan.accounts,plan.policy.environment);
+    const configuration=automaticConfiguration(declaration,values,resources,plan.accounts,plan.policy.environment,{github:{repository:plan.application.repository}});
     // Preserve the approved public identity; never reopen a profile or its secret
     // while replacing provision placeholders with provider resource IDs.
     if(declaration.administrator){

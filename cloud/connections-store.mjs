@@ -4,7 +4,7 @@ import { connectionInput, connectionMetadata, ownerId, validVaultKey } from './c
 import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs';
 import { verifyConnection } from './connections-provider.mjs';
 import { resourceInput, discoverResources } from './resources.mjs';
-import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connectionReference } from './deployment-contract.mjs';
+import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connectionReference, deploymentTargets } from './deployment-contract.mjs';
 import { sbaPolicy, connectedSbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
 import { applicationRepository, readApplication, serviceCatalog } from './service-catalog.mjs';
 import { serviceSummary, serviceEntries, updateOperation } from './service-instance.mjs';
@@ -198,7 +198,7 @@ export class ConnectionVault extends DurableObject {
       for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
       for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&(continuesInstance(plan)||Date.now()-row.checkedAt<=300000));}
       if(plan.credentials)record.credentials=plan.credentials;
-      if(plan.accounts)record.accountIds=[...new Set(Object.values(plan.accounts).map(a=>a.accountId))].sort();
+      if(plan.accounts)record.accountIds=[...new Set([...Object.values(plan.accounts).map(a=>a.accountId),...deploymentTargets(plan.application.declaration,plan.configuration).map(t=>t.accountId)])].sort();
       reserveBootstrap(this,owner,taskId,plan);
       if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
       requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;

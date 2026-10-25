@@ -45,7 +45,7 @@ test('renderer escapes HTML and code, rejects unsafe links and malformed Markdow
 
 test('public output is allowlisted and links work at a GitHub project subpath', async () => {
   const out = await temporary(), names = await build(out);
-  assert.equal(names.length,9);
+  assert.equal(names.length,10);
   assert.deepEqual((await readdir(out)).sort(),[...names,'style.css','.nojekyll'].sort());
   for (const name of names) {
     const html = await readFile(join(out,name),'utf8');
@@ -69,7 +69,7 @@ test('public output is allowlisted and links work at a GitHub project subpath', 
 
 test('both audiences share references and tested examples', async () => {
   const site = await json('pages/site.json');
-  for (const id of ['files','manifest','deployment','lifecycle','validation']) assert.equal(site.pages.find(p=>p.id===id).source,`ai-docs/${id}.md`);
+  for (const id of ['files','manifest','deployment','cloud-suite','lifecycle','validation']) assert.equal(site.pages.find(p=>p.id===id).source,`ai-docs/${id}.md`);
   for (const file of ['manifest','deployment']) {
     const value = await json(`ai-docs/examples/minimal/.sba/${file}.json`), text = await readFile(resolve(root,`ai-docs/${file}.md`),'utf8');
     for (const key of Object.keys(value)) assert.ok(text.includes(key),key);

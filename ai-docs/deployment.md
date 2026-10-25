@@ -1,21 +1,22 @@
 # deployment.json：自助部署声明 v2
 
-此处 schemaVersion 是 2，与 manifest 的 3 不同。声明是纯数据，不执行其中的表达式、命令或 URL。当前 target 仅支持 cloudflare-workers；不要将产品路线当作已有 provider。
+此处 schemaVersion 是 2，与 manifest 的 3 不同。声明是纯数据，不执行其中的表达式、命令或 URL。target 支持 cloudflare-workers，以及显式混合目标 cloudflare-suite；后者是新增代码能力，不代表控制面或业务已上线。参见 [Pages 与 Actions 套件](cloud-suite.md)。
 
 ## 顶层字段
 
 | 字段 | 定义 |
 | --- | --- |
 | schemaVersion | 整数 2；历史手动资源声明 1 仍由代码显式处理 |
-| target | cloudflare-workers |
+| target | cloudflare-workers；v2 还可使用 cloudflare-suite |
 | accountPath | 配置中的运行账号写入路径，须与 accounts 第一个元素的 path 一致 |
 | accountMode | single 或 multiple；single 恰好一个账号 |
 | accounts | 1–12 个账号描述；第一个 key 必须是 runtime；key 与 secret 各自唯一 |
 | defaults | 公开配置对象，不是环境秘密存储 |
 | fields | 最多 32 个公开配置输入 |
 | resources | 最多 12 个 D1/KV/R2 资源绑定 |
-| targets | 1–8 个实际写入的 Worker 或域名目标 |
+| targets | 1–8 个实际写入目标；套件另支持 Pages 项目与 GitHub Actions 工作流环境 |
 | administrator | 可选，仅 v2；首次管理员邮箱路径及独立密码秘密引用 |
+| github | 可选，仅 cloudflare-suite 且有 github-actions 目标时必需；来源仓库和令牌引用 |
 
 所有对象严格白名单。路径是 1–6 个普通对象键的数组，不支持数组下标、原型键、重复或父子重叠路径。声明总编码上限 32 KiB。公开值最多 8 层，数组最多 100 项，字符串最多 8192 字符；业务格式仍要应用自行校验。
 
@@ -29,12 +30,18 @@
 | resources[] | idPath、namePath | 云 ID 写入路径；名称路径可为 null，R2 使用 bucket 名称作为 ID |
 | resources[] | account、nativeAccount | 所属逻辑账号；nativeAccount 可为 null，否则要求原生绑定同账号 |
 | resources[] | nameTemplate | 必须包含 `{instance}` 的资源名称模板 |
-| targets[] | kind、path、account | worker/domain、公开配置路径、逻辑账号；path 必须引用必填 text 字段 |
+| targets[] | kind、path、account | worker/domain；套件另可 pages/github-actions。path 引用必填 text 字段；github-actions 的 account 必须为 null，其余引用逻辑云账号 |
 | administrator | emailPath、secret | 邮箱公开配置路径；密码秘密名不能复用账号 secret |
+| github | repositoryPath、secret | 平台写入已核验来源仓库的路径、来自该 GitHub 连接的秘密名称；不得与其他路径或秘密名重叠 |
 
 模板只支持 `{instance}` 与 `{subdomain:账号key}`，不是任意插值程序。模板最长 256 字符。字段 label 最多 100 字符。账号、资源及路径键使用普通标识符，禁止 prototype、constructor 等原型键。
 
 Worker 名称匹配 `[a-z][a-z0-9-]{1,62}`。域名目标必须为 HTTPS origin，无尾部斜线、路径、端口或凭据。Zone 是共享域名资源，不能随服务删除；部署配置引用域名不等于授权任意 DNS 更改。
+
+Pages 项目名沿用同一保守名称规则。github-actions 目标值为 `.github/workflows/name.yml@instance`
+或 `.yaml`；文件名只接受字母、数字、下划线、连字符，环境后缀必须等于当前实例环境。
+repositoryPath 由平台填入已批准应用仓库，不能作为普通字段传入。凭据仅来自用户的来源
+连接，不是平台执行器 token。声明不是 token 权限沙箱，用户需按实际部署需求授权。
 
 ## 公开配置与秘密
 

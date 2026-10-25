@@ -62,6 +62,11 @@ node pages/check-example.mjs
 它继承原受信执行仓库和 runnerOrigin，且要求 `sba-executor-<SHA>` 的不可移动标签。
 Windows `SBA_CONNECTED_EXECUTOR_SHA` 独立保留，Linux 不借用其 workflow 或隐式回退。
 
+2026-10-26 项目正式控制面已发布 SUITE-03，Linux pin 固定到通过精确 PR/main 检查的
+`4d6a8bcd8c52f0ada791729bafc2788a2cffb972`，准确 executor tag 禁止更新/删除；原 Windows
+pin、历史策略、Access 和资源不变。这是平台能力上线，不是 EasyProxy 应用部署或真实
+Docker 业务审计验收；自建环境仍须独立发布并核对本环境的 workflow ID 和固定 SHA。
+
 source pack、GitHub OIDC、首次 attempt、单次许可和固定回执沿用原链路。应用应在同一
 作业内持有自身套件许可，不把进程内句柄序列化到第二层 dispatch。超时终止普通后代进程组，
 仍一律 UNKNOWN，不以 kill 请求成功推断云端副作用停止。此能力不自动提供 Docker 镜像、

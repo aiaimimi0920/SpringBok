@@ -30,9 +30,16 @@ destroy-preview 只清理回执列出的该测试环境，不能删除共享工�
 平台现有通用“导入现有服务”和“删除正式服务”不支持混合套件，在 provider 写入前拒绝，
 而不是只处理 Worker、静默遗留后台刷新。预升级清理仍由应用的批准动作完成。
 
-业务密码与 R2 S3 凭据不是公开 configuration，也不是云账号令牌。当前此目标扩展不提供
-通用业务秘密管理；应用需要这些秘密时，必须先完成单独的保险库交付通道，不能冒充
-接入完成。verify 继续不取得部署写凭据。
+业务密码与 R2 S3 凭据不是公开 configuration，也不是云账号令牌。使用部署声明的
+applicationSecrets 名称数组，首次在部署表单保存或选择绑定当前仓库/应用的秘密集合。
+明文只发给 owner 的加密保险库；公开计划只带引用，接受任务时复制不可变加密快照。
+更新与预升级继承引用，不重新输入或默默轮换；verify 继续不取得部署写凭据。
+
+应用 API 可向受保护的 `/api/admin/resources` 提交 action 为 application-secrets，字段为
+id（新 UUID）、repository、applicationId、values（名称到单行值的对象）。GET 只返回
+applicationSecretProfiles 的名称与归属元数据，不提供明文读取。禁用动作
+disable-application-secrets 仅接收 id/revision，阻止新任务使用，不破坏已批准任务快照。
+这些请求仍须 owner/同源/CSRF；不能放进 Actions 的公开 inputs 或日志。
 
 ## 检查与上线
 

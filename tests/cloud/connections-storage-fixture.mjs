@@ -16,6 +16,12 @@ export class ConnectionVault extends Vault {
     Object.assign(record.preparation,patch);sql.exec('UPDATE connection_deployments SET record=? WHERE task=?',JSON.stringify(record),taskId);
   }
   inspectStorage() { return this.ctx.storage.sql.exec('SELECT * FROM connections').toArray(); }
+  inspectApplicationSecrets() { return { profiles:this.ctx.storage.sql.exec('SELECT * FROM application_secrets').toArray(),tasks:this.ctx.storage.sql.exec('SELECT * FROM application_task_secrets').toArray() }; }
+  corruptApplicationTaskSecret(task,name) {
+    const sql=this.ctx.storage.sql,row=sql.exec('SELECT sealed FROM application_task_secrets WHERE task=? AND name=?',task,name).one(),sealed=JSON.parse(row.sealed);
+    sealed.cipher=(sealed.cipher[0]==='0'?'1':'0')+sealed.cipher.slice(1);
+    sql.exec('UPDATE application_task_secrets SET sealed=? WHERE task=? AND name=?',JSON.stringify(sealed),task,name);
+  }
   fillResourceCapacity(count) {
     const sql=this.ctx.storage.sql,row=JSON.parse(sql.exec('SELECT metadata FROM resources LIMIT 1').one().metadata);
     while(sql.exec('SELECT COUNT(*) AS n FROM resources').one().n<count){const id=crypto.randomUUID(),copy={...row,id,remoteId:id};sql.exec('INSERT INTO resources VALUES(?,?,?,?,?)',id,row.connectionId,row.kind,id,JSON.stringify(copy));}

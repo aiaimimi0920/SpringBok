@@ -18,6 +18,7 @@ import { serviceRepairDraft } from './service-repair.mjs';
 import { deletionPlan, deleteService, deletionRecord, assertNotDeleting } from './service-deletion.mjs';
 import { adminProfiles, saveAdminProfile, reserveBootstrap, bootstrapCredential } from './admin-profiles.mjs';
 import { cancellationIdentity, cancellationRecord, sameCancellation } from './deployment-cancellation.mjs';
+import { applicationSecretProfiles, saveApplicationSecrets, reserveApplicationSecrets, applicationCredential } from './application-secrets.mjs';
 
 export class ConnectionVault extends DurableObject {
   deletionPlan(owner, input) { return deletionPlan(this, owner, input); }
@@ -59,13 +60,14 @@ export class ConnectionVault extends DurableObject {
   resourceSnapshot(owner) {
     return this.ctx.storage.transactionSync(() => {
       this.resourceGuard(owner);
-      return { adminProfiles: adminProfiles(this, owner), resources: this.ctx.storage.sql.exec('SELECT metadata FROM resources ORDER BY id').toArray().map(({metadata}) => {
+      return { adminProfiles: adminProfiles(this, owner), applicationSecretProfiles: applicationSecretProfiles(this, owner), resources: this.ctx.storage.sql.exec('SELECT metadata FROM resources ORDER BY id').toArray().map(({metadata}) => {
         const resource = JSON.parse(metadata), connection = JSON.parse(this.row(resource.connectionId).metadata);
         return { ...resource, available: connection.state === 'verified' && connection.revision === resource.connectionRevision };
       }) };
     });
   }
   async resourceOperation(owner, raw) {
+    if (['application-secrets','disable-application-secrets'].includes(raw?.action)) return saveApplicationSecrets(this,owner,raw);
     if (['admin-profile','admin-override'].includes(raw?.action)) return saveAdminProfile(this,owner,raw);
     if(raw?.action === 'inventory') return inventory(this,owner,raw);
     if(raw?.action === 'usage') return usageOperation(this,owner,raw);
@@ -173,7 +175,7 @@ export class ConnectionVault extends DurableObject {
     sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(policy)});
     const plan={application,policy,connections:{github:input.github,cloudflare:input.cloudflare},resources,configuration,...(automatic??{})};
     if(input.instance)plan.operation=await updateOperation(this,owner,input.instance,plan);
-    return {...plan,digest:await sbaDigest({application,policy,connections:plan.connections,resources,...(automatic?{accounts:plan.accounts,credentials:plan.credentials}:{}),...(plan.operation?{operation:plan.operation}:{})})};
+    return {...plan,digest:await sbaDigest({application,policy,connections:plan.connections,resources,...(automatic?{accounts:plan.accounts,credentials:plan.credentials}:{}),...(plan.applicationSecrets?{applicationSecrets:plan.applicationSecrets}:{}),...(plan.operation?{operation:plan.operation}:{})})};
   }
   deploymentGuard(owner){
     this.resourceGuard(owner);const sql=this.ctx.storage.sql,tables=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('connection_deployment_meta','connection_deployments')").toArray();
@@ -200,6 +202,7 @@ export class ConnectionVault extends DurableObject {
       if(plan.credentials)record.credentials=plan.credentials;
       if(plan.accounts)record.accountIds=[...new Set([...Object.values(plan.accounts).map(a=>a.accountId),...deploymentTargets(plan.application.declaration,plan.configuration).map(t=>t.accountId)])].sort();
       reserveBootstrap(this,owner,taskId,plan);
+      reserveApplicationSecrets(this,owner,taskId,plan);
       if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
       requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
     });
@@ -234,6 +237,7 @@ export class ConnectionVault extends DurableObject {
   async deploymentCredential(owner,taskId,provider){
     this.ctx.storage.transactionSync(()=>this.deploymentGuard(owner));connectedTaskId(taskId);
     const saved=this.ctx.storage.sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];requireSba(saved);const record=JSON.parse(saved.record);
+    if(provider.startsWith('application:'))return applicationCredential(this,owner,record,provider);
     if(provider==='repair-disabled'){requireSba(record.service.action==='repair'&&Object.values(record.credentials??{}).includes(provider));return 'repair-not-applicable';}
     if(provider==='bootstrap-disabled'||provider.startsWith('bootstrap:'))return bootstrapCredential(this,owner,record,provider);
     const stored=this.row(record.connections[provider].id);requireSba(stored);

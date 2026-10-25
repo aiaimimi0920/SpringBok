@@ -2,6 +2,7 @@ import { boundResources, confirmedVersion, newerVersion, resourceCountText, reso
 import { resourceLabels } from './resource-model.mjs';
 import { importFields, importWorkerOptions, importDraft, importReview, importedDetails } from './service-import.js';
 import { resumePreparation } from './preparation-recovery.js';
+import { applicationSecretFields } from './service-secrets.js';
 
 const $ = id => document.getElementById(id);
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
@@ -12,6 +13,7 @@ let catalogOrder = new Map();
 let scanProgress = null;
 let instances = new Map(), states = new Map(), usage = new Map(), historyRecords = new Map();
 let registeredResources = [], adminProfiles = [], adminOverride = null;
+let applicationSecretProfiles = [], prepareApplicationSecrets = null;
 let selected = null, application = null, updateTarget = null, preview = null, busy = false, selectionBusy = false, submitting = false;
 let importing = false;
 let deletionReview = null, deletionGeneration = 0, deletionSubmitting = false, deletionFocus = null;
@@ -47,6 +49,7 @@ function invalidate() {
   generation++; dialogGeneration++; session = null; clearTimeout(pollTimer); loadingCount = 0; loading(0);
   catalog.clear(); catalogOrder.clear(); instances.clear(); states.clear(); usage.clear(); historyRecords.clear(); usagePending.clear();
   registeredResources = []; adminProfiles = []; adminOverride = null;
+  applicationSecretProfiles = []; prepareApplicationSecrets = null;
   application = null; preview = null; selectedResources = new Map(); busy = false; selectionBusy = false; submitting = false;
   $('service-list').replaceChildren(); $('service-tabs').replaceChildren(); $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); $('service-review').replaceChildren();
   $('service-dialog').close(); controls();
@@ -385,6 +388,7 @@ function syncDomainOptions() {
 }
 function buildFields(data) {
   adminOverride = null;
+  prepareApplicationSecrets = null;
   $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
   if (data.status !== 'ready') return;
   const platform = element('output', data.declaration.target === 'cloudflare-suite' ? 'Cloudflare · GitHub Actions' : 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
@@ -428,6 +432,7 @@ function buildFields(data) {
       addField($('service-resources'), 'service-resource-' + field.key, field.label + ' · ' + resourceLabels[field.kind], output);
     }
     domainFields(data);
+    if(!updateTarget&&!rehearsing)prepareApplicationSecrets=applicationSecretFields(data,applicationSecretProfiles,$('service-inputs'),addField,request,clearPreview);
     if(data.declaration.administrator&&!updateTarget&&!rehearsing){
       const select=element('select'),password=element('input'),mode=element('select');
       fillOptions(select,adminProfiles.map(row=>[row.id,row.email]),'不初始化管理员');
@@ -630,11 +635,14 @@ async function prepare(event) {
       }
       if($('service-admin-mode').value==='override'){if(!adminOverride)throw new Error('请输入本次管理员密码');administrator.override=adminOverride;}
     }
+    const applicationSecrets=prepareApplicationSecrets?await prepareApplicationSecrets():null;
+    if(!currentDialog(version,pageVersion))return;
     const body = { action: 'preview', github: data.github, repository: data.repository, sourceSha: data.sourceSha, cloudflare,
       environment: $('service-environment').value, values, resources: selections,
       ...(accounts ? { accounts } : {}),
       ...(Object.keys(domains).length ? { domains } : {}),
       ...(administrator ? { administrator } : {}),
+      ...(applicationSecrets ? { applicationSecrets } : {}),
       ...(updateTarget ? { instance: { id: updateTarget.instance.id, previousTaskId: updateTarget.taskId } } : {}) };
     const result = await request(api + 'plan', body); if (!currentDialog(version, pageVersion)) return; preview = result;
     const details = element('dl');
@@ -732,7 +740,7 @@ async function initialize() {
   try {
     const auth = await request('/api/admin/state'); if (!current(version)) return; session = auth;
     const result = await request('/api/admin/connections'); if (!current(version)) return; connections = result.connections;
-    const resources = await request('/api/admin/resources'); if (!current(version)) return; registeredResources = resources.resources; adminProfiles = resources.adminProfiles??[];
+    const resources = await request('/api/admin/resources'); if (!current(version)) return; registeredResources = resources.resources; adminProfiles = resources.adminProfiles??[]; applicationSecretProfiles = resources.applicationSecretProfiles??[];
     await refreshInstances(); if (!current(version)) return; controls();
     if (location.hash || $('service-dialog').open) await openDialog();
   } catch (error) { if (current(version)) { invalidate(); notice(error.message, 'error'); } }

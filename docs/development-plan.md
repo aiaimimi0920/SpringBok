@@ -3,7 +3,28 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SUITE-02：应用业务秘密保险库（本地验证通过，待交付，2026-10-25）
+## SUITE-LIVE-01：EasyProxy 接入的平台发布前置（已上线，2026-10-26）
+
+负责人主 AI；用户已明确要求持续推进到 EasyProxy 通过 SpringBok 真实上线。本切片只发布
+已合并 SUITE-01/02 的控制面与兼容固定执行器，不创建 EasyProxy 实例、不迁移或删除旧资源。
+源码 main `d9b327d24fa2a7707a7dff4c6202b818d581f178` 的七个精确主干工作流通过，聚焦
+套件/预升级/文档共 17 项本地测试通过，包含真实本地 workerd 与 Windows PowerShell。
+
+正式控制 Worker 与全部 27 个静态资产已发布；独立 GET 回读代码 SHA-256
+`0ee7ffe341de5bc933c3c7e8a2d1f7d1dedfbfcfe33136d066ecde0e8e93fe81` 与构建一致，原 33 个
+bindings、运行配置、3 条 Access 策略、2 个域名保持。随后创建准确 executor tag 及无 bypass
+的 update/deletion 保护规则，单独将 `SBA_CONNECTED_EXECUTOR_SHA` 固定到同一 main；原
+`SBA_POLICY`、其他 bindings、资产和 Access 保持，不改写已有任务保存的执行策略。
+最终 Worker version `541d812d-d0b3-429c-87f6-a1d5246fb1d9`、deployment
+`305a2efc-69cf-47bf-a502-347db13a5f31` 承接 100% 流量。
+
+无 Cookie 的首页、资源页及管理资源 API 仍 302 到正常 Access 登录入口。没有逐字节独立
+回读全部 27 个在线静态资产，也没有借旧 NAccount 机器委托取得首次部署权限；正常 owner
+登录和 EasyProxy 五动作/周期任务接入仍待完成，不能将本切片写成应用部署验收。
+证据：`linshi/easyproxy-springbok-control-20261026/`；原始配置/响应仅 DPAPI 保存，不入仓库。
+本次文档同时更新共享 cloud-suite/lifecycle 参考，由 Pages 渲染供人类阅读；不复制定义。
+
+## SUITE-02：应用业务秘密保险库（已合并并随 SUITE-LIVE-01 上线，2026-10-25）
 
 负责人主 AI；前置 SUITE-01 PR #112 精确 head 七工作流通过并正常合并，main
 `91b302b8fb17f6ea904c2ac002761248282297da` 七工作流通过，未发布生产控制面。

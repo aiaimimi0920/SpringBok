@@ -69,3 +69,8 @@ version/URL/integrity；不修改已发布 Miniflare 包的原依赖声明、不
 隔离安装实际解析 `miniflare → undici 7.30.1`；包含 dev/optional/peer、阈值 low 的联网 npm audit
 返回零漏洞。基于该新安装运行时，聚焦合同/workerd/安全 39/39、读取预算/资源/用量/四页 Neuro
 四套真实 Chrome 回归通过；Pages 6/6、示例及九页构建通过。完整 Linux 套件仍由新精确 PR/main CI 验证。
+
+PR #108 首轮 Linux 新读取预算回归失败，原错误数量断言为 `4 !== 3`。原因是虚拟时钟推进期间
+另一路真实 workerd I/O 尚未结束，也被测试时钟触发了截止。测试现增加正常 fetch/JSON 计数屏障，
+仅在未被挂起的读取全部完成后推进时钟，并对普通合成传输增加 40ms 延迟覆盖慢 runner。
+原截止、错误数量、partial/unknown 和零重放断言均保留，不修改生产超时。修正后隔离新运行时连续三次通过。

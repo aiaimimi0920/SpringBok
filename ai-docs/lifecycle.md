@@ -56,7 +56,7 @@ unknown，不允许再次恢复或新建任务绕过。已有 bootstrap、creati
 
 preview context 恰好包含 source、resources、urls。source 包含 instanceId、taskId、sourceSha、applicationVersion、environment、configuration、resources、resultDigest。源 environment 必须不同；新资源不能与源资源身份重叠。
 
-destroy-preview context 恰好包含 instanceId、previewTaskId、resultDigest、resources。资源清单 1–20 项，每项包含 key、kind、accountId、remoteId、name；kind 可为 d1、kv、worker、r2、domain。urls 是 1–8 个唯一 HTTPS origin，须匹配域名资源。完整预升级请求编码不超过 48 KiB。
+destroy-preview context 恰好包含 instanceId、previewTaskId、resultDigest、resources。资源清单 1–20 项，每项包含 key、kind、accountId、remoteId、name；kind 可为 d1、kv、worker、r2、domain、pages、github-actions。urls 是 1–8 个唯一 HTTPS origin，须匹配域名资源。完整预升级请求编码不超过 48 KiB。
 
 preview lifecycle 包含 resources、urls、snapshot；resources 各项为 key/status，状态为 created、absent、unknown。snapshot 为 null 或 `{id, createdAt}`，id 是 64 位十六进制摘要，createdAt 是正的安全整数时间值。
 

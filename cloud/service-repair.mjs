@@ -32,7 +32,8 @@ export async function serviceRepairDraft(vault, owner, input) {
     requestDigest: job.requestDigest, resultDigest: await sbaDigest(job.result), errorCode: job.result.errorCode };
   const operation = { action: 'repair', instanceId: input.instanceId, previousTaskId: input.previousTaskId,
     previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };
-  const base = connectedSbaPolicy(vault.env), credentials = {};
+  requireSba(canonicalSba(application.manifest.runtime) === canonicalSba(old.application.manifest.runtime));
+  const base = connectedSbaPolicy(vault.env, application.manifest.runtime), credentials = {};
   for (const name of application.manifest.secrets) {
     const mapping = old.credentials?.[name] ?? (name === 'CLOUDFLARE_API_TOKEN' ? 'cloudflare' : null);
     if (!repair.secretNames.includes(name)) credentials[name] = 'repair-disabled';

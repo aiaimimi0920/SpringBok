@@ -1,5 +1,6 @@
 import { validateManifest, validateRequest } from '../src/sba/contract.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
+import { WINDOWS_RUNTIME, runtimeProfile, workflowProfile } from '../src/sba/runtime.mjs';
 export const requireSba = value => { if (!value) throw new Error('SBA_REJECTED'); };
 export const exactSba = (value, keys) => requireSba(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every(k => Object.hasOwn(value, k)));
 const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(k => [k, ordered(value[k])])) : value;
@@ -14,7 +15,8 @@ export function sbaPolicy(env) {
   exactSba(p, ['github', 'sourceSha', 'environment', 'configuration', 'secretNames', 'runnerOrigin']);
   exactSba(p.github, ['repository', 'repositoryId', 'applicationRepository', 'workflowId', 'workflowPath', 'ref', 'executorSha']);
   createGithubExecutor(p.github, { token: env.SBA_GITHUB_TOKEN });
-  requireSba(p.github.ref === `sba-executor-${p.github.executorSha}` && p.github.workflowPath === '.github/workflows/sba-execute.yml');
+  requireSba(p.github.ref === `sba-executor-${p.github.executorSha}`);
+  workflowProfile(p.github.workflowPath);
   requireSba(typeof p.sourceSha === 'string' && /^[a-f0-9]{40}$/.test(p.sourceSha) && typeof p.environment === 'string' && /^[a-z][a-z0-9-]{1,62}$/.test(p.environment));
   requireSba(p.configuration && typeof p.configuration === 'object' && !Array.isArray(p.configuration) && new TextEncoder().encode(canonicalSba(p.configuration)).length <= 32768);
   validateManifest({ schemaVersion: 2, id: 'policy-app', name: 'Policy', version: '1.0.0', entrypoint: 'entry.ps1',
@@ -25,8 +27,19 @@ export function sbaPolicy(env) {
   return p;
 }
 export function sbaEnabled(env) { try { sbaPolicy(env); return true; } catch { return false; } }
-export function connectedSbaPolicy(env) {
-  const policy = sbaPolicy(env), sha = env.SBA_CONNECTED_EXECUTOR_SHA;
+export function connectedSbaPolicy(env, runtime = WINDOWS_RUNTIME) {
+  const profile = runtimeProfile(runtime), policy = sbaPolicy(env);
+  if (profile.platform === 'linux') {
+    const pin = JSON.parse(env.SBA_CONNECTED_LINUX_EXECUTOR ?? 'null');
+    exactSba(pin, ['workflowId', 'executorSha']);
+    policy.github.workflowPath = profile.workflowPath;
+    policy.github.workflowId = pin.workflowId;
+    policy.github.executorSha = pin.executorSha;
+    policy.github.ref = `sba-executor-${pin.executorSha}`;
+    return sbaPolicy({ ...env, SBA_POLICY: JSON.stringify(policy) });
+  }
+  requireSba(policy.github.workflowPath === profile.workflowPath);
+  const sha = env.SBA_CONNECTED_EXECUTOR_SHA;
   if (sha === undefined) return policy;
   requireSba(typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha));
   policy.github.executorSha = sha;
@@ -35,6 +48,7 @@ export function connectedSbaPolicy(env) {
 }
 export function sbaRequest(policy, taskId, manifest, operation = null) {
   const app = validateManifest(manifest);
+  requireSba(policy.github.workflowPath === runtimeProfile(app.runtime).workflowPath);
   requireSba(canonicalSba(app.secrets) === canonicalSba(policy.secretNames));
   if (operation !== null) requireSba(['update', 'preview', 'destroy-preview', 'verify', 'repair'].includes(operation.action));
   return validateRequest({ schemaVersion: app.schemaVersion, taskId, action: operation?.action ?? 'deploy', repository: policy.github.applicationRepository,

@@ -15,7 +15,7 @@ test("security workflows keep least privilege and untrusted PR boundaries", () =
     assert.match(workflow, /persist-credentials: false/);
     assert.match(workflow, /timeout-minutes:/);
     assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|packages: write/);
-    if (!["sba-execute.yml", "sba-oidc-diagnostic.yml", "pages.yml"].includes(name)) assert.doesNotMatch(workflow, /id-token:/);
+    if (!["sba-execute.yml", "sba-execute-linux.yml", "sba-oidc-diagnostic.yml", "pages.yml"].includes(name)) assert.doesNotMatch(workflow, /id-token:/);
     if (name !== "pages.yml") assert.doesNotMatch(workflow, /pages: write/);
     for (const [, ref] of workflow.matchAll(/uses:\s+([^\s]+) /g)) {
       assert.match(ref, /@[a-f0-9]{40}$/);
@@ -141,4 +141,21 @@ test("SBA execution grants OIDC only to the manual hosted execution job", () => 
   assert.equal([...workflow.matchAll(/id-token:/g)].length, 1);
   assert.match(workflow, /run: node scripts\/sba-workflow\.mjs/);
   assert.match(workflow, /sba-receipt\/receipt\.json/);
+});
+
+test('Linux executor uses a complete trusted runtime and the same verified interpreter as native CI', () => {
+  const workflow = read('.github/workflows/sba-execute-linux.yml');
+  assert.match(workflow, /on:\s+workflow_dispatch:/);
+  assert.match(workflow, /runs-on: ubuntu-24\.04/);
+  assert.doesNotMatch(workflow, /pull_request|push:|schedule:|workflow_call|environment:|secrets\./);
+  assert.equal([...workflow.matchAll(/id-token: write/g)].length, 1);
+  assert.match(workflow, /bash scripts\/ci\/install-sba-pwsh\.sh/);
+  assert.match(workflow, /sba-receipt\/receipt\.json/);
+  const installer = read('scripts/ci/install-sba-pwsh.sh');
+  assert.match(installer, /version=7\.6\.9/);
+  assert.match(installer, /sha256=1da6d6d6035d651f20e70ddee7c4c15ac6ab8b9fb40ee92240d91263f28a884b/);
+  assert.match(installer, /--proto '=https' --proto-redir '=https'/);
+  assert.ok(installer.indexOf('sha256sum --check --strict') < installer.indexOf('tar --extract'));
+  assert.match(read('.github/workflows/contract-tests.yml'), /sba-linux:\s+runs-on: ubuntu-24\.04/);
+  assert.match(read('.github/workflows/contract-tests.yml'), /SBA_NATIVE_LINUX_TEST: 'yes'/);
 });

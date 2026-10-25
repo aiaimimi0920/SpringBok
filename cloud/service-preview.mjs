@@ -38,8 +38,8 @@ export async function servicePreviewDraft(vault, owner, input) {
     requireSba(canonicalSba(context.resources) === canonicalSba(job.request.context.resources));
     const operation = { action: 'destroy-preview', instanceId: input.instanceId, previousTaskId: input.previousTaskId,
       previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };
-    const executor = connectedSbaPolicy(vault.env).github;
-    const policy = { ...old.policy, github: { ...old.policy.github, executorSha: executor.executorSha, ref: executor.ref } };
+    const executor = connectedSbaPolicy(vault.env, old.application.manifest.runtime).github;
+    const policy = { ...old.policy, github: { ...executor, applicationRepository: old.policy.github.applicationRepository } };
     const plan = { ...old, policy, operation };
     sbaRequest(plan.policy, 'dc-' + '0'.repeat(32), plan.application.manifest, operation);
     return { ...plan, digest: await sbaDigest({ ...plan, digest: null }) };
@@ -48,6 +48,7 @@ export async function servicePreviewDraft(vault, owner, input) {
   const candidate = await vault.deploymentDraft(owner, { action: 'application', github: old.connections.github, repository: old.application.repository, sourceSha: input.sourceSha });
   const d = candidate.declaration;
   requireSba(candidate.manifest.schemaVersion === 3 && d.schemaVersion === 2 && candidate.manifest.id === old.application.manifest.id && input.sourceSha !== job.request.sourceSha && compareVersions(candidate.manifest.version, job.request.applicationVersion) > 0);
+  requireSba(canonicalSba(candidate.manifest.runtime) === canonicalSba(old.application.manifest.runtime));
   // 每个可写目标必须从新实例名派生，不能默默继承线上 Worker/域名。
   requireSba(d.targets.every(target => d.fields.find(field => canonicalSba(field.path) === canonicalSba(target.path))?.template?.includes('{instance}')));
   requireSba(d.targets.some(target => target.kind === 'domain'));

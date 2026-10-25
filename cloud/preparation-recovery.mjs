@@ -41,7 +41,7 @@ export async function preparationRecoveryRequest(env, vault, session, action, in
   const record = (await vault.deploymentIndex(session.actor)).find(row => row.taskId === input.taskId);
   requireSba(recoverablePreparation(record));
   requireSba(await connectedStub(env, input.taskId).uninitialized());
-  const plan = record.preparation.intent, current = connectedSbaPolicy(env);
+  const plan = record.preparation.intent, current = connectedSbaPolicy(env, plan.application.manifest.runtime);
   // 固定应用、配置和执行器；控制面配置漂移不能偷偷改变已确认任务。
   requireSba(record.digest === plan.digest && canonicalSba({ ...plan.policy.github, applicationRepository: current.github.applicationRepository }) === canonicalSba(current.github) && plan.policy.runnerOrigin === current.runnerOrigin);
   const legacy = legacyIdentities(sbaPolicy(env).configuration);

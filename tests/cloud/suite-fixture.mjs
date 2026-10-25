@@ -1,7 +1,7 @@
 import { previewFixture } from './preview-fixture.mjs';
 
-export async function suiteFixture() {
-  const fixture = await previewFixture(), { state } = fixture;
+export async function suiteFixture(overrides = {}) {
+  const fixture = await previewFixture(overrides), { state } = fixture;
   Object.assign(state.declaration, { target: 'cloudflare-suite', github: { repositoryPath: ['automation','repository'], secret: 'DEPLOY_GITHUB_TOKEN' } });
   state.declaration.fields.push(
     { path: ['pages','name'], label: 'Pages', type: 'text', required: true, template: '{instance}-pages' },

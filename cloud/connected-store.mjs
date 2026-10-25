@@ -32,7 +32,7 @@ export class ConnectedDeployment extends SbaDeployment {
   async initialize(owner,taskId,plan){
     ownerId(owner);connectedTaskId(taskId);requireSba(this.env.ENABLE_CONNECTED_DEPLOYMENTS==='yes');
     requireSba(this.ctx.id.toString()===this.env.CONNECTED_TASKS.idFromName(`connected/v1/${taskId}`).toString());
-    const current=connectedSbaPolicy(this.env),policy=sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(plan.policy)});
+    const current=connectedSbaPolicy(this.env,plan.application.manifest.runtime),policy=sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(plan.policy)});
     requireSba(canonicalSba({...policy.github,applicationRepository:current.github.applicationRepository})===canonicalSba(current.github)&&policy.runnerOrigin===current.runnerOrigin);
     const record={owner,taskId,plan},digest=await sbaDigest(record);
     return this.ctx.storage.transactionSync(()=>{

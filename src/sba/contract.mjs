@@ -1,6 +1,7 @@
 // 平台仅校验并调用应用契约，不解释迁移或业务实现。
 import { PREVIEW_ACTIONS, previewAction, validatePreviewContext, validatePreviewResult } from './preview.mjs';
 import { validateRepairs, validateRepairContext, validateRepairResult } from './repair.mjs';
+import { runtimeProfile } from './runtime.mjs';
 export class SbaContractError extends Error {}
 const fail = message => { throw new SbaContractError(message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -32,8 +33,7 @@ export function validateManifest(value) {
   // 入口相对 .sba；文件存在、符号链接和解析后边界由执行端另行检查。
   if (typeof value.entrypoint !== 'string' || !/^[a-zA-Z0-9_-]+\.ps1$/.test(value.entrypoint)) fail('entrypoint must be a .sba PowerShell file');
   exact(value.runtime, ['runner', 'powershell', 'python', 'node']);
-  if (value.runtime.runner !== 'windows-2025' || value.runtime.powershell !== '5.1' ||
-      value.runtime.python !== '3.12' || value.runtime.node !== '22') fail('unsupported SBA runtime');
+  try { runtimeProfile(value.runtime); } catch { fail('unsupported SBA runtime'); }
   const actions = value.schemaVersion === 3 ? [...SBA_ACTIONS, ...PREVIEW_ACTIONS, ...(object(value.actions) && Object.hasOwn(value.actions, 'repair') ? ['repair'] : [])] : SBA_ACTIONS;
   exact(value.actions, actions);
   for (const action of actions) {

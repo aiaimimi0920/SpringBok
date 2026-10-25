@@ -50,3 +50,27 @@ Pages 首页人类入口补充实际资源页截止/恢复与写操作边界。�
 读取预算、原资源、用量和四页 Neuro 浏览器四套通过。固定版本 actionlint 1.7.12 通过，
 Gitleaks 8.30.1 对八个变更文件快照未发现泄漏，UTF-8 无 BOM 与 diff whitespace 检查通过。
 这不是全历史秘密扫描、全量 Linux 验收或线上加速比例。
+
+## PERF-01-SEC 发布前安全复核
+
+性能 PR #107 通过精确 head 检查后正常合并。main 的动态 Dependabot 安全更新单独失败：
+Miniflare `5.20261001.0-alpha` 固定 undici `7.29.1`，不能自动解析到修复版。
+2026-10-25 联网 npm audit 确认 `GHSA-4qv8-2p9j-2685`、`GHSA-f72v-6w45-q472` 和
+`GHSA-xjj6-f33q-929c` 适用。官方 registry 的 `7.30.1` 支持 Node `>=20.18.1`，与本项目 Node 22 一致。
+
+最小修复仅在 tests/cloud 增加 `miniflare.undici: 7.30.1` 精确 override，并更新实际解析条目的
+version/URL/integrity；不修改已发布 Miniflare 包的原依赖声明、不降级/升级 workerd，不改 audit 阈值或忽略名单。
+该依赖用于本地/CI workerd 测试，不被控制 Worker bundle 引入；仍需实际 dispatcher、响应体和关闭路径回归，
+不能只凭同一主版本或纯 transport 单测宣称兼容。发布在新精确版本的门禁完成前保持暂停。
+
+此追加修复不改变用户界面、SBA 字段、接入或部署生命周期，因此没有新增 ai-docs/Pages 协议或使用说明变更；
+原 PERF-01 人类入口的截止/恢复说明继续适用。
+
+隔离安装实际解析 `miniflare → undici 7.30.1`；包含 dev/optional/peer、阈值 low 的联网 npm audit
+返回零漏洞。基于该新安装运行时，聚焦合同/workerd/安全 39/39、读取预算/资源/用量/四页 Neuro
+四套真实 Chrome 回归通过；Pages 6/6、示例及九页构建通过。完整 Linux 套件仍由新精确 PR/main CI 验证。
+
+PR #108 首轮 Linux 新读取预算回归失败，原错误数量断言为 `4 !== 3`。原因是虚拟时钟推进期间
+另一路真实 workerd I/O 尚未结束，也被测试时钟触发了截止。测试现增加正常 fetch/JSON 计数屏障，
+仅在未被挂起的读取全部完成后推进时钟，并对普通合成传输增加 40ms 延迟覆盖慢 runner。
+原截止、错误数量、partial/unknown 和零重放断言均保留，不修改生产超时。修正后隔离新运行时连续三次通过。

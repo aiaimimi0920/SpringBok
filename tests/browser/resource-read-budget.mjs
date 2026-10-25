@@ -17,6 +17,8 @@ try {
     const req = route.request(); assert.equal(new URL(req.url()).origin, origin);
     const body = req.postData() ? req.postDataJSON() : null;
     if (body && !['inventory', 'usage'].includes(body.action)) writes.push(body.action);
+    // Keep ordinary workerd I/O observably asynchronous while the browser clock is paused.
+    if (body && ['inventory', 'usage'].includes(body.action)) await new Promise(resolve => setTimeout(resolve, 40));
     const response = await f.mf.dispatchFetch(req.url(), { method: req.method(), headers: {
       ...req.headers(), 'cf-access-jwt-assertion': token,
     }, ...(body ? { body: req.postData() } : {}) });
@@ -25,11 +27,19 @@ try {
   // Synthetic held reads exercise the real controller, including the response-body phase.
   await context.addInitScript(() => {
     const original = window.fetch.bind(window);
-    window.readProbe = { next: null, records: [], release: null };
+    window.readProbe = { next: null, records: [], release: null, normalPending: 0 };
     window.fetch = (path, options = {}) => {
       const body = options.body ? JSON.parse(options.body) : null, action = body?.action ?? 'get';
       const probe = window.readProbe, mode = probe.next;
-      if (!mode || action !== mode.action) return original(path, options);
+      if (!mode || action !== mode.action) {
+        probe.normalPending++;
+        return original(path, options).then(response => {
+          if (!response.ok) { probe.normalPending--; return response; }
+          const json = response.json.bind(response);
+          response.json = async () => { try { return await json(); } finally { probe.normalPending--; } };
+          return response;
+        }, error => { probe.normalPending--; throw error; });
+      }
       probe.next = null;
       const record = { action, signal: !!options.signal, aborted: !!options.signal?.aborted };
       probe.records.push(record);
@@ -51,6 +61,8 @@ try {
     const previous = await page.evaluate(mode => { window.readProbe.next = mode; return window.readProbe.records.length; }, mode);
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
     await page.waitForFunction(count => window.readProbe.records.length > count, previous);
+    // Advancing virtual time must not expire unrelated real workerd I/O on a slow runner.
+    await page.waitForFunction(() => window.readProbe.normalPending === 0);
   };
   const last = () => page.evaluate(() => window.readProbe.records.at(-1));
   await page.goto(origin + '/resources'); await ready();

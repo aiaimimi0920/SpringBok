@@ -30,4 +30,4 @@ export function configurePreviewFixture(fixture) {
   };
   return { ...fixture, complete };
 }
-export async function previewFixture() { return configurePreviewFixture(await serviceFixture()); }
+export async function previewFixture(overrides = {}) { return configurePreviewFixture(await serviceFixture(overrides)); }

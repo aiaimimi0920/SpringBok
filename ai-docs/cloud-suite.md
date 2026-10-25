@@ -53,3 +53,18 @@ node pages/check-example.mjs
 
 实际可用性还需：部署支持该扩展的控制面、固定兼容执行器 SHA、配置用户连接权限、发布
 应用实现，再执行真实云部署和独立验证。本地 workerd 使用合成 provider，不是云端验收。
+
+## 需要 Linux Docker 的应用
+
+按 [manifest](manifest.md) 选择完整 Ubuntu runtime。平台根据已校验 manifest 选择
+固定 `.github/workflows/sba-execute-linux.yml`，不是由公开配置指定任意执行 workflow。
+控制面 `SBA_CONNECTED_LINUX_EXECUTOR` 是仅含 workflowId 和 executorSha 的受信 JSON；
+它继承原受信执行仓库和 runnerOrigin，且要求 `sba-executor-<SHA>` 的不可移动标签。
+Windows `SBA_CONNECTED_EXECUTOR_SHA` 独立保留，Linux 不借用其 workflow 或隐式回退。
+
+source pack、GitHub OIDC、首次 attempt、单次许可和固定回执沿用原链路。应用应在同一
+作业内持有自身套件许可，不把进程内句柄序列化到第二层 dispatch。超时终止普通后代进程组，
+仍一律 UNKNOWN，不以 kill 请求成功推断云端副作用停止。此能力不自动提供 Docker 镜像、
+应用工具安装、预升级数据安全或线上部署验收；控制面及 pin 的实际发布须分别记录。
+原准备恢复仅接受单账号且未创建资源的保留任务；套件还占用 GitHub 锁域，不因 Linux
+支持自动扩展成多锁域恢复。未知任务继续保留，不据此重派发或自动解锁。

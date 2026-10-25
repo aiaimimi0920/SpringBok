@@ -6,7 +6,7 @@
 
 ## 调用与责任
 
-上层在可信、一次性的 Windows runner 内取得已审阅的 GitHub 完整 SHA checkout，
+上层在可信、一次性的 Windows 或 Ubuntu runner 内取得已审阅的 GitHub 完整 SHA checkout，
 提供契约 request、受控临时根目录与本应用环境，然后调用：
 
 ```js
@@ -21,7 +21,8 @@ const { result, receiptPath } = await executeCheckout({
 ```
 
 这些变量由受控调用方提供，不从应用的 README/AGENTS 或自由文本解析。默认执行
-要求 Windows PowerShell 5.1；`invoke` 注入仅用于测试，不是用户可选择的命令接口。
+按 manifest 完整 runtime 选择 Windows PowerShell 5.1 或 Ubuntu 24.04 x64 / PowerShell
+7.6.9；`invoke` 注入仅用于测试，不是用户可选择的命令接口。
 上层仍须负责 GitHub 来源获取、精确版本授权、运行环境准备、任务持久化/互斥/去重、
 Actions run 关联和回执回收。仅配置一个 origin URL 并不证明 GitHub 来源。
 
@@ -58,11 +59,26 @@ Actions run 关联和回执回收。仅配置一个 origin URL 并不证明 GitH
 | 合法 failed/unknown | 保留应用的规范化结果，不推进部署成功 |
 | 零退出且合法 succeeded/deployed-unverified | 接受其状态，但不是独立业务验收证明 |
 
-超时会尝试终止本次进程树，终止调用有 15 秒上限；随后等待进程 `close`，额外宽限
+Windows 超时尝试 taskkill 终止本次进程树，终止调用有 15 秒上限；Linux 使用独立进程组，
+向普通后代所在组发 SIGKILL，不承诺约束主动 setsid 逃逸的恶意程序。随后等待进程 `close`，额外宽限
 最多 5 秒，避免终止请求刚发出就返回、调用方清理时工作目录仍被占用。终止报错不能
 绕过这段宽限；无论退出码或终止结果如何均返回 unknown。没有证明所有复杂后代
 进程或云端操作已经停止，不能据此自动重试发布。目录与回执
 生命周期由上层管理，本模块不清理其他任务目录或撤销外部副作用。
+
+## SUITE-03 固定 Linux 路径（2026-10-26）
+
+完整 tuple 及固定 workflow 由 `src/sba/runtime.mjs` 定义，不接受用户 shell/路径。
+原生执行前检查 host、Ubuntu 24.04/x64 和固定工具目录实际版本；受信 workflow 先下载
+官方 PowerShell 7.6.9 linux-x64 发行包，SHA-256
+`1da6d6d6035d651f20e70ddee7c4c15ac6ab8b9fb40ee92240d91263f28a884b`，校验后才解包。
+入口通过绝对路径运行，不从应用 PATH 选择 pwsh。版本探针不是整个目录的逐文件完整性
+证明，可信字节根来自相同作业的 checksum installer；仍不将应用执行器称为恶意代码沙箱。
+
+官方下载版本、资产摘要及实际安装已经联网核实；Ubuntu 24.04 容器、Node 22.23.3 实际
+原生验证覆盖 deploy/verify/update、数据保持、空格/中文路径及普通后代组超时。该证据不是
+GitHub hosted job、真实 Docker 消费审计或任何云应用上线。专用无凭据 CI 使用同一安装器
+和 `SBA_NATIVE_LINUX_TEST=yes`，不能以其他平台的 skip 代替 Linux 通过。
 
 ## 已测与未测
 

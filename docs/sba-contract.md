@@ -3,6 +3,11 @@
 任务 `SBA-02`。实现入口：`src/sba/contract.mjs`；验证：`tests/sba-contract.test.mjs`。
 本契约不包含业务迁移算法；应用实现如何构建、备份、迁移、发布与验证。
 
+2026-10-26 SUITE-03 增加固定 Ubuntu 24.04 x64 / PowerShell 7.6.9 / Python 3.12 / Node 22
+完整组合，保留本文历史 Windows 示例。当前完整字段参考以 [manifest](../ai-docs/manifest.md)
+与 `src/sba/runtime.mjs` 为准；不允许混搭或跨 runtime 更新/预升级/修复。该代码能力的控制面
+与执行器 pin 发布须独立验收，不代表下文早期“待接通”阶段是当前线上状态。
+
 ## 执行拓扑与信任边界
 
 云端 SpringBok 鉴权 → 持久任务 → 受控 GitHub Actions `workflow_dispatch` → Windows

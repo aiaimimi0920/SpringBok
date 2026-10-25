@@ -74,6 +74,8 @@ test('both audiences share references and tested examples', async () => {
     const value = await json(`ai-docs/examples/minimal/.sba/${file}.json`), text = await readFile(resolve(root,`ai-docs/${file}.md`),'utf8');
     for (const key of Object.keys(value)) assert.ok(text.includes(key),key);
   }
+  const runtime = await readFile(resolve(root, 'ai-docs/manifest.md'), 'utf8');
+  for (const text of ['windows-2025', 'ubuntu-24.04', '7.6.9', '不能混用', '不允许改变 runtime']) assert.ok(runtime.includes(text), text);
   const lifecycle = await readFile(resolve(root,'ai-docs/lifecycle.md'),'utf8');
   for (const name of ['backup-created','data-preserved','snapshot-copied','migration-verified','source-unchanged','side-effects-isolated','repair-completed','unchanged-resources-verified','service-ready']) assert.ok(lifecycle.includes(name));
   const entry = await readFile(resolve(exampleRoot,'.sba/springbok.ps1'),'utf8');

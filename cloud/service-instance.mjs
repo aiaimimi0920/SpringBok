@@ -26,6 +26,7 @@ export async function updateOperation(vault, owner, instance, plan) {
   requireSba((old.operation?.instanceId ?? instance.previousTaskId) === instance.id &&
     plan.application.repository.toLowerCase() === old.application.repository.toLowerCase() &&
     plan.application.manifest.id === old.application.manifest.id && plan.policy.environment === old.policy.environment &&
+    canonicalSba(plan.application.manifest.runtime) === canonicalSba(old.application.manifest.runtime) &&
     plan.connections.cloudflare.id === old.connections.cloudflare.id &&
     canonicalSba(plan.configuration) === canonicalSba(old.configuration) &&
     canonicalSba(identities(plan.resources)) === canonicalSba(identities(old.resources)) &&

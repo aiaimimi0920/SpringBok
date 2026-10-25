@@ -3,19 +3,23 @@ import { mkdtemp, mkdir, writeFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { devNull } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { inspectCheckout, executeCheckout } from '../src/sba/runner.mjs';
+import { inspectCheckout, executeCheckout, nativePowerShell } from '../src/sba/runner.mjs';
+import { runtimeProfile, workflowProfile } from '../src/sba/runtime.mjs';
 import { canonicalSba, sbaDigest } from '../cloud/sba-control.mjs';
 import { requestSource, decodeSourceResponse } from '../src/sba/source.mjs';
 const reject = () => { throw new Error('SBA_WORKFLOW_REJECTED'); };
 
 export async function workflowInput(env) {
   const sha = env.SBA_EXECUTOR_SHA;
+  const workflowPath = env.GITHUB_WORKFLOW_REF?.split('@')[0]?.slice(`${env.GITHUB_REPOSITORY}/`.length);
+  let profile;
+  try { profile = workflowProfile(workflowPath); } catch { reject(); }
   if (!/^[a-f0-9]{40}$/.test(sha) || env.GITHUB_SHA !== sha || env.GITHUB_WORKFLOW_SHA !== sha ||
       env.GITHUB_REF !== `refs/tags/sba-executor-${sha}` || env.GITHUB_REF_TYPE !== 'tag' ||
       env.GITHUB_EVENT_NAME !== 'workflow_dispatch' || env.GITHUB_RUN_ATTEMPT !== '1' ||
       env.GITHUB_ACTIONS !== 'true' || env.RUNNER_ENVIRONMENT !== 'github-hosted' ||
       !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ID) || !Number.isSafeInteger(Number(env.GITHUB_RUN_ID)) ||
-      env.GITHUB_WORKFLOW_REF !== `${env.GITHUB_REPOSITORY}/.github/workflows/sba-execute.yml@${env.GITHUB_REF}` ||
+      env.GITHUB_WORKFLOW_REF !== `${env.GITHUB_REPOSITORY}/${profile.workflowPath}@${env.GITHUB_REF}` ||
       typeof env.SBA_REQUEST_JSON !== 'string' || Buffer.byteLength(env.SBA_REQUEST_JSON) > 49152 ||
       !/^[a-f0-9]{64}$/.test(env.SBA_REQUEST_SHA256)) reject();
   if (await sbaDigest(env.SBA_REQUEST_JSON) !== env.SBA_REQUEST_SHA256) reject();
@@ -24,7 +28,7 @@ export async function workflowInput(env) {
       !/^[a-f0-9]{40}$/.test(request.sourceSha) || !/^[a-z][a-z0-9-]{1,62}$/.test(request.taskId)) reject();
   const origin = new URL(env.SBA_RUNNER_ORIGIN);
   if (origin.protocol !== 'https:' || origin.origin !== env.SBA_RUNNER_ORIGIN || origin.username || origin.password) reject();
-  return { request, endpoint: `${origin.origin}/sba/v2/permit`, executorSha: sha, runId: Number(env.GITHUB_RUN_ID) };
+  return { request, endpoint: `${origin.origin}/sba/v2/permit`, executorSha: sha, runId: Number(env.GITHUB_RUN_ID), workflowPath: profile.workflowPath };
 }
 async function readJson(url, options, fetchImpl) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
@@ -85,6 +89,9 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
   onStage('checkout');
   const checked = await checkout({ ...input, directory, environment, authorizeSource });
   if (canonicalSba(checked.input) !== canonicalSba(input.request)) reject();
+  if (runtimeProfile(checked.manifest.runtime).workflowPath !== input.workflowPath) reject();
+  // 取得不可重放的部署秘密之前，先确认声明 runtime 与本机及固定工具匹配。
+  if (execute === executeCheckout) nativePowerShell(checked.manifest.runtime);
   const token = await getIdentity();
   onStage('permit');
   // 不重试：POST 的任何丢响应都可能已经消费许可。
@@ -108,7 +115,7 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   let stage = 'platform';
-  try { if (process.platform !== 'win32') reject(); await runSbaWorkflow({ onStage: value => { stage = value; },
+  try { if (!['win32', 'linux'].includes(process.platform)) reject(); await runSbaWorkflow({ onStage: value => { stage = value; },
     onSourceFailure: value => console.error(`SBA_SOURCE_DIAGNOSTIC ${JSON.stringify(value)}`) }); }
   // 只输出代码内的固定阶段名，不输出异常、Git/应用日志、输入或环境。
   catch { console.error(`SBA_WORKFLOW_UNCONFIRMED stage=${stage}`); process.exitCode = 1; }

@@ -158,11 +158,12 @@ export class ConnectionVault extends DurableObject {
     }
     const input=deploymentInput(raw);this.ctx.storage.transactionSync(()=>this.resourceGuard(owner));
     const {row:github,sealed}=this.activeConnection(input.github.id,input.github.revision);requireSba(github.provider==='github');
-    const base=connectedSbaPolicy(this.env), repository=applicationRepository(github,input.repository);
+    const repository=applicationRepository(github,input.repository);
     const application=await readApplication(this.env,repository,input.sourceSha,await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,github,sealed));
     const {manifest,declaration}=application;
     this.activeConnection(github.id,github.revision);
     if(input.action==='application')return application;
+    const base=connectedSbaPolicy(this.env,manifest.runtime);
     const {row:cloudflare}=this.activeConnection(input.cloudflare.id,input.cloudflare.revision);requireSba(cloudflare.provider==='cloudflare');
     let resources={},automatic=null;
     if(declaration.schemaVersion===2){automatic=await automaticDraft(this,owner,input,application);resources=automatic.resources;}

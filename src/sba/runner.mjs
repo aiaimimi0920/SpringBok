@@ -1,9 +1,10 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { lstat, realpath, open, mkdtemp, writeFile, rename } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { constants, readFileSync, lstatSync, realpathSync } from 'node:fs';
 import { devNull } from 'node:os';
 import { join, relative, isAbsolute } from 'node:path';
 import { validateManifest, validateRequest, validateResult } from './contract.mjs';
+import { WINDOWS_RUNTIME, runtimeProfile } from './runtime.mjs';
 
 const reject = () => { throw new Error('SBA_RUNNER_PREFLIGHT_FAILED'); };
 const inside = (root, path) => {
@@ -98,18 +99,38 @@ async function inspectTrustedCheckout(checkout, request) {
   return { root, manifest, input, entrypoint };
 }
 
-export function invokePowerShell({ root, entrypoint, requestPath, resultPath, environment, timeoutSeconds }) {
-  if (process.platform !== 'win32') reject();
+export function nativePowerShell(runtime = WINDOWS_RUNTIME) {
+  const profile = runtimeProfile(runtime);
+  if (process.platform !== profile.platform) reject();
+  if (profile.platform === 'win32') return join(process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  if (process.arch !== 'x64' || !process.env.RUNNER_TEMP || !isAbsolute(process.env.RUNNER_TEMP)) reject();
+  const release = readFileSync('/etc/os-release', 'utf8');
+  if (!/^ID=ubuntu$/m.test(release) || !/^VERSION_ID="24\.04"$/m.test(release)) reject();
+  // 固定目录来自受信 workflow，不从应用 PATH、configuration 或 secret 选择解释器。
+  const executable = join(process.env.RUNNER_TEMP, `sba-pwsh-${runtime.powershell}`, 'pwsh');
+  const info = lstatSync(executable);
+  if (!info.isFile() || info.isSymbolicLink() || realpathSync(executable) !== executable) reject();
+  const version = execFileSync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'], {
+    env: runtimeEnvironment(process.env), encoding: 'utf8', timeout: 15000, maxBuffer: 1024, stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+  if (version !== runtime.powershell) reject();
+  return executable;
+}
+
+export function invokePowerShell({ root, manifest, entrypoint, requestPath, resultPath, environment, timeoutSeconds }) {
+  const executable = nativePowerShell(manifest?.runtime);
+  const linux = process.platform === 'linux';
   return new Promise(resolveResult => {
-    const executable = join(environment.SystemRoot || environment.SYSTEMROOT || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    const child = spawn(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    const child = spawn(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', ...(linux ? [] : ['-ExecutionPolicy', 'Bypass']),
       '-File', entrypoint, '-RequestPath', requestPath, '-ResultPath', resultPath], {
-      cwd: root, env: environment, shell: false, windowsHide: true,
+      cwd: root, env: environment, shell: false, windowsHide: true, detached: linux,
       // 应用输出可能含业务数据或秘密；只消费经过校验的结果，不转发原始日志。
       stdio: 'ignore',
     });
-    let timedOut = false, closeTimer;
+    let timedOut = false, closeTimer, settled = false;
     const finish = exitCode => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       clearTimeout(closeTimer);
       resolveResult({ exitCode: timedOut ? null : exitCode, timedOut });
@@ -119,7 +140,8 @@ export function invokePowerShell({ root, entrypoint, requestPath, resultPath, en
       if (child.pid) {
         // 终止本次子进程树，不只终止 PowerShell 而遗留发布子进程。
         try {
-          execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+          if (linux) process.kill(-child.pid, 'SIGKILL');
+          else execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
             windowsHide: true, timeout: 15000, stdio: 'ignore',
           });
         } catch { /* 无论外部进程是否已退出，超时一律归为 unknown。 */ }
@@ -155,8 +177,8 @@ export async function readExecutionResult(path, request, execution) {
 
 // tempRoot 必须是执行器控制的目录；每次新建独立输入/输出位置，不接受旧结果。
 export async function executeCheckout({ checkout, request, tempRoot, environment = process.env, invoke = invokePowerShell }) {
-  if (invoke === invokePowerShell && process.platform !== 'win32') reject();
   const checked = await inspectCheckout(checkout, request);
+  if (invoke === invokePowerShell) nativePowerShell(checked.manifest.runtime);
   const temporary = await realpath(tempRoot);
   if (temporary === checked.root || inside(checked.root, temporary)) reject();
   const directory = await mkdtemp(join(temporary, 'springbok-sba-'));

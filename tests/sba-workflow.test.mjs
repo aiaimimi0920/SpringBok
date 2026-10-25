@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { sbaDigest, canonicalSba } from '../cloud/sba-control.mjs';
 import { workflowInput, runSbaWorkflow } from '../scripts/sba-workflow.mjs';
 import { sourceWant, SOURCE_CONTENT_TYPE } from '../src/sba/source.mjs';
+import { LINUX_RUNTIME } from '../src/sba/runtime.mjs';
 const sha = 'a'.repeat(40), request = { schemaVersion: 2, taskId: 'sba-test-task', action: 'deploy', repository: 'owner/application',
   sourceSha: 'b'.repeat(40), applicationId: 'sample-app', applicationVersion: '1.0.0', environment: 'staging', configuration: {}, previous: null };
 const manifest = { schemaVersion: 2, id: 'sample-app', name: 'Sample', version: '1.0.0', entrypoint: 'entry.ps1',
@@ -28,6 +29,28 @@ test('workflow input binds fixed executor tag, task digest and first hosted atte
     { GITHUB_RUN_ATTEMPT: '2' }, { GITHUB_EVENT_NAME: 'pull_request' }, { RUNNER_ENVIRONMENT: 'self-hosted' },
     { SBA_REQUEST_SHA256: 'd'.repeat(64) }, { SBA_RUNNER_ORIGIN: 'http://runner.example.invalid' }])
     await assert.rejects(workflowInput({ ...base, ...changed }), /SBA_WORKFLOW_REJECTED/);
+});
+test('Linux workflow identity is fixed and a mismatched application cannot consume a permit', async t => {
+  const environment = { ...base, GITHUB_WORKFLOW_REF: `owner/executor/.github/workflows/sba-execute-linux.yml@${base.GITHUB_REF}` };
+  assert.equal((await workflowInput(environment)).workflowPath, '.github/workflows/sba-execute-linux.yml');
+  await assert.rejects(workflowInput({ ...environment, GITHUB_WORKFLOW_REF: `owner/executor/.github/workflows/custom.yml@${base.GITHUB_REF}` }));
+  const root = await mkdtemp(join(tmpdir(), 'springbok-workflow-mismatch-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  let network = 0, executions = 0;
+  await assert.rejects(runSbaWorkflow({ environment, tempRoot: root,
+    checkout: async () => ({ root, input: request, manifest }),
+    execute: async () => { executions++; }, fetchImpl: async () => { network++; throw new Error('unexpected-network'); },
+  }), /SBA_WORKFLOW_REJECTED/);
+  assert.equal(network, 0); assert.equal(executions, 0);
+  const linuxManifest = { ...manifest, runtime: LINUX_RUNTIME };
+  const result = { schemaVersion: 2, taskId: request.taskId, action: request.action, sourceSha: request.sourceSha,
+    applicationVersion: request.applicationVersion, status: 'succeeded', checks: [{ id: 'synthetic-linux', passed: true }] };
+  const envelope = await runSbaWorkflow({ environment, tempRoot: root,
+    checkout: async () => ({ root, input: request, manifest: linuxManifest }),
+    execute: async () => { executions++; return { result }; },
+    fetchImpl: async () => ++network === 1 ? Response.json({ value: 'synthetic-oidc' }) : Response.json({ ...permit, manifest: linuxManifest }),
+  });
+  assert.equal(network, 2); assert.equal(executions, 1); assert.deepEqual(envelope.result, result);
 });
 async function scenario(t, { response = permit, failPermit = false, businessStatus = 'succeeded' } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'springbok-workflow-'));
@@ -104,7 +127,7 @@ test('CLI failure logs only the fixed stage, never input or raw error', () => {
   } catch (error) { failure = error; }
   assert.equal(failure?.status, 1);
   assert.equal(failure.stdout, '');
-  assert.equal(failure.stderr.trim(), `SBA_WORKFLOW_UNCONFIRMED stage=${process.platform === 'win32' ? 'input' : 'platform'}`);
+  assert.equal(failure.stderr.trim(), `SBA_WORKFLOW_UNCONFIRMED stage=${['win32', 'linux'].includes(process.platform) ? 'input' : 'platform'}`);
 });
 
 

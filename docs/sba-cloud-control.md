@@ -18,10 +18,11 @@
 - Worker secret `SBA_GITHUB_TOKEN`：只授予所选仓库所需源码读取、Actions dispatch/run/artifact 权限。
 - Worker secret `SBA_APPLICATION_SECRETS`：JSON 对象，键为 manifest/policy 声明的 secret 名称，值为非空字符串；不要把秘密写入配置仓库。
 - `SBA_POLICY`：JSON 字符串，精确包含 `github, sourceSha, environment, configuration, secretNames, runnerOrigin`。`configuration` 仅公开配置；`sourceSha` 为应用完整 40 位 SHA。
-- `github` 精确包含 `repository, repositoryId, applicationRepository, workflowId, workflowPath, ref, executorSha`；repository 为 owner/name，repositoryId/workflowId 使用真实 GitHub 身份；workflowPath 固定 `.github/workflows/sba-execute.yml`；ref 必须为 `sba-executor-<executorSha>`，executorSha 为已审阅完整 SHA。
+- `github` 精确包含 `repository, repositoryId, applicationRepository, workflowId, workflowPath, ref, executorSha`；repository 为 owner/name，repositoryId/workflowId 使用真实 GitHub 身份；workflowPath 为平台固定 Windows 或 Linux 路径且必须匹配应用 runtime；ref 必须为 `sba-executor-<executorSha>`，executorSha 为已审阅完整 SHA。
 - 部署前创建并保护该不可移动 executor tag，核查其精确 workflow SHA；OIDC 核验不能取代仓库权限和 ref 保护。
 - `runnerOrigin` 为独立 HTTPS origin，不能等于 `ADMIN_ORIGIN`。该 origin 仅允许 `POST /sba/v2/source` 和 `POST /sba/v2/permit`，拒绝 cookie、Origin、query；不可为此放宽管理 Access。
-- 执行仓库公开 variable `SBA_RUNNER_ORIGIN` 与 policy 一致。workflow 仅手动 dispatch，使用 windows-2025、PowerShell 5.1、Python 3.12、Node 22；固定 Actions，只有执行 job 获得 id-token:write。
+- 执行仓库公开 variable `SBA_RUNNER_ORIGIN` 与 policy 一致。workflow 仅手动 dispatch，完整 runtime 为 Windows 原组合或 Ubuntu 24.04 / PowerShell 7.6.9 / Python 3.12 / Node 22；固定 Actions，只有执行 job 获得 id-token:write，不配置 job environment。
+- connected Linux 新草稿须另配 `SBA_CONNECTED_LINUX_EXECUTOR`，JSON 恰好为 `{ "workflowId": <真实数字ID>, "executorSha": "<完整SHA>" }`。固定路径 `.github/workflows/sba-execute-linux.yml`，继承受信执行仓库；缺失/非法即拒绝，不回落 Windows。原 `SBA_POLICY` 与 Windows pin 保留，已接受任务继续使用持久保存的原策略。
 
 准确验证规则以 `cloud/sba-control.mjs`、`src/sba/github.mjs` 和 `.github/workflows/sba-execute.yml` 为准。
 

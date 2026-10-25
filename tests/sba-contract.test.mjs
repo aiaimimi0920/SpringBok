@@ -25,6 +25,16 @@ test('legacy manifests, path escapes, shell text and unsupported runtimes fail c
   }
 });
 
+test('Linux runtime is an exact approved tuple, not independently selectable version fields', () => {
+  const linux = { runner: 'ubuntu-24.04', powershell: '7.6.9', python: '3.12', node: '22' };
+  assert.deepEqual(validateManifest({ ...manifest(), runtime: linux }).runtime, linux);
+  for (const runtime of [{ ...linux, powershell: '5.1' }, { ...linux, runner: 'ubuntu-latest' },
+    { ...linux, powershell: '7' }, { ...linux, python: '3.13' }, { ...linux, node: '24' },
+    { ...manifest().runtime, powershell: linux.powershell }, { ...linux, command: 'pwsh' }]) {
+    assert.throws(() => validateManifest({ ...manifest(), runtime }));
+  }
+});
+
 test('updates use numeric stable versions and immutable different commit identities', () => {
   assert.equal(compareVersions('1.10.0', '1.2.0'), 1);
   for (const version of ['v1.2.0', '1.2', '01.2.0', '1.2.0-beta', '1.2.0+sha']) assert.throws(() => compareVersions(version, '1.2.0'));

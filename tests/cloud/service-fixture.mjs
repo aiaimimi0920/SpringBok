@@ -13,7 +13,7 @@ export async function serviceFixture(overrides={}) {
   state.headSha = sourceSha; state.invalidSba = new Set(['owner/broken']); state.missingSba = new Set(['owner/empty']);
   state.provider = async (request, context) => {
     const url = new URL(request.url);
-    if (url.pathname.endsWith('/actions/workflows/99/dispatches')) state.runStatus = 'in_progress';
+    if (url.pathname.endsWith(`/actions/workflows/${state.executorWorkflowId}/dispatches`)) state.runStatus = 'in_progress';
     if (url.origin === 'https://api.github.com' && url.pathname === '/user/repos') return Response.json(state.repositoryPages[Number(url.searchParams.get('page')) - 1] ?? []);
     const match = url.pathname.match(/^\/repos\/(owner\/[^/]+)(.*)$/), repository = match?.[1], suffix = match?.[2];
     if (match && repository !== 'owner/executor') {

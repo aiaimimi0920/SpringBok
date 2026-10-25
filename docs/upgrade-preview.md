@@ -65,6 +65,11 @@ unknown 保留记录、占用和错误，不能重放或自动换任务重试。
 已提交任务仍使用自己持久保存的策略与 OIDC 绑定。旧 `SBA_POLICY` 不改写，避免发布新
 执行器改变历史任务身份或回执。此配置只选择代码版本，不授予执行许可，不触发应用部署。
 
+Linux 新草稿独立使用 `SBA_CONNECTED_LINUX_EXECUTOR` 的真实 workflowId / executorSha，
+固定 Linux workflow，完整 runtime 见共享 manifest 参考。destroy-preview / preparation
+recovery 按原计划 runtime 校验当前受信 pin，repair 也保持原 runtime；普通 update/rehearse
+不承担跨 runtime 迁移。两组 pin 的变更不改写已接受任务，也不会触发应用部署。
+
 完成协议和新旧混用回归、源/目标隔离、重复提交/重启/并发、清理归属与部分失败检查；
 跑真实产品 workerd/Chrome 合成流程及四页 Neuro 回归，保留 UTF-8 证据与截图。
 每个交付阶段记录源码版本和未验证项，正常 scoped 提交推送、精确 PR 审阅及 main

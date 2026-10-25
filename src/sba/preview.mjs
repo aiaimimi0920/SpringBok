@@ -13,10 +13,11 @@ export function validatePreviewInventory(rows) {
   requireValue(Array.isArray(rows) && rows.length > 0 && rows.length <= 20);
   for (const row of rows) {
     exact(row, ['key', 'kind', 'accountId', 'remoteId', 'name']);
-    requireValue(typeof row.key === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(row.key) && /^[a-f0-9]{32}$/.test(row.accountId));
+    const workflow = row.kind === 'github-actions';
+    requireValue(typeof row.key === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(row.key) && (workflow ? /^github:[a-z0-9][a-z0-9_.-]{0,99}\/[a-z0-9][a-z0-9_.-]{0,99}$/.test(row.accountId) : /^[a-f0-9]{32}$/.test(row.accountId)));
     requireValue(typeof row.name === 'string' && row.name.length > 0 && row.name.length <= 256 && !/[\x00-\x1f]/.test(row.name));
     requireValue(typeof row.remoteId === 'string' && (row.kind === 'd1' ? /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(row.remoteId) :
-      row.kind === 'kv' ? /^[a-f0-9]{32}$/.test(row.remoteId) : ['worker', 'r2'].includes(row.kind) ? /^[a-z][a-z0-9-]{1,62}$/.test(row.remoteId) : row.kind === 'domain' && previewUrl(row.remoteId)));
+      row.kind === 'kv' ? /^[a-f0-9]{32}$/.test(row.remoteId) : ['worker', 'pages', 'r2'].includes(row.kind) ? /^[a-z][a-z0-9-]{1,62}$/.test(row.remoteId) : workflow ? /^\.github\/workflows\/[A-Za-z0-9_-]+\.ya?ml@[a-z][a-z0-9-]{1,62}$/.test(row.remoteId) : row.kind === 'domain' && previewUrl(row.remoteId)));
   }
   requireValue(new Set(rows.map(row => row.key)).size === rows.length && new Set(rows.map(resourceIdentity)).size === rows.length);
   return rows;

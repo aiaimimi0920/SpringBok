@@ -6,6 +6,8 @@ const identity = row => `${row.accountId}/${row.kind}/${row.remoteId}`;
 const sort = rows => rows.sort((a, b) => identity(a).localeCompare(identity(b), 'en'));
 const name = value => typeof value === 'string' && /^[a-z0-9][a-z0-9_-]{0,62}$/.test(value);
 export function deletionInventory(instance) {
+  // Never delete only the Worker half of a suite and orphan live publishers.
+  requireSba(instance.targets.every(t => ['worker','domain'].includes(t.kind)));
   const rows = Object.values(instance.resources).map(r => ({ kind: r.kind, accountId: r.accountId, remoteId: r.remoteId, name: r.name }));
   for (const t of instance.targets) if (t.kind === 'worker') rows.push({ kind: 'worker', accountId: t.accountId ?? instance.accountId, remoteId: t.value, name: t.value });
   requireSba(rows.length > 0 && rows.length <= 32 && rows.some(r => r.kind === 'worker'));

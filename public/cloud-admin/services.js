@@ -387,7 +387,7 @@ function buildFields(data) {
   adminOverride = null;
   $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
   if (data.status !== 'ready') return;
-  const platform = element('output', 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
+  const platform = element('output', data.declaration.target === 'cloudflare-suite' ? 'Cloudflare · GitHub Actions' : 'Cloudflare Workers'); addField($('service-inputs'), 'service-platform', '平台', platform);
   const config = updateTarget?.configuration ?? data.declaration.defaults;
   const automatic = data.declaration.schemaVersion === 2;
   for (const [index, field] of (importing || rehearsing || repairing ? [] : data.declaration.fields).entries()) {
@@ -513,6 +513,7 @@ async function changeVersion() {
   try {
     const data = await request(api + 'application', { github: row.github, repository: row.repository, sourceSha }); if (!currentDialog(version, pageVersion)) return;
     if (data.status !== 'ready') throw new Error('此版本的 .sba 声明无效或不受支持');
+    if (importing && data.declaration.target === 'cloudflare-suite') throw new Error('此部署类型暂不支持导入');
     if (updateTarget && data.manifest.id !== updateTarget.instance.application.id) throw new Error('所选版本不是同一个服务');
     application = data; $('service-selection').textContent = data.repository + ' · v' + data.manifest.version; buildFields(data); dialogNotice('');
     void loadVersions(row, version, pageVersion);

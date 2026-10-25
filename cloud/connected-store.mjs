@@ -4,9 +4,10 @@ import { ownerId } from './connections-contract.mjs';
 import { sbaPolicy, connectedSbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba } from './sba-control.mjs';
 import { importedId } from './service-import.mjs';
 import { cancellationRecord } from './deployment-cancellation.mjs';
+import { deploymentScope } from './deployment-suite.mjs';
 export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));return value; };
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
-export const accountStub = (env,accountId) => {requireSba(/^[a-f0-9]{32}$/.test(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
+export const accountStub = (env,accountId) => {requireSba(deploymentScope(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
 export class ConnectedDeployment extends SbaDeployment {
   uninitialized() {
     return this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND (name IN ('connected_bootstrap','connected_cancellation') OR name LIKE 'sba_%')").toArray().length === 0;
@@ -153,6 +154,7 @@ export class DeploymentLocks extends DurableObject {
     return this.#claim(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,true);
   }
   #claim(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,repair){
+    requireSba(deploymentScope(accountId));
     ownerId(owner);connectedTaskId(taskId);requireSba(/^[a-f0-9]{64}$/.test(digest)&&typeof scope==='string'&&scope.length<=300&&Array.isArray(resourceKeys)&&resourceKeys.length<=32&&Array.isArray(observed)&&observed.length<=256);
     requireSba(this.ctx.id.toString()===this.env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`).toString());
     if(update){exactSba(update,['instanceId','previousTaskId']);connectedTaskId(update.instanceId);connectedTaskId(update.previousTaskId);requireSba(taskId!==update.previousTaskId&&taskId!==update.instanceId);}

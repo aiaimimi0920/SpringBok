@@ -60,18 +60,28 @@ test('accept immutable subject only when signed owner and repository identities 
 });
 
 test('OIDC rejection exposes only fixed categories, not the signed claims or original error', async () => {
-  const verify = verifier();
+  const verify = verifier(), payload = claims();
   for (const [changed, expected] of [[{ sub: 'synthetic-private-subject' }, 'subject'],
     [{ repository: 'synthetic-private-repo' }, 'repository'], [{ workflow_sha: 'b'.repeat(40) }, 'executor'],
     [{ run_attempt: '2' }, 'context'], [{ run_id: 'synthetic-private-run' }, 'run-id'],
-    [{ exp: Math.floor(Date.now() / 1000) + 601 }, 'time']]) {
+    [{ exp: payload.iat + 601 }, 'time']]) {
     let reason;
-    await assert.rejects(verify(await sign({ ...claims(), ...changed }), policy, { onReject: value => { reason = value; } }), /SBA_OIDC_REJECTED/);
+    await assert.rejects(verify(await sign({ ...payload, ...changed }), policy, { onReject: value => { reason = value; } }), /SBA_OIDC_REJECTED/);
     assert.equal(reason, expected); assert.doesNotMatch(reason, /synthetic-private/);
   }
   let reason;
   await assert.rejects(verify('synthetic-private-invalid-token', policy, { onReject: value => { reason = value; } }), /SBA_OIDC_REJECTED/);
   assert.equal(reason, 'jwt');
+});
+
+test('accept a 600-second signed lifetime and reject 601 seconds from the same issued-at time', async () => {
+  const verify = verifier(), payload = claims();
+  assert.deepEqual(await verify(await sign({ ...payload, exp: payload.iat + 600 }), policy),
+    { runId: 456, runAttempt: 1, executorSha: 'a'.repeat(40) });
+  let reason;
+  await assert.rejects(verify(await sign({ ...payload, exp: payload.iat + 601 }), policy,
+    { onReject: value => { reason = value; } }), /SBA_OIDC_REJECTED/);
+  assert.equal(reason, 'time');
 });
 
 test('accept current signed self-workflow job identity but reject foreign, partial and inconsistent pairs', async () => {

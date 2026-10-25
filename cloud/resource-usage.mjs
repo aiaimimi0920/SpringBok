@@ -52,13 +52,14 @@ function sample(value, observedAt, complete = true) {
   check(number(value)); return { value, observedAt, complete };
 }
 
-async function storage(account, kind, token, transport, now, plan) {
+async function storage(account, kind, token, transport, now, planRead) {
   const day = date(now), dataset = kind === 'd1' ? 'd1StorageAdaptiveGroups' : 'kvStorageAdaptiveGroups';
   const field = kind === 'd1' ? 'databaseSizeBytes' : 'byteCount', dimension = kind === 'd1' ? 'databaseId' : 'namespaceId';
-  const definition = metric('storage', '存储 · 今日峰值', 'bytes', 'day-peak:' + day, day + ' UTC', quota(plan, kind === 'd1' ? 5e9 : 1e9));
-  const result = await query(account, token, transport,
+  // Storage selection is independent of subscription metadata; neither read should block the other.
+  const [result, plan] = await Promise.all([query(account, token, transport,
     `samples:${dataset}(limit:${LIMIT},filter:{date_geq:$start,date_leq:$end}){max{${field}} dimensions{date ${dimension}}}`,
-    'Date', day, day);
+    'Date', day, day), planRead]);
+  const definition = metric('storage', '存储 · 今日峰值', 'bytes', 'day-peak:' + day, day + ' UTC', quota(plan, kind === 'd1' ? 5e9 : 1e9));
   const samples = Object.create(null);
   for (const row of result.rows) {
     const id = row.dimensions?.[dimension]; check(identifier(kind, id) && row.dimensions.date === day && !Object.hasOwn(samples, id));
@@ -75,13 +76,25 @@ async function workers(account, token, transport, now, plan) {
   const definition = metric('requests', monthly ? '请求 · 本账期' : '请求 · 今日', 'requests', period,
     monthly ? `${date(start)} — ${date(plan.end)} UTC` : date(now) + ' UTC', allowance, true);
   const samples = Object.create(null); let complete = true, hadSuccess = false, unattributed = 0;
+  // Bound provider fan-out to two reads. Merge in window order, not completion order.
+  const windows = [], results = []; let next = 0;
   // Workers analytics bounds each query to one week; non-overlapping chunks prevent double counting.
   for (let from = start; from < now; from += 7 * DAY) {
-    const to = Math.min(from + 7 * DAY, now);
+    windows.push([from, Math.min(from + 7 * DAY, now)]);
+  }
+  await Promise.all(Array.from({ length: Math.min(2, windows.length) }, async () => {
+    while (next < windows.length) {
+      const index = next++, [from, to] = windows[index];
+      try {
+        results[index] = await query(account, token, transport,
+          `samples:workersInvocationsAdaptive(limit:${LIMIT},filter:{datetime_geq:$start,datetime_lt:$end}){sum{requests} dimensions{scriptName}}`,
+          'Time', iso(from), iso(to));
+      } catch { results[index] = null; }
+    }
+  }));
+  for (const result of results) {
     try {
-      const result = await query(account, token, transport,
-        `samples:workersInvocationsAdaptive(limit:${LIMIT},filter:{datetime_geq:$start,datetime_lt:$end}){sum{requests} dimensions{scriptName}}`,
-        'Time', iso(from), iso(to));
+      check(result);
       hadSuccess = true; complete &&= result.complete;
       for (const row of result.rows) {
         const id = row.dimensions?.scriptName;
@@ -155,13 +168,13 @@ async function r2(account, token, transport, now, plan) {
 
 export async function readResourceUsage(account, token, kind, transport = fetch, now = Date.now()) {
   check(/^[a-f0-9]{32}$/.test(account) && ['d1', 'kv', 'r2', 'worker'].includes(kind));
-  const plan = await planFor(account, kind, token, transport, now);
+  const planRead = planFor(account, kind, token, transport, now);
   try {
-    const result = kind === 'worker' ? await workers(account, token, transport, now, plan) :
-      kind === 'r2' ? await r2(account, token, transport, now, plan) : await storage(account, kind, token, transport, now, plan);
+    const result = kind === 'worker' ? await workers(account, token, transport, now, await planRead) :
+      kind === 'r2' ? await r2(account, token, transport, now, await planRead) : await storage(account, kind, token, transport, now, planRead);
     // DO RPC transports plain DTOs; keep the prototype-safe accumulator internal.
-    return { ...result, samples: { ...result.samples }, plan: plan?.id ?? null, checkedAt: now, status: result.complete ? 'available' : 'partial' };
+    return { ...result, samples: { ...result.samples }, plan: (await planRead)?.id ?? null, checkedAt: now, status: result.complete ? 'available' : 'partial' };
   } catch {
-    return { metrics: [], samples: {}, complete: false, plan: plan?.id ?? null, checkedAt: now, status: 'unavailable' };
+    return { metrics: [], samples: {}, complete: false, plan: (await planRead)?.id ?? null, checkedAt: now, status: 'unavailable' };
   }
 }

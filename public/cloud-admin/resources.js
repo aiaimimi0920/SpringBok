@@ -3,6 +3,7 @@ import { createResourceTree, renderResourceDetail } from './resource-tree.js';
 const $ = id => document.getElementById(id);
 let session = null, connections = [], sources = [], generation = 0, busy = false, lastRead = 0, createId = crypto.randomUUID(), view = 'account';
 let budgetTarget = null, detailFocus = null, budgetFocus = null;
+const reads = new Set();
 const notice = (text, tone='info') => { $('resource-notice').textContent=text; $('resource-notice').dataset.tone=tone; };
 const loading = text => { $('resource-loading').textContent=text; };
 const dialogNotice = (text, tone='info') => { $('resource-dialog-notice').textContent=text; $('resource-dialog-notice').dataset.tone=tone; };
@@ -36,15 +37,21 @@ const tree = createResourceTree($('resource-accounts'), {
   },
 });
 function invalidate() {
-  generation++;busy=false;session=null;connections=[];sources=[];budgetTarget=null;clearSecret();tree.clear();loading('');
+  generation++;for(const controller of reads)controller.abort();reads.clear();busy=false;session=null;connections=[];sources=[];budgetTarget=null;clearSecret();tree.clear();loading('');
   $('resource-detail-dialog').close();$('resource-budget-dialog').close();$('resource-detail').replaceChildren();$('admin-profiles-list').replaceChildren();$('admin-profiles-section').hidden=true;controls();
 }
 async function request(path, body) {
-  const version=generation;
-  const response=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',redirect:'error',headers:body?{'content-type':'application/json','x-csrf-token':session?.csrf??''}:{},...(body?{body:JSON.stringify(body)}:{})});
-  if(response.status===403){if(version===generation){invalidate();notice('身份验证失败，请重新登录','error');if($('resource-dialog').open)dialogNotice('身份验证失败，请重新登录','error');}throw new Error('身份验证失败，请重新登录');}
-  if(!response.ok)throw new Error(body?.action === 'budget' ? '规划保存未确认，请重新读取后核对。' : body && !['inventory','usage'].includes(body.action) ? '保存或选用未确认，请检查密钥、权限和连接容量。' : '读取失败，请检查权限或平台状态。');
-  return response.json();
+  const version=generation,controller=!body || ['inventory','usage'].includes(body.action)?new AbortController():null;
+  let timedOut=false,timer;
+  if(controller){reads.add(controller);timer=setTimeout(()=>{timedOut=true;controller.abort();},body?.action==='usage'?45000:15000);}
+  try {
+    const response=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',redirect:'error',headers:body?{'content-type':'application/json','x-csrf-token':session?.csrf??''}:{},...(body?{body:JSON.stringify(body)}:{}),...(controller?{signal:controller.signal}:{})});
+    if(response.status===403){if(version===generation){invalidate();notice('身份验证失败，请重新登录','error');if($('resource-dialog').open)dialogNotice('身份验证失败，请重新登录','error');}throw new Error('身份验证失败，请重新登录');}
+    if(!response.ok)throw new Error(body?.action === 'budget' ? '规划保存未确认，请重新读取后核对。' : body && !['inventory','usage'].includes(body.action) ? '保存或选用未确认，请检查密钥、权限和连接容量。' : '读取失败，请检查权限或平台状态。');
+    return await response.json();
+  } catch(error) {
+    if(timedOut)throw new Error('读取超时，请稍后重试。');throw error;
+  } finally {if(controller){clearTimeout(timer);reads.delete(controller);}}
 }
 function render() { tree.render(projectAccounts(sources), view); }
 function types(row) { return row.provider==='cloudflare'?['worker','d1','kv','r2','zone']:['repository']; }

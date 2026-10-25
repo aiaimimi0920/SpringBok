@@ -86,6 +86,7 @@ jobs:
         run: node tests/browser/automatic-deployment.mjs
         env:
           SUITE_TARGETS: '1'
+          APPLICATION_SECRETS: '1'
       - name: Check registered domain selection and exact subdomain deployment
         run: node tests/browser/domain-deployment.mjs
       - name: Check Gmail bootstrap profiles and private password overrides

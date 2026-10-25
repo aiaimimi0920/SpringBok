@@ -15,7 +15,7 @@ function publicValue(value, depth=0) {
 }
 export function deploymentDeclaration(value) {
   const automatic=value?.schemaVersion===2;
-  exact(value,['schemaVersion','target','accountPath','defaults','fields','resources','targets',...(automatic?['accountMode','accounts']:[]),...(Object.hasOwn(value,'administrator')?['administrator']:[]),...(Object.hasOwn(value,'github')?['github']:[])]);
+  exact(value,['schemaVersion','target','accountPath','defaults','fields','resources','targets',...(automatic?['accountMode','accounts']:[]),...(Object.hasOwn(value,'administrator')?['administrator']:[]),...(Object.hasOwn(value,'github')?['github']:[]),...(Object.hasOwn(value,'applicationSecrets')?['applicationSecrets']:[])]);
   requireValue([1,2].includes(value.schemaVersion) && ['cloudflare-workers','cloudflare-suite'].includes(value.target) && object(value.defaults));publicValue(value.defaults);
   if(automatic){
     requireValue(['single','multiple'].includes(value.accountMode)&&Array.isArray(value.accounts)&&value.accounts.length>0&&value.accounts.length<=12);
@@ -34,8 +34,9 @@ export function deploymentDeclaration(value) {
   requireValue(Array.isArray(value.targets)&&value.targets.length>0&&value.targets.length<=8);
   for(const target of value.targets){exact(target,['kind','path',...(automatic?['account']:[])]);path(target.path);requireValue((['worker','domain'].includes(target.kind)||value.target==='cloudflare-suite'&&['pages','github-actions'].includes(target.kind))&&value.fields.some(f=>f.type==='text'&&f.required&&f.path.join('.')===target.path.join('.')));if(automatic){if(target.kind==='github-actions')requireValue(target.account===null);else accountKey(target.account);}}
   validateSuite(value,path);
+  if(Object.hasOwn(value,'applicationSecrets'))requireValue(automatic&&Array.isArray(value.applicationSecrets)&&value.applicationSecrets.length>0&&value.applicationSecrets.length<=20&&value.applicationSecrets.every(name=>typeof name==='string'&&/^[A-Z][A-Z0-9_]{1,63}$/.test(name)));
   if(value.github)paths.push(value.github.repositoryPath);
-  const secrets=deploymentSecrets(value);requireValue(new Set(secrets).size===secrets.length);
+  const secrets=deploymentSecrets(value);requireValue(secrets.length<=20&&new Set(secrets).size===secrets.length);
   requireValue(new Set(value.targets.map(t=>t.path.join('.'))).size===value.targets.length);
   paths.forEach(path);const names=paths.map(p=>p.join('.'));
   requireValue(names.every((n,i)=>names.every((m,j)=>i===j || (n!==m&&!n.startsWith(m+'.')&&!m.startsWith(n+'.')))));
@@ -43,7 +44,7 @@ export function deploymentDeclaration(value) {
 }
 function validTemplate(value,accounts){return typeof value==='string'&&value.length>0&&value.length<=256&&!/[\x00-\x1f]/.test(value)&&!value.replaceAll('{instance}','').replace(/\{subdomain:([A-Za-z][A-Za-z0-9_]*)\}/g,(all,key)=>accounts.some(a=>a.key===key)?'':all).match(/[{}]/);}
 export const deploymentValue=(root,parts)=>parts.reduce((v,k)=>v?.[k],root);
-export function deploymentSecrets(declaration){return declaration.schemaVersion===2?[...declaration.accounts.map(a=>a.secret),...(declaration.administrator?[declaration.administrator.secret]:[]),...(declaration.github?[declaration.github.secret]:[])]:['CLOUDFLARE_API_TOKEN'];}
+export function deploymentSecrets(declaration){return declaration.schemaVersion===2?[...declaration.accounts.map(a=>a.secret),...(declaration.administrator?[declaration.administrator.secret]:[]),...(declaration.github?[declaration.github.secret]:[]),...(declaration.applicationSecrets??[])]:['CLOUDFLARE_API_TOKEN'];}
 export function deploymentTemplate(template,environment,facts={}){return template.replaceAll('{instance}',environment).replace(/\{subdomain:([A-Za-z][A-Za-z0-9_]*)\}/g,(_,key)=>{const value=facts[key]?.subdomain;requireValue(typeof value==='string'&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value));return value;});}
 function label(value){requireValue(typeof value==='string'&&value.trim().length>0&&value.length<=100&&!/[\x00-\x1f]/.test(value));}
 export function connectionReference(value) {exact(value,['id','revision']);connectionId(value.id);requireValue(Number.isSafeInteger(value.revision)&&value.revision>0);return value;}
@@ -51,6 +52,7 @@ export function deploymentInput(input) {
   const keys=input.action==='application'?['action','github','sourceSha']:['action','github','sourceSha','cloudflare','environment','values','resources'];
   if(Object.hasOwn(input,'repository'))keys.push('repository');
   if(input.action==='preview'&&Object.hasOwn(input,'accounts'))keys.push('accounts');
+  if(input.action==='preview'&&Object.hasOwn(input,'applicationSecrets')){keys.push('applicationSecrets');connectionReference(input.applicationSecrets);}
   if(input.action==='preview'&&Object.hasOwn(input,'administrator')){keys.push('administrator');exact(input.administrator,['profile',...(Object.hasOwn(input.administrator,'override')?['override']:[])]);connectionReference(input.administrator.profile);if(input.administrator.override)connectionReference(input.administrator.override);}
   if(input.action==='preview'&&Object.hasOwn(input,'domains')){keys.push('domains');requireValue(object(input.domains)&&Object.keys(input.domains).length<=8);for(const row of Object.values(input.domains)){exact(row,['resource','subdomain']);connectionReference(row.resource);requireValue(typeof row.subdomain==='string'&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(row.subdomain));}}
   if(input.action==='preview'&&Object.hasOwn(input,'instance')){keys.push('instance');exact(input.instance,['id','previousTaskId']);for(const value of Object.values(input.instance))requireValue(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));}

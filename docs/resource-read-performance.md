@@ -64,7 +64,8 @@ version/URL/integrity；不修改已发布 Miniflare 包的原依赖声明、不
 不能只凭同一主版本或纯 transport 单测宣称兼容。发布在新精确版本的门禁完成前保持暂停。
 
 此追加修复不改变用户界面、SBA 字段、接入或部署生命周期，因此没有新增 ai-docs/Pages 协议或使用说明变更；
-原 PERF-01 人类入口的截止/恢复说明继续适用。
+原 PERF-01 人类入口的截止/恢复说明继续适用。后续 PR #108 精确 head 七工作流通过，
+原 undici Dependabot 告警已联网独立核对为 fixed，未忽略或手动关闭。
 
 隔离安装实际解析 `miniflare → undici 7.30.1`；包含 dev/optional/peer、阈值 low 的联网 npm audit
 返回零漏洞。基于该新安装运行时，聚焦合同/workerd/安全 39/39、读取预算/资源/用量/四页 Neuro
@@ -85,4 +86,31 @@ OIDC 拒绝诊断测试暴露 `Missing expected rejection.`：数组创建时计
 隔离复现对旧/新测试的 time 场景都增加 1100ms 延迟，旧版出现相同错误，新版通过；该延迟只在
 临时证据中，不进入正常测试。OIDC 28/28、Pages 6/6、安全合同 12/12、示例及九页站点构建通过。
 这仅修复测试时间取样，不改变 SBA 字段、实际有效期、诊断类别、用户操作或权限，两种公开文档入口
-无新增合同或操作说明需要同步。新精确 PR/main CI 和生产发布仍需分别完成。
+无新增合同或操作说明需要同步。PR #109 精确 head 经只读审阅、七工作流通过后正常合并；
+新 main 七工作流通过，随后按下节发布。生产 OIDC 校验未改变。
+
+## PERF-01-EVIDENCE 生产发布与验证边界
+
+2026-10-25 正式控制 Worker 和全部 26 个静态资产已发布；不是只推送代码或只保留旧 assets。
+
+| 证据 | 值 |
+| --- | --- |
+| 发布源码 main | `39374fd7fb57c467d9d4f84b2c8a012d40eafb07` |
+| Worker version | `5c6add25-b5e2-4ab3-ac47-ff8461b353b4` |
+| Deployment | `3f4d3642-477d-4952-8373-0bf6f40a5cc9` |
+| Bundle SHA-256 | `b280124e56854f7e772bf51e6bf9cf27dc715a01afca50bcb993aee2536b987b` |
+| 流量 | 单一新版本 100% |
+
+PR #107、#108、#109 均精确 head 检查后正常合并，发布 main 七工作流全部通过。发布前绑定源码、
+bundle、完整资产 manifest 与每个文件摘要，唯一 marker 在第一次资产写入前创建；写请求不自动重试。
+最终写入前再次核对当前部署、配置和 Access。此操作依赖单发布者，不把 GET/PUT 间的复核称为跨发布者原子锁。
+
+发布后通过独立 Cloudflare GET 读取线上 Worker 模块，SHA-256 与构建一致；33 个 bindings、
+运行配置、3 条 Access 策略、2 个域名及执行器 pin 保持。无 Cookie 探针访问 `/`、`/resources`、
+`/api/admin/state` 均返回 302 到原 Access 登录域名。没有修改业务 Worker、数据、权限或启用旧委托。
+脱敏结果与加密私密快照保留在 `linshi/springbok-perf01-20261025/release-v2/`，不提交凭据或原始私密日志。
+
+**未验证项：**浏览器访问正式资源页仍停在 Cloudflare Access，尚无正常 owner 登录会话；登录态资源双视角、
+统计/刷新、服务页及实际页面耗时仍待验收。资产已上传并随版本发布，但尚未在登录态浏览器中独立逐项读取。
+本地 Chrome/workerd 合成回归和匿名 302 不等同于线上业务成功，也不能支持真实提速比例。
+本次证据文档提交不新增产品能力或操作，ai-docs/Pages 无新增合同需要同步，且不触发另一轮控制 Worker 发布。

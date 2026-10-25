@@ -3,7 +3,7 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SUITE-03：固定 Linux 执行器（本地完成，待 PR 交付，2026-10-26）
+## SUITE-03：固定 Linux 执行器（已合并并上线，2026-10-26）
 
 负责人主 AI；为 EasyProxy 真实 Docker 消费审计增加一组受信 Ubuntu 24.04 runtime，保留
 原 Windows 执行器和既有任务。范围为完整 runtime 白名单、固定 PowerShell 工具、原生
@@ -23,8 +23,22 @@ source pack、OIDC、单次许可和回执，不增加应用二次 dispatch 或�
 共享 AI/Pages 参考、示例与十页站点、actionlint、UTF-8 无 BOM、diff check 和变更快照
 Gitleaks 通过；只读交叉审阅无剩余阻断。两项新增恢复/repair 测试最初误用套件恢复范围
 和 preview fixture，保留失败 XML 后修正夹具，未放宽产品边界。证据
-`linshi/springbok-suite03-20261026/`；尚无精确 PR/main 或 GitHub-hosted Linux job 的通过
-证据，未发布本切片控制面或 Linux pin，不能称为已上线。
+`linshi/springbok-suite03-20261026/`。PR #115 精确 head `9467577` 的七工作流通过，含真实
+GitHub-hosted Linux job 23 passed、无 skip；正常合并后 main
+`4d6a8bcd8c52f0ada791729bafc2788a2cffb972` 七工作流及 Pages publication 再次全部通过。
+
+同日已发布该 main 的控制 Worker 与全部 27 个静态资产，独立 GET 回读代码 SHA-256
+`9bec17265bf142a7a9baacf956dcdb15eb5b67e2f1b5dc0ab5e80281c0e1c3b3` 与构建一致。
+创建准确 executor tag 及无 bypass 的 update/deletion 保护后，新增独立 Linux pin，指向
+真实 workflow ID `396352142` 和同一完整 SHA；原 33 bindings（含 Windows pin 与旧
+SBA_POLICY）、运行配置、3 条 Access 策略、2 个域名保持。最终 version
+`920ffae7-cbb6-48bc-9215-f1d5cae69f40`、deployment
+`8e5ee67e-546f-4097-8307-9435fefd10ba` 承接 100% 流量。匿名访问仍被 Access 拒绝。
+
+正常 owner 登录已在正式控制台确认；没有用空应用派发冒充验收，没有创建 EasyProxy
+实例或改动旧业务资源。未逐字节独立回读全部线上静态资产。此切片完成平台前置，不代表
+EasyProxy 工具链、五动作、真实部署或本地业务消费完成。上述生产事实由独立发布材料证明，
+后续仅记录证据的文档提交不要求移动控制面或执行器 pin。
 
 ## SUITE-LIVE-01：EasyProxy 接入的平台发布前置（已上线，2026-10-26）
 

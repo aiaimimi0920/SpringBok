@@ -3,7 +3,7 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SUITE-06：repair 后的独立固定版本 verify（进行中，2026-10-26）
+## SUITE-06：repair 后的独立固定版本 verify（已合并并上线，2026-10-26）
 
 负责人主 AI。范围仅为允许当前实例 head 的已终态 repair 创建一次独立 verify，固定
 该修复任务的 SHA/version/config，全部秘密为 verification-not-applicable。原 repair 和
@@ -17,10 +17,21 @@ repair；先新增失败先行 workerd 回归，再做窄修和双入口共享�
 无 skip；相邻 repair/套件合同 9 项、共享示例和十页构建通过。派发丢失测试的两次初始
 期望误用了 HTTP 409/unknown；已根据原 dispatch/持久状态源码修正为 200/dispatch-unknown，
 保留失败 XML，没有放宽单次派发或原回执断言。未改 UI、workflow 或 executor 合同，
-不重复浏览器视觉回归/actionlint；共享参考源同时供 AI 与 Pages 阅读。待 scoped PR/main 门禁，
-尚未发布控制面，不将合成 provider 回归写成 EasyProxy 线上验证成功。
+不重复浏览器视觉回归/actionlint；共享参考源同时供 AI 与 Pages 阅读。PR #120 精确 head
+`40d31e08e10487a5f7499103831bbbd11eed6462` 与合并 main
+`14df58aac8f101e0d19c036b28e0b8e2ef89bfc3` 的七个工作流全部通过，含 Linux/Windows。
 
-## SUITE-05：受限 repair 复用应用秘密（已合并、未发布，2026-10-26）
+同日已单次发布该 main 控制面，version `46d9c7ed-7d52-479f-93f0-b288937abc3a`、deployment
+`6210fde8-d2ee-433a-929d-5c936586a207` 承接 100% 流量。独立 GET 回读代码 SHA256
+`639f8f7d8175e2fed35a3ce407191f2f8ecfe926974da95bb2a04c691aaa9840` 与构建一致；34 个
+bindings、运行配置、3 条 Access 策略、2 个域名和 Windows/Linux 两个 executor pins 保持。
+27 个资产与 SUITE-04 源码逐字节一致并使用原准确 manifest 发布；未逐字节独立回读全部
+线上资产。三条匿名探测均为 403，不能表述为登录重定向或 owner 业务验收。
+SUITE-05 业务秘密 repair 继承随本次发布生效。正常 owner 会话已过期，真实 EasyProxy
+repair/独立 verify/本地消费仍未完成，不把平台上线和合成回归写成应用成功。
+当前收尾仅同步发布证据到共享文档；后续纯文档提交不重复发布控制面或移动 executor pin。
+
+## SUITE-05：受限 repair 复用应用秘密（已合并并随 SUITE-06 上线，2026-10-26）
 
 负责人主 AI。EasyProxy 首次应用回执为 unknown，原任务和云资源保持；本切片只补齐
 平台 repair 已声明秘密范围内复用原实例业务秘密保险库的缺口，不重放部署、不清锁、
@@ -33,7 +44,7 @@ repair；先新增失败先行 workerd 回归，再做窄修和双入口共享�
 的提交拒绝测试。相邻 repair/套件/安全合同 9 项、共享示例及十页文档构建通过。
 代码、测试和两个共享参考源同步；未改 UI/自动化/运行时合同，不重复 actionlint。
 证据在 `linshi/springbok-suite05-20261026/`。PR #119 精确 head `4c210cf6ccacbfca7b0b888738d6941a98f6c7f0`
-及合并 main `0af6f8202f60cca8fa1c2ce1c8043101f17ba43a` 七工作流全部通过。新增能力未发布，
+及合并 main `0af6f8202f60cca8fa1c2ce1c8043101f17ba43a` 七工作流全部通过。生产发布见 SUITE-06，
 不把合成 provider/秘密回归当作真实 EasyProxy repair 或应用上线。
 
 ## SUITE-04：业务秘密标准文件导入（已合并并上线，2026-10-26）

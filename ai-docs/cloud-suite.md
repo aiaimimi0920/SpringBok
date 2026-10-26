@@ -40,7 +40,7 @@ applicationSecrets 名称数组，首次在部署表单保存或选择绑定当�
 秘密引用；仅允许原 owner/仓库/应用及精确修订的活动 profile，不接受新的 profile 输入
 或新增名称。接受任务时仅为本次声明的名称创建独立加密快照，其他名称不交付，bootstrap
 密码仍禁止交付。禁用 profile 阻止新的计划/提交，但不会撤销已接受任务的不可变快照。
-此扩展为 SUITE-05 已合并但尚未发布的能力，未发布环境不能据本文假设支持；原父任务的 verified
+此扩展已随 SUITE-06 发布到控制面；其他未升级环境不能据本文假设支持。原父任务的 verified
 artifact、相同资源声明/runtime、更高版本和共享锁域仍须成立，不自动重放 unknown 任务。
 SUITE-06 同时补充终态 repair 的独立无写凭据 verify，仍绑定当前实例 head；详见
 [生命周期](lifecycle.md)。验证不改写历史或解开 UNKNOWN 锁，不以修复权限代替验收。

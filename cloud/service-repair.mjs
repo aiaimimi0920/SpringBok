@@ -3,6 +3,7 @@ import { serviceEntries } from './service-instance.mjs';
 import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSbaPolicy } from './sba-control.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 import { compareVersions } from '../src/sba/contract.mjs';
+import { configureApplicationSecrets } from './application-secrets.mjs';
 
 export const repairEnabled = env => env.ENABLE_SERVICE_REPAIR === 'yes';
 export const repairableJob = (plan, job) => !plan.previewOf && !plan.verificationOf &&
@@ -34,10 +35,18 @@ export async function serviceRepairDraft(vault, owner, input) {
     previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };
   requireSba(canonicalSba(application.manifest.runtime) === canonicalSba(old.application.manifest.runtime));
   const base = connectedSbaPolicy(vault.env, application.manifest.runtime), credentials = {};
+  // Resolve only the parent's original active profile; repair input cannot
+  // replace it or introduce undeclared application-secret aliases.
+  const applicationCredentials = {};
+  configureApplicationSecrets(vault, owner, { instance: true }, application, applicationCredentials, old);
   for (const name of application.manifest.secrets) {
     const mapping = old.credentials?.[name] ?? (name === 'CLOUDFLARE_API_TOKEN' ? 'cloudflare' : null);
     if (!repair.secretNames.includes(name)) credentials[name] = 'repair-disabled';
-    else { requireSba(typeof mapping === 'string' && !mapping.startsWith('bootstrap') && !!old.connections[mapping]); credentials[name] = mapping; }
+    else {
+      requireSba(typeof mapping === 'string' && !mapping.startsWith('bootstrap'));
+      requireSba(mapping.startsWith('application:') ? applicationCredentials[name] === mapping : !!old.connections[mapping]);
+      credentials[name] = mapping;
+    }
   }
   const policy = { ...old.policy, sourceSha: input.sourceSha, secretNames: application.manifest.secrets,
     github: { ...base.github, applicationRepository: old.application.repository } };

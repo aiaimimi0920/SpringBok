@@ -29,9 +29,38 @@ try{
   await ready(page);await page.locator('#service-add').click();await page.locator('[role=tab][data-repository="owner/repo"]').click();
   if(process.env.SUITE_TARGETS==='1')assert.equal(await page.locator('#service-platform').textContent(),'Cloudflare · GitHub Actions');
   assert.match(await page.locator('#service-environment').inputValue(),/^app-[a-f0-9]{12}$/);
-  assert.equal(await page.locator('#service-inputs input, #service-resources select').count(),business?2:0);
+  assert.equal(await page.locator('#service-inputs input, #service-resources select').count(),business?3:0);
   assert.equal(await page.locator('#service-inputs textarea').count(),1);
-  if(business)for(const [name,value]of Object.entries(privateValues))await page.locator('#service-secret-'+name).fill(value);
+  if(business){
+    const file=page.locator('#service-secret-file'),status=page.locator('#service-secret-import-status');
+    const importFile=async value=>{await file.setInputFiles({name:'secrets.json',mimeType:'application/json',buffer:Buffer.from(value)});};
+    await importFile(JSON.stringify(privateValues));await status.getByText('已导入 2 项',{exact:true}).waitFor();
+    for(const [name,value]of Object.entries(privateValues))assert.equal(await page.locator('#service-secret-'+name).inputValue(),value);
+    await importFile('{synthetic-private-parser-error');await status.getByText('秘密文件格式或内容不匹配',{exact:true}).waitFor();
+    for(const [name,value]of Object.entries(privateValues))assert.equal(await page.locator('#service-secret-'+name).inputValue(),value,'invalid imports are atomic');
+    assert.ok(!(await status.textContent()).includes('synthetic-private-parser-error'));
+    await importFile(' '.repeat(32769));await status.getByText('秘密文件格式或内容不匹配',{exact:true}).waitFor();
+    assert.equal(await file.inputValue(),'');
+    assert.equal(requests.filter(row=>row.body?.action==='application-secrets').length,0,'import never submits secrets');
+    await importFile(JSON.stringify(privateValues));await status.getByText('已导入 2 项',{exact:true}).waitFor();
+    await page.evaluate(()=>{
+      const read=File.prototype.text;
+      File.prototype.text=function(){const selected=this;return new Promise(resolve=>{window.releaseSecretImport=async()=>{File.prototype.text=read;resolve(await read.call(selected));};});};
+    });
+    await importFile(JSON.stringify(privateValues));await status.getByText('正在导入…',{exact:true}).waitFor();
+    await page.locator('#service-secret-profile').selectOption('');await page.evaluate(()=>window.releaseSecretImport());
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert.equal(await status.textContent(),'');
+    for(const name of Object.keys(privateValues))assert.equal(await page.locator('#service-secret-'+name).inputValue(),'','stale import cannot repopulate fields');
+    for(const [name,value]of Object.entries(privateValues))await page.locator('#service-secret-'+name).fill(value);
+    assert.equal(await status.textContent(),'','manual secret entry remains available');
+    await importFile(JSON.stringify(privateValues));await status.getByText('已导入 2 项',{exact:true}).waitFor();
+    await page.locator('#service-close').click();
+    await page.waitForFunction(()=>!document.getElementById('service-dialog').open && [...document.querySelectorAll('#service-inputs input[type=password]')].every(input=>!input.value));
+    for(const name of Object.keys(privateValues))assert.equal(await page.locator('#service-secret-'+name).inputValue(),'','closing clears secrets');
+    await page.locator('#service-add').click();await page.locator('[role=tab][data-repository="owner/repo"]').click();
+    await importFile(JSON.stringify(privateValues));await status.getByText('已导入 2 项',{exact:true}).waitFor();
+  }
   await page.locator('#service-field-1').fill('{');
   await page.locator('#service-submit').click();
   await page.getByText('JSON 配置格式不正确',{exact:true}).waitFor();

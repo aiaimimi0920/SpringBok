@@ -68,6 +68,12 @@ repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDiges
 
 repair 成功必须通过 repair-completed、data-preserved、unchanged-resources-verified、service-ready。service-ready 证明应用声明的配置就绪范围，不自动证明用户已完成 Access、邮箱验证或后台登录。
 
+业务秘密的 repair 授权沿用原实例 profile，并与 repair 声明的 secretNames 取受限范围；
+不允许通过 repair 输入替换 profile、扩大名称或读取管理员 bootstrap 密码。未选名称在
+执行许可中为 repair-not-applicable；选中名称接受任务时建立独立加密快照。此能力发布
+状态与具体版本边界见 [云套件](cloud-suite.md)。应用仍负责根据父证据和实际资源判断可
+修复边界，不得把取得凭据或平台继续持有的 lane 当作原云操作可以重放的证明。
+
 平台普通服务删除不是 manifest 中的第七个 destroy 动作；不要自行发明接口。当前删除流程核对平台持有的资源身份并由用户明确确认，R2 非空清理等未实现路径不能靠文档声称支持。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[preview.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/preview.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。

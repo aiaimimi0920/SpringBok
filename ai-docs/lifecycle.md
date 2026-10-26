@@ -74,6 +74,12 @@ repair 成功必须通过 repair-completed、data-preserved、unchanged-resource
 状态与具体版本边界见 [云套件](cloud-suite.md)。应用仍负责根据父证据和实际资源判断可
 修复边界，不得把取得凭据或平台继续持有的 lane 当作原云操作可以重放的证明。
 
+当前实例 head 的终态 repair 可以创建一次独立 verify，与 deploy/update 使用相同的
+固定 SHA/version/config 和一次性 reservation。verify 请求不继承 repair context，全部
+秘密为 verification-not-applicable；在途任务、陈旧 head、preview 和 verify 自身不适用。
+验证成功不改写 repair 或原部署回执，不提升 UNKNOWN，也不释放其未知资源锁。此能力
+随 SUITE-06 发布控制面后可用；源码回归通过不是应用修复或线上验证回执。
+
 平台普通服务删除不是 manifest 中的第七个 destroy 动作；不要自行发明接口。当前删除流程核对平台持有的资源身份并由用户明确确认，R2 非空清理等未实现路径不能靠文档声称支持。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[preview.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/preview.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。

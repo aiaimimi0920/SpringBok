@@ -3,7 +3,24 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SUITE-05：受限 repair 复用应用秘密（进行中，2026-10-26）
+## SUITE-06：repair 后的独立固定版本 verify（进行中，2026-10-26）
+
+负责人主 AI。范围仅为允许当前实例 head 的已终态 repair 创建一次独立 verify，固定
+该修复任务的 SHA/version/config，全部秘密为 verification-not-applicable。原 repair 和
+父部署回执、UNKNOWN 资源锁与一次性派发/重启语义保持；拒绝在途、陈旧 head、foreign
+owner、preview 或 verify 自身再次验证。不新增 UI，不移动 executor pins，不执行真实
+repair；先新增失败先行 workerd 回归，再做窄修和双入口共享文档验证。证据目录
+`linshi/springbok-suite06-20261026/`；发布控制面与实际应用验收分别记录。
+
+旧实现的新增正向 workerd 用例准确 2 failed / 6 passed，均因 repair 的 canVerify=false。
+窄修两处动作白名单后，聚焦 repair/独立 verify/业务秘密/套件/Linux/共享文档共 25 项通过，
+无 skip；相邻 repair/套件合同 9 项、共享示例和十页构建通过。派发丢失测试的两次初始
+期望误用了 HTTP 409/unknown；已根据原 dispatch/持久状态源码修正为 200/dispatch-unknown，
+保留失败 XML，没有放宽单次派发或原回执断言。未改 UI、workflow 或 executor 合同，
+不重复浏览器视觉回归/actionlint；共享参考源同时供 AI 与 Pages 阅读。待 scoped PR/main 门禁，
+尚未发布控制面，不将合成 provider 回归写成 EasyProxy 线上验证成功。
+
+## SUITE-05：受限 repair 复用应用秘密（已合并、未发布，2026-10-26）
 
 负责人主 AI。EasyProxy 首次应用回执为 unknown，原任务和云资源保持；本切片只补齐
 平台 repair 已声明秘密范围内复用原实例业务秘密保险库的缺口，不重放部署、不清锁、
@@ -15,7 +32,8 @@
 混合套件、Linux、既有独立 verify 和共享文档共 35 项通过、无 skip，含计划后禁用 profile
 的提交拒绝测试。相邻 repair/套件/安全合同 9 项、共享示例及十页文档构建通过。
 代码、测试和两个共享参考源同步；未改 UI/自动化/运行时合同，不重复 actionlint。
-证据在 `linshi/springbok-suite05-20261026/`。待精确 PR/main 门禁。新增能力未发布，
+证据在 `linshi/springbok-suite05-20261026/`。PR #119 精确 head `4c210cf6ccacbfca7b0b888738d6941a98f6c7f0`
+及合并 main `0af6f8202f60cca8fa1c2ce1c8043101f17ba43a` 七工作流全部通过。新增能力未发布，
 不把合成 provider/秘密回归当作真实 EasyProxy repair 或应用上线。
 
 ## SUITE-04：业务秘密标准文件导入（已合并并上线，2026-10-26）

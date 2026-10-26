@@ -5,7 +5,7 @@ import { exactSba, requireSba, sbaRequest } from './sba-control.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 
 export const canVerifyService = (plan, job) => !plan.verificationOf && !plan.previewOf &&
-  ['deploy', 'update'].includes(job?.request.action) && !!job.result &&
+  ['deploy', 'update', 'repair'].includes(job?.request.action) && !!job.result &&
   ['unknown', 'failed', 'succeeded', 'deployed-unverified'].includes(job.status);
 
 export async function verificationState(env, owner, parent, reconcile) {

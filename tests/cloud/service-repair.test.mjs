@@ -109,3 +109,52 @@ test('different approved repair tasks cannot concurrently take the same failed p
     assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);assert.equal(state.dispatches,2);
   }finally{await f.close();}
 });
+
+for(const repairStatus of ['succeeded','unknown'])test(`independent verify of ${repairStatus} repair is exact, secret-free, immutable and one-shot`,async()=>{
+  const {f,state,service,submit,machine,receipt,api,session,first,original,body}=await setup('yes',true);
+  try{
+    const plan=(await service('plan',body)).json();assert.equal((await submit(plan)).status,200);
+    const repairedRequest=structuredClone(state.request),verifyBody={instanceId:first.taskId,previousTaskId:plan.taskId};
+    assert.equal((await api('verify',verifyBody)).status,409,'in-progress repair is not verifiable');
+    receipt(await(await machine()).json(),repairStatus,repairStatus==='succeeded'?
+      {checks:['repair-completed','data-preserved','unchanged-resources-verified','service-ready'].map(id=>({id,passed:true}))}:{errorCode:'REPAIR_PROVIDER_UNKNOWN'});
+    const repaired=(await service('service-state',{instanceId:first.taskId,reconcile:true})).json();
+    assert.equal(repaired.job.status,repairStatus);assert.equal(repaired.canVerify,true);
+    assert.equal((await api('verify',{...verifyBody,previousTaskId:first.taskId})).status,409);
+    assert.equal((await f.call('/api/admin/deployments/verify',{token:session.token,body:verifyBody})).status,403);
+    assert.equal((await f.call('/api/admin/deployments/verify',{...session,token:f.jwt({sub:'foreign'}),body:verifyBody})).status,403);
+    const replies=await Promise.all([api('verify',verifyBody),api('verify',verifyBody)]);
+    assert.ok(replies.every(row=>row.status===200),JSON.stringify(replies));assert.equal(state.dispatches,3);
+    assert.equal(state.request.action,'verify');assert.notEqual(state.request.taskId,plan.taskId);
+    assert.equal(state.request.sourceSha,repairedRequest.sourceSha);assert.equal(state.request.applicationVersion,repairedRequest.applicationVersion);
+    assert.deepEqual(state.request.configuration,repairedRequest.configuration);assert.equal(Object.hasOwn(state.request,'context'),false);
+    assert.deepEqual(state.request.previous,{sourceSha:repairedRequest.sourceSha,applicationVersion:repairedRequest.applicationVersion});
+    await f.restart();
+    const permit=await(await machine()).json();assert.deepEqual(permit.secrets,{CLOUDFLARE_API_TOKEN:'verification-not-applicable',ADMIN_BOOTSTRAP_PASSWORD:'verification-not-applicable'});
+    assert.ok(!JSON.stringify(permit).includes(fakeToken));assert.equal((await machine()).status,403);
+    receipt(permit);
+    const verified=(await service('service-state',{instanceId:first.taskId,reconcile:true})).json();
+    assert.equal(verified.verification.status,'succeeded');assert.deepEqual(verified.job,repaired.job);
+    assert.deepEqual((await api('state',{taskId:first.taskId})).json().job,original.job);
+    assert.equal(verified.canUpdate,repairStatus==='succeeded');assert.equal(verified.canVerify,false);
+    if(repairStatus==='unknown')assert.equal(verified.canDelete,false,'verification does not free UNKNOWN claims');
+    await f.restart();assert.equal((await api('verify',verifyBody)).status,200);assert.equal(state.dispatches,3);
+    assert.equal((await api('verify',{instanceId:first.taskId,previousTaskId:permit.request.taskId})).status,409);
+  }finally{await f.close();}
+});
+
+test('lost verification dispatch after repair keeps the reservation across restart and is not replayed',async()=>{
+  const {f,state,service,submit,machine,receipt,api,first,body}=await setup();
+  try{
+    const plan=(await service('plan',body)).json();assert.equal((await submit(plan)).status,200);
+    receipt(await(await machine()).json(),'unknown',{errorCode:'REPAIR_PROVIDER_UNKNOWN'});
+    const repaired=(await service('service-state',{instanceId:first.taskId,reconcile:true})).json();
+    const verifyBody={instanceId:first.taskId,previousTaskId:plan.taskId};state.dispatchLost=true;
+    const lost=await api('verify',verifyBody);assert.equal(lost.status,200);assert.equal(lost.json().status,'dispatch-unknown');assert.equal(state.dispatches,3);
+    await f.restart();state.dispatchLost=false;
+    assert.equal((await api('verify',verifyBody)).status,200);assert.equal(state.dispatches,3);
+    const restored=(await service('service-state',{instanceId:first.taskId,reconcile:false})).json();
+    assert.equal(restored.verification.status,'dispatch-unknown');assert.deepEqual(restored.job,repaired.job);
+    assert.equal(restored.canUpdate,false);assert.equal(restored.canDelete,false);
+  }finally{await f.close();}
+});

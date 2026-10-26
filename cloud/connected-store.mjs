@@ -63,7 +63,7 @@ export class ConnectedDeployment extends SbaDeployment {
   }
   async reserveVerification(actor) {
     const parent=await this.bootstrap(actor),job=await this.inspect(actor);
-    requireSba(!parent.plan.verificationOf&&!parent.plan.previewOf&&['deploy','update'].includes(job?.request.action)&&
+    requireSba(!parent.plan.verificationOf&&!parent.plan.previewOf&&['deploy','update','repair'].includes(job?.request.action)&&
       ['unknown','failed','succeeded','deployed-unverified'].includes(job.status)&&job.result!==null);
     return this.ctx.storage.transactionSync(()=>{
       const sql=this.ctx.storage.sql;

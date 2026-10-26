@@ -36,6 +36,13 @@ applicationSecrets 名称数组，首次在部署表单保存或选择绑定当�
 明文只发给 owner 的加密保险库；公开计划只带引用，接受任务时复制不可变加密快照。
 更新与预升级继承引用，不重新输入或默默轮换；verify 继续不取得部署写凭据。
 
+首次表单的“导入 JSON”通过标准文件选择器读取一个 UTF-8 JSON 对象，属性必须恰好为
+当前声明的全部 applicationSecrets；每个值为 1–512 UTF-8 字节且不含控制字符，文件
+上限 32 KiB。页面内验证全部通过后原子填写密码框，不修剪值、不读取其他本地文件，
+不使用浏览器持久存储或自动发起保存/部署。错误不包含文件内容或解析器原文；切换
+秘密配置或关闭弹窗会清理输入并使未完成导入失效。保存仍走原 owner/CSRF 保险库接口。
+此导入入口当前为 SUITE-04 开发中能力，未发布版本不能据本文假设支持。
+
 应用 API 可向受保护的 `/api/admin/resources` 提交 action 为 application-secrets，字段为
 id（新 UUID）、repository、applicationId、values（名称到单行值的对象）。GET 只返回
 applicationSecretProfiles 的名称与归属元数据，不提供明文读取。禁用动作

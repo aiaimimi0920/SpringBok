@@ -34,6 +34,8 @@
 #service-dialog label { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #service-dialog input, #service-dialog select, #service-dialog textarea { font-size: 13px; padding: 9px; min-height: 38px; }
 #service-dialog h3 { font-size: 13px; color: var(--neuro-text-muted); margin: 18px 0 12px; }
+.service-secret-import-status { grid-column: 2; font-size: 12px; overflow-wrap: anywhere; }
+.service-secret-import-status:empty { display: none; }
 .service-dialog-footer { display: flex; flex: 0 0 70px; align-items: center; gap: 10px; padding-top: 12px; }
 #service-dialog-notice { flex: 1; min-width: 0; font-size: 12px; margin: 0; max-height: 56px; overflow: auto; }
 #service-submit, #service-back { flex-shrink: 0; }

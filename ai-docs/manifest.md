@@ -13,7 +13,7 @@
 | actions | v3 必须含 deploy、update、verify、preview、destroy-preview；可选 repair |
 | actions.*.timeoutSeconds | 每个动作仅此字段，整数 1–3600 秒 |
 | secrets | 最多 20 个唯一秘密名称；不是秘密值；匹配 `[A-Z][A-Z0-9_]{1,63}`，受保留名称约束 |
-| repairs | 仅声明 repair 动作时必须出现，1–8 个修复描述；否则禁止出现 |
+| repairs | 仅声明 repair 动作时必须出现，1–9 个修复描述；否则禁止出现 |
 
 | runtime 字段 | Windows 组合 | Linux 组合 |
 | --- | --- | --- |

@@ -33,6 +33,31 @@ async function setup(enabled='yes',bootstrap=false) {
   return {...f,first,original,body:{action:'repair',instanceId:first.taskId,previousTaskId:first.taskId,sourceSha:updatedSha,repairId:'admin-publish'}};
 }
 
+test('ninth explicit repair uses the normal persistent parent and one-permit path; tenth remains rejected',async()=>{
+  const f=await setup();
+  try{
+    const scope=structuredClone(f.state.manifestOverride.repairs[0]);
+    const scopes=count=>Array.from({length:count},(_,index)=>({...structuredClone(scope),id:`admin-publish-${index}`}));
+    f.state.manifestOverride.repairs=scopes(10);
+    const body={...f.body,repairId:'admin-publish-8'};
+    assert.equal((await f.service('plan',body)).status,409);
+    f.state.manifestOverride.repairs=scopes(9);
+    const preview=await f.service('plan',body);assert.equal(preview.status,200,preview.text);
+    const plan=preview.json();
+    assert.equal(plan.plan.operation.context.repairId,'admin-publish-8');
+    assert.equal((await f.submit(plan)).status,200);
+    const permit=await(await f.machine()).json();
+    assert.equal(permit.request.context.repairId,'admin-publish-8');
+    assert.deepEqual(permit.request.configuration,f.original.job.request.configuration);
+    assert.equal(permit.secrets.CLOUDFLARE_API_TOKEN,fakeToken);
+    assert.equal(Object.hasOwn(permit.secrets,'ADMIN_BOOTSTRAP_PASSWORD'),false);
+    assert.equal((await f.machine()).status,403);
+    assert.equal((await f.service('plan',body)).status,409);
+    assert.equal(f.state.dispatches,2);
+    assert.deepEqual((await f.api('state',{taskId:f.first.taskId})).json().job,f.original.job);
+  }finally{await f.f.close();}
+});
+
 test('repair preserves parent receipt, atomically continues held lane, uses one permit and survives restart',async()=>{
   const {f,state,service,submit,machine,receipt,api,first,original,body}=await setup();
   try{

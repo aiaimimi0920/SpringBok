@@ -10,7 +10,7 @@ export function validateRepairs(manifest) {
   const enabled = Object.hasOwn(manifest.actions, 'repair');
   requireRepair(enabled === Object.hasOwn(manifest, 'repairs'));
   if (!enabled) return;
-  requireRepair(manifest.schemaVersion === 3 && Array.isArray(manifest.repairs) && manifest.repairs.length > 0 && manifest.repairs.length <= 8);
+  requireRepair(manifest.schemaVersion === 3 && Array.isArray(manifest.repairs) && manifest.repairs.length > 0 && manifest.repairs.length <= 9);
   const seen = new Set();
   for (const repair of manifest.repairs) {
     requireRepair(exact(repair, ['id', 'name', 'fromErrorCodes', 'secretNames']) && identifier(repair.id) && !seen.has(repair.id));

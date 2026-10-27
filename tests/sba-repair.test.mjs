@@ -16,6 +16,39 @@ const result = () => {
     checks: ['repair-completed', 'data-preserved', 'unchanged-resources-verified', 'service-ready'].map(id => ({ id, passed: true })) };
 };
 
+const boundedManifest = count => {
+  const value = manifest();
+  value.repairs = Array.from({ length: count }, (_, index) => ({ ...value.repairs[0], id: `admin-publish-${index}` }));
+  return value;
+};
+
+test('repair accepts nine explicit historical scopes without weakening per-scope or runner secret checks', () => {
+  for (const count of [1, 8, 9]) {
+    const value = boundedManifest(count);
+    assert.deepEqual(validateManifest(value), value);
+    const selected = request(); selected.context.repairId = value.repairs.at(-1).id;
+    assert.deepEqual(validateRequest(selected, value), selected);
+    const environment = applicationEnvironment({ CLOUDFLARE_API_TOKEN: 'fixture-token',
+      ADMIN_BOOTSTRAP_PASSWORD: 'must-not-inherit', SBA_GITHUB_TOKEN: 'control', GITHUB_TOKEN: 'control' },
+    value, 'fixture-temp', selected);
+    assert.equal(environment.CLOUDFLARE_API_TOKEN, 'fixture-token');
+    for (const name of ['ADMIN_BOOTSTRAP_PASSWORD', 'SBA_GITHUB_TOKEN', 'GITHUB_TOKEN']) {
+      assert.equal(Object.hasOwn(environment, name), false);
+    }
+  }
+});
+
+test('repair remains bounded at nine and validates the last scope fully', () => {
+  assert.throws(() => validateManifest(boundedManifest(10)));
+  for (const change of [m => { m.repairs[8].id = m.repairs[0].id; },
+    m => { m.repairs[8].secretNames = ['OTHER_SECRET']; }, m => { m.repairs[8].fromErrorCodes = ['bad']; },
+    m => { m.repairs[8].unexpected = true; }]) {
+    const value = boundedManifest(9); change(value); assert.throws(() => validateManifest(value));
+  }
+  const selected = request(); selected.context.repairId = 'admin-publish-8'; selected.context.errorCode = 'OTHER_FAILURE';
+  assert.throws(() => validateRequest(selected, boundedManifest(9)));
+});
+
 test('repair explicitly declares capabilities and requires parent evidence fields', () => {
   assert.deepEqual(validateManifest(manifest()), manifest());
   assert.deepEqual(validateRequest(request(), manifest()), request());

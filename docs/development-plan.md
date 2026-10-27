@@ -3,6 +3,24 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
+## SUITE-07：有界第九个 repair 声明（实施中，2026-10-27）
+
+负责人主 AI。EasyProxy 新实例的准确生成失败需要独立 pristine 继续入口，不能替换或
+泛化八个已审核历史操作。完整平台合同已准确拒绝第九项；本切片只将 repair 声明数量上限
+从 8 提到 9，不改字段、错误码/秘密子集、父任务证据、lane、一次性 dispatch/permit 或
+UNKNOWN 语义。新增第九项正向与第十项、最后项错误/重复/秘密边界测试；正向在旧源码
+失败，证据 `linshi/easyproxy-fresh-20261027/springbok-capacity-before-44.xml`。
+
+共享 `ai-docs/manifest.md` 同时供 AI 与 Pages 阅读，无第二份定义或新 UI。执行器也使用
+同一 validator，因此完成源码 PR/main CI 后必须正常发布控制面及受保护的固定 Linux
+executor；不修改旧任务保存的 executor，不用新源码假冒旧 pin。平台发布、实际 EasyProxy
+继续部署、独立 verify 和业务消费验收分开记录；本段不预报部署成功。
+
+旧源码新增正向准确 1 failed / 7 passed；窄修后 repair/runtime/合同/共享文档 21 passed，
+实际 workerd 的第九项父子任务、秘密继承及相邻 verify/Linux suite 共 14 passed，均零
+失败/错误/跳过；共享示例与十页站点构建通过。没有改 UI 或 workflow，故不重复视觉回归或
+改变 executor 工作流，仍要求正常精确 PR/main 的完整七工作流门禁与新可信 pin 发布。
+
 ## SUITE-06：repair 后的独立固定版本 verify（已合并并上线，2026-10-26）
 
 负责人主 AI。范围仅为允许当前实例 head 的已终态 repair 创建一次独立 verify，固定

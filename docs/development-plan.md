@@ -3,7 +3,19 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## SUITE-07：有界第九个 repair 声明（实施中，2026-10-27）
+## SUITE-08：有界第十个 repair 声明（实施中，2026-10-27）
+
+负责人主 AI。用户已批准 EasyProxy 当前准确 Edge UNKNOWN 的独立第十恢复，不复用九个
+历史操作。本切片仅将平台 repair 数量上限9提升至10，保留逐项 schema、父回执、秘密子集、
+单次 permit/dispatch、锁域和 UNKNOWN 语义。测试覆盖第十项正常持久父子链和秘密隔离、
+第十一项拒绝及末项全部校验；正常 PR/main CI 后才可独立发布控制面和固定 Linux executor。
+旧任务 executor、Windows pin、其他绑定和资产保持。共享 manifest 参考由 Pages 直接渲染，
+不复制定义、不新增 UI。旧实现新增正向准确1 failed/7 passed；窄修后repair/runtime/合同/
+共享文档23 passed，实际workerd第十项父子链/秘密/独立verify及Linux相邻回归20 passed，
+均无失败/错误/跳过；共享示例与十页构建通过，证据 `linshi/easyproxy-fresh-20261027/` 的
+69/71记录。尚未发布控制面或executor，不等同 EasyProxy 实际恢复或业务验收。
+
+## SUITE-07：有界第九个 repair 声明（历史实施记录，2026-10-27）
 
 负责人主 AI。EasyProxy 新实例的准确生成失败需要独立 pristine 继续入口，不能替换或
 泛化八个已审核历史操作。完整平台合同已准确拒绝第九项；本切片只将 repair 声明数量上限

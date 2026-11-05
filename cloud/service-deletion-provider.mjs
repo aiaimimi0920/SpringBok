@@ -1,6 +1,8 @@
 import { readJson } from './connections-provider.mjs';
 import { requireSba, canonicalSba } from './sba-control.mjs';
 import { deletionBucketName, inspectDeletionBucket, deletionBucketAbsent, removeDeletionBucket } from './service-deletion-r2.mjs';
+import { deletionEmailTarget, inspectDeletionEmail, deletionEmailAbsent } from './service-deletion-email.mjs';
+import { unbindEmailRouting } from './email-routing-provider.mjs';
 
 const endpoint = (account, path) => `https://api.cloudflare.com/client/v4/accounts/${account}${path}`;
 const identity = row => `${row.accountId}/${row.kind}/${row.remoteId}`;
@@ -8,13 +10,14 @@ const sort = rows => rows.sort((a, b) => identity(a).localeCompare(identity(b), 
 const name = value => typeof value === 'string' && /^[a-z0-9][a-z0-9_-]{0,62}$/.test(value);
 export function deletionInventory(instance) {
   // Never delete only the Worker half of a suite and orphan live publishers.
-  requireSba(instance.targets.every(t => ['worker','domain'].includes(t.kind)));
+  requireSba(instance.targets.every(t => ['worker','domain','email-routing'].includes(t.kind)));
   const rows = Object.values(instance.resources).map(r => ({ kind: r.kind, accountId: r.accountId, remoteId: r.remoteId, name: r.name }));
   for (const t of instance.targets) if (t.kind === 'worker') rows.push({ kind: 'worker', accountId: t.accountId ?? instance.accountId, remoteId: t.value, name: t.value });
+  for (const t of instance.targets) if (t.kind === 'email-routing') rows.push(deletionEmailTarget(t, instance));
   requireSba(rows.length > 0 && rows.length <= 32 && rows.some(r => r.kind === 'worker'));
   for (const r of rows) {
     requireSba(/^[a-f0-9]{32}$/.test(r.accountId) && typeof r.name === 'string' && r.name.length <= 256);
-    requireSba(r.kind === 'worker' ? name(r.remoteId) : r.kind === 'd1' ? /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(r.remoteId) : r.kind === 'r2' ? deletionBucketName(r.remoteId) && r.name === r.remoteId : r.kind === 'kv' && /^[a-f0-9]{32}$/.test(r.remoteId));
+    requireSba(r.kind === 'email-routing' ? /^email-routing:[a-f0-9]{32}$/.test(r.remoteId) : r.kind === 'worker' ? name(r.remoteId) : r.kind === 'd1' ? /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(r.remoteId) : r.kind === 'r2' ? deletionBucketName(r.remoteId) && r.name === r.remoteId : r.kind === 'kv' && /^[a-f0-9]{32}$/.test(r.remoteId));
   }
   requireSba(new Set(rows.map(identity)).size === rows.length);
   return sort(rows);
@@ -40,6 +43,7 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
   const result = [], unverifiedReferences = [];
   for (const accountId of [...new Set(rows.map(r => r.accountId))].sort()) {
     const token = tokens[accountId], own = rows.filter(r => r.accountId === accountId), keys = new Set(own.map(identity));
+    result.push(...await inspectDeletionEmail(own, token, transport));
     const storageIds = new Set(own.filter(r => r.kind !== 'worker').map(r => `${r.kind}/${r.remoteId}`));
     const workers = await list(accountId, token, '/workers/scripts', transport);
     requireSba(workers.length <= 100 && workers.every(w => name(w.id)));
@@ -87,6 +91,7 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
     const databases = own.some(r => r.kind === 'd1') ? await list(accountId, token, '/d1/database?per_page=1000&page=1', transport) : [];
     const namespaces = own.some(r => r.kind === 'kv') ? await list(accountId, token, '/storage/kv/namespaces?per_page=1000&page=1', transport) : [];
     for (const row of own) {
+      if (row.kind === 'email-routing') continue;
       if (row.kind === 'r2') { result.push(await inspectDeletionBucket(row, token, transport)); continue; }
       const live = row.kind === 'worker' ? workers.find(w => w.id === row.remoteId) : row.kind === 'd1' ? databases.find(d => d.uuid === row.remoteId) : namespaces.find(k => k.id === row.remoteId);
       if (live && row.kind !== 'worker') requireSba((live.name ?? live.title) === row.name);
@@ -96,12 +101,14 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
   return { resources: sort(result), unverifiedReferences };
 }
 export async function resourceAbsent(row, token, transport = fetch) {
+  if (row.kind === 'email-routing') return deletionEmailAbsent(row, token, transport);
   if (row.kind === 'r2') return deletionBucketAbsent(row, token, transport);
   const path = { worker: '/workers/scripts', domain: '/workers/domains', d1: '/d1/database?per_page=1000&page=1', kv: '/storage/kv/namespaces?per_page=1000&page=1' }[row.kind];
   const rows = await list(row.accountId, token, path, transport);
   return !rows.some(r => (row.kind === 'd1' ? r.uuid : r.id) === row.remoteId);
 }
 export async function removeResource(row, token, transport = fetch) {
+  if (row.kind === 'email-routing') return unbindEmailRouting(row, token, transport);
   if (row.kind === 'r2') return removeDeletionBucket(row, token, transport);
   const path = { worker: '/workers/scripts/', domain: '/workers/domains/', d1: '/d1/database/', kv: '/storage/kv/namespaces/' }[row.kind];
   requireSba(path);

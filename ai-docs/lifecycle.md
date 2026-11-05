@@ -58,6 +58,11 @@ preview context 恰好包含 source、resources、urls。source 包含 instanceI
 
 destroy-preview context 恰好包含 instanceId、previewTaskId、resultDigest、resources。资源清单 1–20 项，每项包含 key、kind、accountId、remoteId、name；kind 可为 d1、kv、worker、r2、domain、pages、github-actions。urls 是 1–8 个唯一 HTTPS origin，须匹配域名资源。完整预升级请求编码不超过 48 KiB。
 
+仅 preview 的 source.resources 还可包含只读 email-routing 身份，其 remoteId 为
+`email-routing:<32位zoneId>`、accountId 为 Cloudflare 账号。可写 context.resources 和
+destroy-preview 清单均不允许此 kind。rehearse 生成配置时强制将声明的邮件 JSON 字段
+置 null，不复制正式根域 catch-all。执行端仍由应用验证邮件副作用隔离；平台不是凭据沙箱。
+
 preview lifecycle 包含 resources、urls、snapshot；resources 各项为 key/status，状态为 created、absent、unknown。snapshot 为 null 或 `{id, createdAt}`，id 是 64 位十六进制摘要，createdAt 是正的安全整数时间值。
 
 preview 成功要求所有资源 created、所有批准 urls、非空 snapshot，并通过 snapshot-copied、migration-verified、source-unchanged、side-effects-isolated 四项检查。destroy-preview lifecycle 仅含 resources，状态可为 removed、absent、failed、unknown；成功必须全部 removed/absent 且 status 为 succeeded。失败可无 lifecycle；只要提供就仍需满足结构与清单匹配。
@@ -80,6 +85,6 @@ repair 成功必须通过 repair-completed、data-preserved、unchanged-resource
 验证成功不改写 repair 或原部署回执，不提升 UNKNOWN，也不释放其未知资源锁。此能力
 已随 SUITE-06 发布控制面；平台上线和源码回归通过不是应用修复或线上验证回执。
 
-平台普通服务删除不是 manifest 中的第七个 destroy 动作；不要自行发明接口。删除流程核对平台持有的资源身份并由用户明确确认。源码新增的 R2 删除支持与限制见 [部署声明](deployment.md)；本地测试通过不代表控制面已发布或真实实例已清理。
+平台普通服务删除不是 manifest 中的第七个 destroy 动作；不要自行发明接口。删除流程核对平台持有的资源身份并由用户明确确认。源码新增的 R2 删除、邮件引用检查及 catch-all 先解绑支持与限制见 [部署声明](deployment.md)；本地测试通过不代表控制面已发布或真实实例已清理。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[preview.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/preview.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。

@@ -1,6 +1,7 @@
 import { exactSba as exact, requireSba as requireValue, canonicalSba } from './sba-control.mjs';
 import { connectionId } from './connections-contract.mjs';
 import { validateSuite, suiteConfiguration, workflowTarget, githubScope } from './deployment-suite.mjs';
+import { validateEmailTarget, emailTarget } from './deployment-email-targets.mjs';
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const key = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value) && !['__proto__','prototype','constructor'].includes(value);
 const path = value => requireValue(Array.isArray(value) && value.length > 0 && value.length <= 6 && value.every(key));
@@ -32,7 +33,12 @@ export function deploymentDeclaration(value) {
   for(const resource of value.resources){exact(resource,['key','label','kind','idPath','namePath',...(automatic?['account','nativeAccount','nameTemplate']:[])]);requireValue(key(resource.key)&&['d1','kv','r2'].includes(resource.kind));label(resource.label);paths.push(resource.idPath);if(resource.namePath!==null)paths.push(resource.namePath);if(automatic){accountKey(resource.account);if(resource.nativeAccount!==null)accountKey(resource.nativeAccount);requireValue(validTemplate(resource.nameTemplate,value.accounts)&&resource.nameTemplate.includes('{instance}'));}}
   requireValue(new Set(value.resources.map(r=>r.key)).size===value.resources.length);
   requireValue(Array.isArray(value.targets)&&value.targets.length>0&&value.targets.length<=8);
-  for(const target of value.targets){exact(target,['kind','path',...(automatic?['account']:[])]);path(target.path);requireValue((['worker','domain'].includes(target.kind)||value.target==='cloudflare-suite'&&['pages','github-actions'].includes(target.kind))&&value.fields.some(f=>f.type==='text'&&f.required&&f.path.join('.')===target.path.join('.')));if(automatic){if(target.kind==='github-actions')requireValue(target.account===null);else accountKey(target.account);}}
+  for(const target of value.targets){
+    exact(target,['kind','path',...(automatic?['account']:[]),...(target.kind==='email-routing'?['workerPath']:[])]);path(target.path);
+    if(target.kind==='email-routing')validateEmailTarget(target,value,path);
+    else requireValue((['worker','domain'].includes(target.kind)||value.target==='cloudflare-suite'&&['pages','github-actions'].includes(target.kind))&&value.fields.some(f=>f.type==='text'&&f.required&&f.path.join('.')===target.path.join('.')));
+    if(automatic){if(target.kind==='github-actions')requireValue(target.account===null);else accountKey(target.account);}
+  }
   validateSuite(value,path);
   if(Object.hasOwn(value,'applicationSecrets'))requireValue(automatic&&Array.isArray(value.applicationSecrets)&&value.applicationSecrets.length>0&&value.applicationSecrets.length<=20&&value.applicationSecrets.every(name=>typeof name==='string'&&/^[A-Z][A-Z0-9_]{1,63}$/.test(name)));
   if(value.github)paths.push(value.github.repositoryPath);
@@ -81,11 +87,12 @@ export function deploymentConfiguration(declaration, values, resources, accountI
   for(const field of d.resources){const row=resources[field.key];requireValue(row&&row.kind===field.kind&&row.accountId===accountId);set(configuration,field.idPath,row.remoteId);if(field.namePath)set(configuration,field.namePath,row.name);}
   publicValue(configuration);deploymentTargets(d,configuration);requireValue(new TextEncoder().encode(canonicalSba(configuration)).length<=32768);return configuration;
 }
-export function deploymentTargets(declaration,configuration){return declaration.targets.map(target=>{
+export function deploymentTargets(declaration,configuration){const targets=declaration.targets.flatMap(target=>{
+  if(target.kind==='email-routing')return emailTarget(target,declaration,configuration);
   const value=deploymentValue(configuration,target.path);requireValue(typeof value==='string');
   if(['worker','pages'].includes(target.kind))requireValue(/^[a-z][a-z0-9-]{1,62}$/.test(value));
   else if(target.kind==='github-actions')requireValue(workflowTarget(value));
   else{const url=new URL(value);requireValue(url.protocol==='https:'&&url.origin===value&&!url.username&&!url.password&&!url.port&&(declaration.schemaVersion===2||!url.hostname.endsWith('.workers.dev')));}
   const accountId=target.kind==='github-actions'?githubScope(deploymentValue(configuration,declaration.github.repositoryPath)):declaration.schemaVersion===2?deploymentValue(configuration,declaration.accounts.find(a=>a.key===target.account).path):null;
   return {kind:target.kind,value,...(accountId?{accountId}:{})};
-});}
+});requireValue(new Set(targets.map(row=>`${row.accountId}/${row.kind}/${row.value}`)).size===targets.length);return targets;}

@@ -50,17 +50,18 @@ export async function servicePreviewDraft(vault, owner, input) {
   requireSba(candidate.manifest.schemaVersion === 3 && d.schemaVersion === 2 && candidate.manifest.id === old.application.manifest.id && input.sourceSha !== job.request.sourceSha && compareVersions(candidate.manifest.version, job.request.applicationVersion) > 0);
   requireSba(canonicalSba(candidate.manifest.runtime) === canonicalSba(old.application.manifest.runtime));
   // 每个可写目标必须从新实例名派生，不能默默继承线上 Worker/域名。
-  requireSba(d.targets.every(target => d.fields.find(field => canonicalSba(field.path) === canonicalSba(target.path))?.template?.includes('{instance}')));
+  requireSba(d.targets.every(target => target.kind === 'email-routing' || d.fields.find(field => canonicalSba(field.path) === canonicalSba(target.path))?.template?.includes('{instance}')));
   requireSba(d.targets.some(target => target.kind === 'domain'));
   requireSba(old.application.declaration.resources.every(resource => d.resources.some(row => row.key === resource.key && row.kind === resource.kind)));
   const values = Object.fromEntries(d.fields.filter(field => field.template === null).map(field => [field.path.join('.'), deploymentValue(old.configuration, field.path)]));
+  for (const target of d.targets.filter(row => row.kind === 'email-routing')) values[target.path.join('.')] = null;
   const accounts = Object.fromEntries(d.accounts.slice(1).map(account => { const ref = old.connections['cloudflare_' + account.key]; requireSba(ref); return [account.key, ref]; }));
   const plan = await vault.deploymentDraft(owner, { action: 'preview', github: old.connections.github, repository: old.application.repository, sourceSha: input.sourceSha,
     cloudflare: old.connections.cloudflare, environment: input.environment, values, resources: {}, accounts,
     ...(old.applicationSecrets?{applicationSecrets:old.applicationSecrets}:{}) });
   const source = { instanceId: input.instanceId, taskId: input.previousTaskId, sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion,
     environment: old.policy.environment, configuration: old.configuration, resources: previewInventory(old), resultDigest: await sbaDigest(job.result) };
-  validatePreviewInventory(source.resources);
+  validatePreviewInventory(source.resources, { source: true });
   const context = { source, resources: previewInventory(plan), urls: deploymentTargets(d, plan.configuration).filter(row => row.kind === 'domain').map(row => row.value) };
   const operation = { action: 'preview', previous: { sourceSha: source.sourceSha, applicationVersion: source.applicationVersion }, context };
   const previewOf = { instanceId: input.instanceId, taskId: input.previousTaskId, sourceSha: source.sourceSha, applicationVersion: source.applicationVersion, environment: source.environment };

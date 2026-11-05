@@ -7,6 +7,7 @@ import { serviceIndex, serviceState } from './service-api.mjs';
 import { serviceImportRequest } from './service-import-api.mjs';
 import { serviceDeletionRequest } from './service-deletion-api.mjs';
 import { domainPlanErrors } from './deployment-domains.mjs';
+import { emailPlanErrors } from './deployment-email-routing.mjs';
 import { startServiceVerification } from './service-verification.mjs';
 import { preparationRecoveryRequest } from './preparation-recovery.mjs';
 import { restartUpdateRequest } from './unstarted-update-recovery.mjs';
@@ -47,5 +48,5 @@ export async function adminDeploymentRequest(request,env,session,readBody){
     if(input.action==='application')return reply(result);
     const expiresAt=Date.now()+120000,taskId='dc-'+crypto.randomUUID().replaceAll('-','');
     return reply({taskId,draft:input,plan:result,expiresAt,confirmation:await signSession(session,'deployment-confirm',[taskId,input,result.digest,expiresAt]),executionEnabled:connectedEnabled(env)});
-  }catch(error){return reply({error:domainPlanErrors.includes(error?.message)?error.message:'deployment-plan-rejected-check-source-resources-and-public-configuration'},409);}
+  }catch(error){return reply({error:[...domainPlanErrors,...emailPlanErrors].includes(error?.message)?error.message:'deployment-plan-rejected-check-source-resources-and-public-configuration'},409);}
 }

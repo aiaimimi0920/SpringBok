@@ -3,7 +3,30 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## EMAIL-01：EasyEmail 接入前置——有界 R2 服务删除（实施中，2026-11-06）
+## EMAIL-02：显式邮件目标、隔离预升级与先解绑删除（实施中，2026-11-06）
+
+负责人主 AI。范围仅为 v2 可空 email-routing 目标、Zone 单例身份锁、计划/提交只读
+占用检查、rehearse 强制关闭收信，以及普通删除先核对/解绑 catch-all 再删 Worker。
+应用仍负责实际部署绑定和业务验证；平台不启用、删除或迁移共享 Zone/MX，不抢占
+其他路由，不将源码测试当成云端发布。当前正式 EasyEmail 不变；真实清理仍等准确清单
+及用户明确批准。先补失败先行回归，再实现、同步共享 AI/Pages 合同并走正常 PR 门禁。
+
+已实现可空 JSON/同账号 Worker 引用、Zone 单例锁、source-only 预升级身份、准确快照
+及单次解绑/读回；任何 Worker 删除均扫描账号邮件引用，防止未声明或 literal 引用绕过。
+原实现新增四项 workerd 用例准确 4 failed；最终聚焦及相邻 93 项通过、无失败或跳过，
+三个真实 Chrome 流程通过（邮件删除、原普通删除、R2 删除），共享示例/十页构建、
+actionlint、Gitleaks 和 UTF-8 无 BOM/diff check 通过。未变共享布局，不重跑主题截图。
+证据 `linshi/easyemail-springbok-20261106/email02-*`。额外误跑完整云套件含 Linux 专用
+测试，在 Windows 为 212 passed/27 failed；已确认 Linux 平台断言失败，未把该运行记成
+通过，也未改变生产语义掩盖失败；完整受支持 Linux 套件仍以精确 PR/main CI 为门禁。
+
+真实只读核对：Cloudflare OAuth 的账号邮件列表为 47 项并包含 catch-all；本地既有
+account-owned API token 验证为 active、带 Email Routing Rules Write，单 Zone GET 成功，
+但账号列表仍返回 HTTP403/code10000。当前证据不能断言仅缺少某一权限，也未创建/轮换
+凭据或绕过检查；该 token 的完整真实删除前置尚未通过。源码/合成回归不等于真实绑定、
+删除、控制面/执行器发布或 EasyEmail 五动作完成，后者仍需应用 adapter 和部署验收。
+
+## EMAIL-01：EasyEmail 接入前置——有界 R2 服务删除（已合并，2026-11-06）
 
 负责人主 AI。用户要求 EasyEmail 先通过 SpringBok 验证一次部署，再清理新旧实例、使用
 既定域名从零部署。本切片仅补平台普通删除对私有 R2 的支持，复用原确认/归属/unknown
@@ -21,7 +44,7 @@ Routing 显式目标仍在后续范围，不能以本切片通过代替 EasyEmai
 跳过。浏览器通过 R2 双 bucket 确认/取消/窄屏/持久终态、既有普通删除及四页五宽度
 Neuro 回归。共享示例、十页站点构建、actionlint、UTF-8 无 BOM、diff check 与变更快照
 Gitleaks 通过；只读交叉审查未发现阻断。证据 `linshi/easyemail-springbok-20261106/`；
-AI/Pages 共享参考同步，精确 PR/main 门禁、控制面发布和真实应用验收仍待验证，不预报
+AI/Pages 共享参考同步，PR #126 及合并 main e6edd9c 七工作流全部通过；控制面发布和真实应用验收仍待验证，不预报
 上线成功。外部同名 eu bucket 不与默认 jurisdiction 的目标混为一个资源。
 
 真实只读核对发现通知 API 的无配置为 404/11015、当前对象列表省略 result_info；已补

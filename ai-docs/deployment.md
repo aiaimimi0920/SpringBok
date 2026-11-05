@@ -31,7 +31,8 @@
 | resources[] | idPath、namePath | 云 ID 写入路径；名称路径可为 null，R2 使用 bucket 名称作为 ID |
 | resources[] | account、nativeAccount | 所属逻辑账号；nativeAccount 可为 null，否则要求原生绑定同账号 |
 | resources[] | nameTemplate | 必须包含 `{instance}` 的资源名称模板 |
-| targets[] | kind、path、account | worker/domain；套件另可 pages/github-actions。path 引用必填 text 字段；github-actions 的 account 必须为 null，其余引用逻辑云账号 |
+| targets[] | kind、path、account | worker/domain/email-routing；套件另可 pages/github-actions。普通 path 引用必填 text 字段；邮件目标见下文。github-actions 的 account 必须为 null，其余引用逻辑云账号 |
+| targets[] | workerPath | 仅 email-routing 必需；引用同一逻辑 account 下已声明的 worker target 路径 |
 | administrator | emailPath、secret | 邮箱公开配置路径；密码秘密名不能复用账号 secret |
 | github | repositoryPath、secret | 平台写入已核验来源仓库的路径、来自该 GitHub 连接的秘密名称；不得与其他路径或秘密名重叠 |
 
@@ -67,6 +68,39 @@ v2 资源归属检查按所属账号核对 resources 的名称/真实 ID 和 tar
 配置中的外部身份 issuer、客户端 ID 等调用依赖不占用该服务的资源身份；多个应用可共享
 同一认证服务，但不能声明覆盖其 Worker 或域名。历史 v1 仍采用保守的配置检查。
 
+## 根域 Email Routing 目标
+
+源码支持 v2 的显式 `email-routing`，不是 HTTPS `domain`，也不是可创建/删除的 Zone。
+目标 `path` 必须引用 `type: json`、`required: false`、`template: null` 的字段，且 defaults
+中该字段明确为 `null`。`workerPath` 必须指向同 account 已声明的 Worker，不能引用任意
+文本字段、域名或另一个逻辑账号的 Worker。字段通过现有 JSON 配置入口填写。
+
+```json
+{
+  "kind": "email-routing",
+  "path": ["routing"],
+  "account": "runtime",
+  "workerPath": ["server", "name"]
+}
+```
+
+配置值为 `null` 时不产生邮件写目标，不占用收信身份；非 null 时恰为
+`{"zoneId":"00000000000000000000000000000000","domain":"example.com"}`。
+域名须为 Zone 根域，不接受 URL 或将子域假作独立 catch-all。平台以
+`email-routing:<zoneId>` 作为账号内单例占用键，不因接收 Worker 不同而绕过冲突。
+
+计划和确认提交都重新读取 Zone 所属账号/根域/active 状态、Email Routing ready 状态
+和 catch-all。首次部署只接受 source=api、disabled/drop 的中性规则；即便已有规则指向
+同名 Worker，也不隐式收养或抢占。更新要求规则仍启用并指向本实例。平台不自动启用
+Email Routing DNS，也不创建或改变 MX/SPF；DNS 准备属于显式前置。所需读取包括
+Zone Read、Zone Settings Read 和 Email Routing Rules Read，实际绑定另需 Rules Write。
+账号级邮件列表还需实际授权，单 Zone 的规则 GET 成功不证明账号列表权限已具备。
+
+应用 adapter 负责在发布接收 Worker 后再次检查并绑定、读回和业务验证；声明不构成
+账号级 token 沙箱。rehearse 强制将全部邮件配置置 null，只在 source.resources 中保留
+只读身份；preview 可写清单和 destroy-preview 均拒绝邮件身份。应用仍须验证 null 并
+隔离邮件/发信等外部副作用，不能把控制面合成回执当成应用执行已验。发布状态另见开发计划。
+
 ## 普通实例的 R2 删除边界
 
 源码新增 R2 删除能力，复用现有删除计划、逐项持久回执和明确确认，不新增 SBA action。
@@ -84,11 +118,27 @@ Functions 部署缺少 R2 绑定字段时，作为单独风险进入签名计划
 确认提交时重新检查完整计划；先删除域名和 Worker 入口，再处理数据资源。R2 再次核对
 元数据，只对批准的一批 key 发出一次 DELETE，读回空 bucket 后才删除 bucket，并最终
 独立确认资源不存在。HTTP 200 的部分失败、响应丢失或晚到新对象均保持 delete-unknown，
-不自动重放或追加清空。历史部署、删除回执与归属保护保留；不会删除共享 Zone、MX 或
-Email Routing。邮件路由的完整生命周期接入仍需单独完成。
+不自动重放或追加清空。历史部署、删除回执与归属保护保留；共享 Zone、MX 和 Email
+Routing DNS/settings 永不删除。显式 catch-all 的解绑流程见下文。
 
 对象批量删除不是跨请求事务，独立 S3 客户端等写入方仍须在删除前停止；平台不声称能
 阻止账号外部写入，也不会替用户禁用独立凭据。源码/合成 provider 验收不等于已发布控制面
 或完成真实云删除，发布状态见仓库开发计划。
 
-事实来源：[deployment-contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/deployment-contract.mjs)、[service-deletion-r2.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/service-deletion-r2.mjs)。
+## 普通实例的收信解绑
+
+删除任何 Worker 前都按账号完整读取邮件规则（包含 catch-all 和 literal），不仅检查声明
+了邮件目标的实例。未声明、其他 Zone 或 literal 规则仍引用所选 Worker 时拒绝；缺少
+Email Routing Rules Read 权限或列表不完整也拒绝，不把 403/404 当成无引用。每页最多
+50 项、最多 20 页/1000 项、单响应最多 256 KiB，校验总数、当前页和规则 ID 唯一性。
+
+邮件删除计划绑定 Zone/账号/接收 Worker 和准确 catch-all 规则。确认时重读整个计划；
+执行前再次比较快照，先单次 PUT 为 disabled/drop 并读回、确认再无邮件规则引用接收
+Worker，之后才删除 HTTPS 入口、Worker 和数据。已经中性解绑的目标只读确认、不重复
+写入。规则归属漂移、部分失败、丢响应或迟到引用持久为 delete-unknown，停止后续删除，
+不重放。解绑需 Email Routing Rules Write，不更改其他规则或共享 Zone/MX/DNS。
+
+这些跨请求检查不是 Cloudflare 原子事务。删除前必须停止独立路由/DNS/Worker 写入者，
+平台不声称能阻止账号外部并发修改。源码/合成 provider 通过不等于真实云解绑或一键部署完成。
+
+事实来源：[deployment-contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/deployment-contract.mjs)、[service-deletion-r2.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/service-deletion-r2.mjs)、[service-deletion-email.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/service-deletion-email.mjs)。

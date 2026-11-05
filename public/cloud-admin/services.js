@@ -248,7 +248,7 @@ async function openDeleteService(state, trigger) {
     if (version !== deletionGeneration || !current(pageVersion) || !$('service-delete-dialog').open) return;
     deletionReview = result;
     const list = element('dl');
-    for (const row of result.plan.resources) list.append(element('dt', ({ worker: 'Worker', domain: '域名', d1: 'D1', kv: 'KV' })[row.kind]), element('dd', `${row.name} · ${row.remoteId} · ${row.accountId}${row.present ? '' : ' · 已不存在'}`));
+    for (const row of result.plan.resources) list.append(element('dt', ({ worker: 'Worker', domain: '域名', d1: 'D1', kv: 'KV', r2: 'R2' })[row.kind]), element('dd', `${row.name} · ${row.remoteId} · ${row.accountId}${row.present ? '' : ' · 已不存在'}${row.kind === 'r2' && row.present ? ` · ${row.objects.count} 对象 · ${row.objects.bytes} B` : ''}`));
     $('service-delete-resources').append(list);
     for (const risk of result.plan.unverifiedReferences) $('service-delete-resources').append(element('p', `未核实历史 Pages 引用：${risk.project} · ${risk.kind.toUpperCase()} · ${risk.accountId} · ${risk.deploymentIds.join('、')}`));
     $('service-delete-risk-label').hidden = !result.plan.unverifiedReferences.length;

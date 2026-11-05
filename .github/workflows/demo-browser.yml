@@ -98,7 +98,9 @@ jobs:
       - name: Check isolated upgrade previews and explicit test environment cleanup
         run: node tests/browser/upgrade-preview.mjs
       - name: Check ordinary service deletion confirmation and persistent resource cleanup
-        run: node tests/browser/service-deletion.mjs
+        run: |
+          node tests/browser/service-deletion.mjs
+          node tests/browser/service-deletion-r2.mjs
       - name: Check Neuro shell, colors, responsive layouts and keyboard states
         run: node tests/browser/neuro-ui.mjs
       - name: Check catalog, enrollment and telemetry UI on Linux

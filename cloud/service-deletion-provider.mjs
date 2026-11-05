@@ -1,5 +1,6 @@
 import { readJson } from './connections-provider.mjs';
 import { requireSba, canonicalSba } from './sba-control.mjs';
+import { deletionBucketName, inspectDeletionBucket, deletionBucketAbsent, removeDeletionBucket } from './service-deletion-r2.mjs';
 
 const endpoint = (account, path) => `https://api.cloudflare.com/client/v4/accounts/${account}${path}`;
 const identity = row => `${row.accountId}/${row.kind}/${row.remoteId}`;
@@ -13,7 +14,7 @@ export function deletionInventory(instance) {
   requireSba(rows.length > 0 && rows.length <= 32 && rows.some(r => r.kind === 'worker'));
   for (const r of rows) {
     requireSba(/^[a-f0-9]{32}$/.test(r.accountId) && typeof r.name === 'string' && r.name.length <= 256);
-    requireSba(r.kind === 'worker' ? name(r.remoteId) : r.kind === 'd1' ? /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(r.remoteId) : r.kind === 'kv' && /^[a-f0-9]{32}$/.test(r.remoteId));
+    requireSba(r.kind === 'worker' ? name(r.remoteId) : r.kind === 'd1' ? /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(r.remoteId) : r.kind === 'r2' ? deletionBucketName(r.remoteId) && r.name === r.remoteId : r.kind === 'kv' && /^[a-f0-9]{32}$/.test(r.remoteId));
   }
   requireSba(new Set(rows.map(identity)).size === rows.length);
   return sort(rows);
@@ -27,13 +28,19 @@ async function list(account, token, path, transport) {
 function bindingIdentity(accountId, binding) {
   if (binding.type === 'd1') return identity({ accountId, kind: 'd1', remoteId: binding.id });
   if (binding.type === 'kv_namespace') return identity({ accountId, kind: 'kv', remoteId: binding.namespace_id });
+  if (binding.type === 'r2_bucket') {
+    requireSba(deletionBucketName(binding.bucket_name) && (!binding.jurisdiction || typeof binding.jurisdiction === 'string'));
+    const kind = !binding.jurisdiction || binding.jurisdiction === 'default' ? 'r2' : `r2-${binding.jurisdiction}`;
+    return identity({ accountId, kind, remoteId: binding.bucket_name });
+  }
   return null;
 }
 // 只检查元数据；不读取数据库内容、KV 值或 Worker secret。
 export async function inspectDeletion(rows, tokens, transport = fetch) {
-  const result = [], unverifiedReferences = [], storageIds = new Set(rows.filter(r => r.kind !== 'worker').map(r => `${r.kind}/${r.remoteId}`));
+  const result = [], unverifiedReferences = [];
   for (const accountId of [...new Set(rows.map(r => r.accountId))].sort()) {
     const token = tokens[accountId], own = rows.filter(r => r.accountId === accountId), keys = new Set(own.map(identity));
+    const storageIds = new Set(own.filter(r => r.kind !== 'worker').map(r => `${r.kind}/${r.remoteId}`));
     const workers = await list(accountId, token, '/workers/scripts', transport);
     requireSba(workers.length <= 100 && workers.every(w => name(w.id)));
     const selected = new Set(own.filter(r => r.kind === 'worker').map(r => r.remoteId));
@@ -49,7 +56,7 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
         const key = bindingIdentity(accountId, binding);
         if (selected.has(worker.id)) {
           // 未登记的数据绑定不能随 Worker 被隐式销毁。
-          requireSba(!['durable_object_namespace', 'r2_bucket'].includes(binding.type) && (!key || keys.has(key)));
+          requireSba(binding.type !== 'durable_object_namespace' && (!key || keys.has(key)));
         } else {
           requireSba(!key || !storageIds.has(key.slice(accountId.length + 1)));
           requireSba(!(binding.type === 'service' && selected.has(binding.service)) && !(binding.type === 'durable_object_namespace' && selected.has(binding.script_name)));
@@ -62,21 +69,25 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
       requireSba(name(project.name) && project.deployment_configs && typeof project.deployment_configs === 'object');
       const deployments = await list(accountId, token, `/pages/projects/${project.name}/deployments?page=1`, transport);
       // 实际 API 可返回绑定字段，但 OpenAPI 未保证；Functions 部署缺少字段时不能当空绑定。
-      for (const [field, kind] of [['d1_databases', 'd1'], ['kv_namespaces', 'kv']]) {
+      for (const [field, kind] of [['d1_databases', 'd1'], ['kv_namespaces', 'kv'], ['r2_buckets', 'r2']]) {
         const unknown = deployments.filter(d => d.uses_functions !== false && !Object.hasOwn(d, field));
         requireSba(unknown.every(d => typeof d.id === 'string' && /^[a-f0-9-]{36}$/.test(d.id)));
-        if (rows.some(r => r.kind === kind) && unknown.length) unverifiedReferences.push({ accountId, project: project.name, kind, deploymentIds: unknown.map(d => d.id).sort() });
+        if (own.some(r => r.kind === kind) && unknown.length) unverifiedReferences.push({ accountId, project: project.name, kind, deploymentIds: unknown.map(d => d.id).sort() });
       }
       for (const config of [...Object.values(project.deployment_configs), ...deployments]) {
-        for (const [field, kind] of [['d1_databases', 'd1'], ['kv_namespaces', 'kv']]) {
+        for (const [field, kind] of [['d1_databases', 'd1'], ['kv_namespaces', 'kv'], ['r2_buckets', 'r2']]) {
           const bindings = config[field] ?? {}; requireSba(bindings && typeof bindings === 'object' && !Array.isArray(bindings));
-          for (const binding of Object.values(bindings)) requireSba(typeof binding?.id === 'string' && !storageIds.has(`${kind}/${binding.id}`));
+          for (const binding of Object.values(bindings)) {
+            const remoteId = kind === 'r2' ? binding?.name : binding?.id;
+            requireSba(typeof remoteId === 'string' && !storageIds.has(`${kind}/${remoteId}`));
+          }
         }
       }
     }
     const databases = own.some(r => r.kind === 'd1') ? await list(accountId, token, '/d1/database?per_page=1000&page=1', transport) : [];
     const namespaces = own.some(r => r.kind === 'kv') ? await list(accountId, token, '/storage/kv/namespaces?per_page=1000&page=1', transport) : [];
     for (const row of own) {
+      if (row.kind === 'r2') { result.push(await inspectDeletionBucket(row, token, transport)); continue; }
       const live = row.kind === 'worker' ? workers.find(w => w.id === row.remoteId) : row.kind === 'd1' ? databases.find(d => d.uuid === row.remoteId) : namespaces.find(k => k.id === row.remoteId);
       if (live && row.kind !== 'worker') requireSba((live.name ?? live.title) === row.name);
       result.push({ ...row, present: !!live, ...(row.kind === 'worker' && live ? { modifiedAt: live.modified_on ?? null } : {}) });
@@ -85,11 +96,13 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
   return { resources: sort(result), unverifiedReferences };
 }
 export async function resourceAbsent(row, token, transport = fetch) {
+  if (row.kind === 'r2') return deletionBucketAbsent(row, token, transport);
   const path = { worker: '/workers/scripts', domain: '/workers/domains', d1: '/d1/database?per_page=1000&page=1', kv: '/storage/kv/namespaces?per_page=1000&page=1' }[row.kind];
   const rows = await list(row.accountId, token, path, transport);
   return !rows.some(r => (row.kind === 'd1' ? r.uuid : r.id) === row.remoteId);
 }
 export async function removeResource(row, token, transport = fetch) {
+  if (row.kind === 'r2') return removeDeletionBucket(row, token, transport);
   const path = { worker: '/workers/scripts/', domain: '/workers/domains/', d1: '/d1/database/', kv: '/storage/kv/namespaces/' }[row.kind];
   requireSba(path);
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 8000);

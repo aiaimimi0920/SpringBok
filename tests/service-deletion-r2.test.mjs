@@ -6,9 +6,9 @@ const row = { kind: 'r2', accountId: 'a'.repeat(32), remoteId: 'test-email-inbox
 const entry = key => ({ key, size: 12, etag: 'a'.repeat(32), last_modified: '2026-11-06T00:00:00.000Z' });
 function provider() {
   const state = { entries: [entry('message.eml')], truncated: false, cursor: '', buckets: [{ name: row.name, creation_date: '2026-11-06T00:00:00Z', jurisdiction: 'default' }],
-    reads: [], writes: [], badResponse: null, deletedKeys: null };
+    reads: [], writes: [], badResponse: null, deletedKeys: null, notificationMissing: false, notificationCode: 11015, legacyList: false, extraTail: false };
   const transport = async (url, options) => {
-    const path = new URL(url).pathname, ok = (result, result_info) => Response.json({ success: true, errors: [], result, ...(result_info ? { result_info } : {}) });
+    const parsed = new URL(url), path = parsed.pathname, ok = (result, result_info) => Response.json({ success: true, errors: [], result, ...(result_info ? { result_info } : {}) });
     if (options.method === 'DELETE') {
       state.writes.push({ path, body: options.body });
       if (state.badResponse) return state.badResponse();
@@ -20,11 +20,15 @@ function provider() {
     }
     state.reads.push(path);
     if (path.endsWith('/r2/buckets')) return ok({ buckets: state.buckets }, { cursor: state.cursor });
-    if (path.endsWith('/objects')) return ok(state.entries, { is_truncated: state.truncated });
+    if (path.endsWith('/objects')) {
+      if (parsed.searchParams.has('start_after')) return ok(state.extraTail ? [entry('extra')] : []);
+      return ok(state.entries, state.legacyList ? undefined : { is_truncated: state.truncated });
+    }
     if (path.endsWith('/lock')) return ok({ rules: [] });
     if (path.endsWith('/domains/custom')) return ok({ domains: [] });
     if (path.endsWith('/domains/managed')) return ok({ enabled: false });
-    if (path.endsWith('/configuration')) return ok({ queues: [] });
+    if (path.endsWith('/configuration')) return state.notificationMissing
+      ? Response.json({ success: false, result: null, errors: [{ code: state.notificationCode }] }, { status: 404 }) : ok({ queues: [] });
     throw new Error('unexpected test request');
   };
   return { state, transport, inspect: () => inspectDeletionBucket(row, 'synthetic', transport) };
@@ -44,6 +48,23 @@ test('R2 object snapshots are order-independent and expose only counts and diges
   assert.equal(first.objects.bytes, 24); assert.ok(!JSON.stringify(first).includes('z.eml'));
   p.state.entries[0].last_modified = '2026-11-06T01:00:00Z';
   assert.notEqual((await p.inspect()).objects.digest, first.objects.digest);
+});
+
+test('R2 notification HTTP 404 means empty only for the exact observed no-config code 11015', async () => {
+  const p = provider(); p.state.notificationMissing = true;
+  assert.equal((await p.inspect()).present, true);
+  p.state.notificationCode = 10000; await assert.rejects(p.inspect());
+  assert.equal(p.state.writes.length, 0);
+});
+
+test('legacy R2 lists without result_info require empty tail proof, including exactly 1000 entries', async () => {
+  const p = provider(); p.state.legacyList = true;
+  assert.equal((await p.inspect()).objects.count, 1);
+  p.state.entries = Array.from({ length: 1000 }, (_, index) => entry(String(index)));
+  assert.equal((await p.inspect()).objects.count, 1000);
+  p.state.extraTail = true; await assert.rejects(p.inspect());
+  p.state.entries = []; assert.equal((await p.inspect()).objects.count, 0);
+  assert.equal(p.state.writes.length, 0);
 });
 
 test('R2 boundary accepts exactly 1000 objects and rejects unbounded, duplicate or malformed metadata before writes', async () => {

@@ -20,7 +20,8 @@ async function metadata(row, token, transport) {
 async function objects(row, token, transport) {
   // One bounded batch: never launch a background prefix job or silently approve unlisted objects.
   const body = await readJson(endpoint(row, '/objects?per_page=1000'), token, false, transport);
-  requireSba(body.success === true && Array.isArray(body.result) && body.result.length <= 1000 && body.result_info?.is_truncated === false);
+  requireSba(body.success === true && Array.isArray(body.result) && body.result.length <= 1000);
+  if (body.result_info !== undefined) requireSba(body.result_info?.is_truncated === false);
   const entries = body.result.map(item => {
     requireSba(typeof item.key === 'string' && item.key.length > 0 && new TextEncoder().encode(item.key).length <= 1024);
     requireSba(Number.isSafeInteger(item.size) && item.size >= 0 && typeof item.etag === 'string' && /^[a-fA-F0-9]{32}(?:-\d+)?$/.test(item.etag));
@@ -28,6 +29,12 @@ async function objects(row, token, transport) {
     return { key: item.key, size: item.size, etag: item.etag, modifiedAt: item.last_modified };
   }).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   requireSba(new Set(entries.map(item => item.key)).size === entries.length);
+  if (body.result_info === undefined && body.result.length) {
+    // The live legacy response omits result_info. Prove the lexicographic tail is empty,
+    // rather than assuming that a short page (or exactly 1000 entries) is the whole bucket.
+    const tail = await readJson(endpoint(row, '/objects?per_page=1&start_after=' + encodeURIComponent(body.result.at(-1).key)), token, false, transport);
+    requireSba(tail.success === true && Array.isArray(tail.result) && tail.result.length === 0 && (tail.result_info === undefined || tail.result_info?.is_truncated === false));
+  }
   const bytes = entries.reduce((sum, item) => sum + item.size, 0);
   requireSba(Number.isSafeInteger(bytes));
   return { keys: entries.map(item => item.key), summary: { count: entries.length, bytes, digest: await sbaDigest(entries) } };
@@ -45,8 +52,16 @@ async function privateUnsharedBucket(row, token, transport) {
   requireSba(Array.isArray(custom.domains) && custom.domains.length === 0);
   const managed = await get(endpoint(row, '/domains/managed'));
   requireSba(managed.enabled === false);
-  const notifications = await get(`https://api.cloudflare.com/client/v4/accounts/${row.accountId}/event_notifications/r2/${encodeURIComponent(row.remoteId)}/configuration`);
-  requireSba(Array.isArray(notifications.queues) && notifications.queues.length === 0);
+  let notFound = false;
+  const notifications = await readJson(`https://api.cloudflare.com/client/v4/accounts/${row.accountId}/event_notifications/r2/${encodeURIComponent(row.remoteId)}/configuration`, token, false, async (url, options) => {
+    const response = await transport(url, options);
+    if (response.status !== 404) return response;
+    notFound = true;
+    // Keep the shared bounded JSON reader; only this exact provider absence is accepted.
+    return new Response(response.body, { status: 200, headers: response.headers });
+  });
+  if (notFound) requireSba(notifications.success === false && notifications.result === null && Array.isArray(notifications.errors) && notifications.errors.length === 1 && notifications.errors[0]?.code === 11015);
+  else requireSba(notifications.success === true && Array.isArray(notifications.result?.queues) && notifications.result.queues.length === 0);
 }
 
 export async function inspectDeletionBucket(row, token, transport = fetch) {

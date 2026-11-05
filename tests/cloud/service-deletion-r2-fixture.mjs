@@ -43,12 +43,17 @@ export async function r2DeletionFixture(suite) {
         const bucket = path.split('/')[3];
         if (path.startsWith('/r2/buckets/') && r2.objects.has(bucket)) {
           if (r2.denied) return new Response(null, { status: 403 });
-          if (path.endsWith('/objects')) return ok(r2.objects.get(bucket), { is_truncated: r2.truncated });
+          if (path.endsWith('/objects')) {
+            const entries = r2.objects.get(bucket);
+            if (url.searchParams.has('start_after')) return ok(entries.filter(item => item.key > url.searchParams.get('start_after')));
+            return ok(entries, r2.truncated ? { is_truncated: true } : undefined);
+          }
           if (path.endsWith('/lock')) return ok({ rules: r2.locks });
           if (path.endsWith('/domains/custom')) return ok({ domains: r2.domains });
           if (path.endsWith('/domains/managed')) return ok({ enabled: r2.public });
         }
-        if (path.startsWith('/event_notifications/r2/')) return ok({ queues: r2.queues });
+        if (path.startsWith('/event_notifications/r2/')) return r2.queues.length ? ok({ queues: r2.queues })
+          : Response.json({ success: false, result: null, errors: [{ code: 11015 }] }, { status: 404 });
       }
       if (request.method === 'DELETE' && path.startsWith('/r2/buckets/')) {
         live.deletes.push(path);

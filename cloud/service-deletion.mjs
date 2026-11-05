@@ -73,7 +73,7 @@ export async function deleteService(vault, owner, input) {
       const keys = deletionInventory(fresh.instance).filter(r => r.accountId === account).flatMap(r => [r.name, r.remoteId]);
       await accountStub(vault.env, account).claimDeletion(owner, instanceId, input.operationId, account, keys, fresh.digest);
     }
-    const order = { domain: 0, worker: 1, d1: 2, kv: 3 };
+    const order = { domain: 0, worker: 1, d1: 2, kv: 3, r2: 4 };
     for (const row of [...record.resources].sort((a, b) => order[a.kind] - order[b.kind])) {
       if (row.status === 'absent') continue;
       row.status = 'deleting'; record.updatedAt = Date.now(); save(vault, record);

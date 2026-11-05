@@ -67,4 +67,26 @@ v2 资源归属检查按所属账号核对 resources 的名称/真实 ID 和 tar
 配置中的外部身份 issuer、客户端 ID 等调用依赖不占用该服务的资源身份；多个应用可共享
 同一认证服务，但不能声明覆盖其 Worker 或域名。历史 v1 仍采用保守的配置检查。
 
-事实来源：[deployment-contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/deployment-contract.mjs)。
+## 普通实例的 R2 删除边界
+
+源码新增 R2 删除能力，复用现有删除计划、逐项持久回执和明确确认，不新增 SBA action。
+目前只接受默认 jurisdiction、无 custom domain、关闭 r2.dev、无 bucket lock、无事件通知
+的私有 bucket。Worker 与 Pages 当前配置中发现外部存储引用时拒绝删除；历史 Pages
+Functions 部署缺少 R2 绑定字段时，作为单独风险进入签名计划，要求明确接受，不能当成空绑定。
+
+计划读取对象元数据，不读取邮件内容或暴露私有对象 key；展示对象数量与字节数，并绑定
+创建时间和对象 key、etag、大小、修改时间的摘要。单 bucket 最多 1000 个对象、单次
+读取及批量删除请求均不超过 256 KiB。分页未结束、权限不足或响应不完整时拒绝；更大
+数据集、其他 jurisdiction 和公开 bucket 尚不在支持范围，不自动清空、修改配置或绕过锁。
+
+确认提交时重新检查完整计划；先删除域名和 Worker 入口，再处理数据资源。R2 再次核对
+元数据，只对批准的一批 key 发出一次 DELETE，读回空 bucket 后才删除 bucket，并最终
+独立确认资源不存在。HTTP 200 的部分失败、响应丢失或晚到新对象均保持 delete-unknown，
+不自动重放或追加清空。历史部署、删除回执与归属保护保留；不会删除共享 Zone、MX 或
+Email Routing。邮件路由的完整生命周期接入仍需单独完成。
+
+对象批量删除不是跨请求事务，独立 S3 客户端等写入方仍须在删除前停止；平台不声称能
+阻止账号外部写入，也不会替用户禁用独立凭据。源码/合成 provider 验收不等于已发布控制面
+或完成真实云删除，发布状态见仓库开发计划。
+
+事实来源：[deployment-contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/deployment-contract.mjs)、[service-deletion-r2.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/cloud/service-deletion-r2.mjs)。

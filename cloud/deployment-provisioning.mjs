@@ -8,6 +8,7 @@ import { finalizePreview } from './service-preview.mjs';
 import { resolveDeploymentDomains } from './deployment-domains.mjs';
 import { bootstrapConfiguration } from './admin-profiles.mjs';
 import { configureApplicationSecrets } from './application-secrets.mjs';
+import { checkDeploymentEmailRouting } from './deployment-email-routing.mjs';
 
 export async function automaticDraft(vault,owner,input,application){
   const declaration=application.declaration,accounts={},connections={github:input.github,cloudflare:input.cloudflare},credentials={},facts={};
@@ -43,6 +44,7 @@ export async function automaticDraft(vault,owner,input,application){
   }
   for(const field of declaration.resources){const source=accounts[field.account],row=resources[field.key];requireSba(row&&row.accountId===source.accountId&&row.connectionId===source.connection.id);}
   const configuration=automaticConfiguration(declaration,values,resources,accounts,input.environment,facts);
+  await checkDeploymentEmailRouting(vault,owner,declaration,configuration,accounts,!!input.instance);
   bootstrapConfiguration(vault,owner,input,declaration,configuration,credentials,previous);
   const applicationSecrets=configureApplicationSecrets(vault,owner,input,application,credentials,previousPlan);
   for(const reference of Object.values(connections))vault.activeConnection(reference.id,reference.revision);

@@ -71,7 +71,12 @@ async function request(path, body, timeoutMs = 0) {
       ['domain-zone-read-failed', '无法读取所选域名，请检查 Cloudflare 连接的 Zone 读取权限'],
       ['domain-zone-mismatch', '所选域名的账户、名称或启用状态已变化'],
       ['domain-dns-read-failed', '无法核对 DNS，请检查 Cloudflare 连接的 DNS 读取权限'],
-      ['domain-dns-not-empty', '所选子域名已有 DNS 记录，请更换子域名']
+      ['domain-dns-not-empty', '所选子域名已有 DNS 记录，请更换子域名'],
+      ['email-routing-read-failed', '无法读取邮件路由，请检查 Cloudflare 读取权限'],
+      ['email-routing-zone-mismatch', '收信根域与 Cloudflare 账户不匹配'],
+      ['email-routing-not-ready', '所选根域的 Email Routing 尚未就绪'],
+      ['email-routing-rule-unsupported', '当前 catch-all 配置不受支持'],
+      ['email-routing-occupied', '收信路由已被占用或归属已变化']
     ]);
     const result = await response.json().catch(() => null);
     throw new Error(messages.get(result?.error) ?? (path.endsWith('/plan') ? '计划校验失败：检查版本兼容性、连接、资源与公开配置' : '读取或操作未确认，请检查连接权限与平台状态'));
@@ -248,7 +253,7 @@ async function openDeleteService(state, trigger) {
     if (version !== deletionGeneration || !current(pageVersion) || !$('service-delete-dialog').open) return;
     deletionReview = result;
     const list = element('dl');
-    for (const row of result.plan.resources) list.append(element('dt', ({ worker: 'Worker', domain: '域名', d1: 'D1', kv: 'KV', r2: 'R2' })[row.kind]), element('dd', `${row.name} · ${row.remoteId} · ${row.accountId}${row.present ? '' : ' · 已不存在'}${row.kind === 'r2' && row.present ? ` · ${row.objects.count} 对象 · ${row.objects.bytes} B` : ''}`));
+    for (const row of result.plan.resources) list.append(element('dt', ({ worker: 'Worker', domain: '域名', d1: 'D1', kv: 'KV', r2: 'R2', 'email-routing': '收信路由' })[row.kind]), element('dd', `${row.name} · ${row.remoteId} · ${row.accountId}${row.present ? '' : row.kind === 'email-routing' ? ' · 已解绑' : ' · 已不存在'}${row.kind === 'email-routing' ? ' → ' + row.worker : ''}${row.kind === 'r2' && row.present ? ` · ${row.objects.count} 对象 · ${row.objects.bytes} B` : ''}`));
     $('service-delete-resources').append(list);
     for (const risk of result.plan.unverifiedReferences) $('service-delete-resources').append(element('p', `未核实历史 Pages 引用：${risk.project} · ${risk.kind.toUpperCase()} · ${risk.accountId} · ${risk.deploymentIds.join('、')}`));
     $('service-delete-risk-label').hidden = !result.plan.unverifiedReferences.length;

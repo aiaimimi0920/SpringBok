@@ -16,6 +16,7 @@ export function deletionProvider(suite) {
       return new Response(null, { status: 200 });
     }
     if (request.method !== 'GET') return prior(request, context);
+    if (path === '/email/routing/rules' && !suite.mailRouting) return Response.json({ success: true, result: [], result_info: { page: 1, count: 0, total_count: 0 } });
     if (path === '/workers/scripts') return ok([...(live.worker ? [{ id: 'test-worker', modified_on: live.modified }] : []), { id: 'unrelated-worker', modified_on: live.modified }]);
     if (path === '/pages/projects') return ok(live.pagesShared || live.pagesDeployments ? [{ name: 'other-pages', deployment_configs: { production: { d1_databases: live.pagesShared ? { DB: { id: resource.remoteId } } : {} } } }] : []);
     if (path === '/pages/projects/other-pages/deployments') return ok(live.pagesDeployments ?? []);

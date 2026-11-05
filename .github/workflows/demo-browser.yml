@@ -101,6 +101,7 @@ jobs:
         run: |
           node tests/browser/service-deletion.mjs
           node tests/browser/service-deletion-r2.mjs
+          node tests/browser/email-routing.mjs
       - name: Check Neuro shell, colors, responsive layouts and keyboard states
         run: node tests/browser/neuro-ui.mjs
       - name: Check catalog, enrollment and telemetry UI on Linux

@@ -37,17 +37,38 @@ try{
     await page.screenshot({path:join(directory,`preview-repair-${width}.png`)});}
   await page.locator('#service-submit').evaluate(button=>{button.click();button.click();});
   await page.waitForFunction(()=>!document.getElementById('service-dialog').open);assert.equal(state.dispatches,3);
-  const permit=await(await machine()).json(),context=permit.request.context.preview;
+  let permit=await(await machine()).json();const context=permit.request.context.preview,firstRepair=permit.request.taskId;
   assert.deepEqual(context,failed.job.request.context);assert.deepEqual(permit.request.configuration,failed.configuration);
+  assert.equal(state.created.length,2);assert.equal((await machine()).status,403);
+  receipt(permit,'unknown',{checks:[],errorCode:'SOURCE_DATABASE_CHANGED'});
+  const failedRepair=(await service('service-state',{instanceId:preview.taskId,reconcile:true})).json();
+  state.updateVersion='4.0.0';state.manifestOverride.repairs[0].fromErrorCodes.push('SOURCE_DATABASE_CHANGED');
+  await ready(page);await page.getByRole('button',{name:'修复',exact:true}).click();
+  await page.getByRole('button',{name:'指定来源',exact:true}).click();
+  await page.getByLabel('提交 SHA',{exact:true}).fill('6'.repeat(40));
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.locator('#service-dialog-notice').filter({hasText:'此版本没有匹配当前错误的修复操作'}).waitFor();
+  assert.equal(await page.locator('#service-submit').isDisabled(),true);assert.equal(state.dispatches,3);
+  state.manifestOverride.repairs[0].fromActions.push('repair');
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.waitForFunction(()=>!document.getElementById('service-submit').disabled);
+  await page.locator('#service-submit').click();await page.locator('#service-review').waitFor({state:'visible'});
+  assert.match(await page.locator('#service-review').textContent(),new RegExp(firstRepair));
+  await page.screenshot({path:join(directory,'preview-repair-continuation.png')});
+  await page.locator('#service-submit').evaluate(button=>{button.click();button.click();});
+  await page.waitForFunction(()=>!document.getElementById('service-dialog').open);assert.equal(state.dispatches,4);
+  permit=await(await machine()).json();assert.deepEqual(permit.request.context.preview,context);
+  assert.deepEqual(permit.request.context.previewBaseline,{sourceSha:updatedSha,applicationVersion:'2.0.0',instanceId:preview.taskId});
   assert.equal(state.created.length,2);assert.equal((await machine()).status,403);
   receipt(permit,'succeeded',{checks:['snapshot-copied','migration-verified','source-unchanged','side-effects-isolated',
     'repair-completed','data-preserved','unchanged-resources-verified','service-ready'].map(id=>({id,passed:true})),lifecycle:{
     resources:context.resources.map(item=>({key:item.key,status:'created'})),urls:context.urls,snapshot:{id:'e'.repeat(64),createdAt:7}}});
   await ready(page);await page.getByRole('button',{name:'删除测试环境',exact:true}).click();
   await page.locator('#service-review').filter({hasText:'将永久删除以上测试资源及其中的数据'}).waitFor({state:'visible'});
-  assert.equal(state.dispatches,3,'cleanup review must not execute deletion');
-  await page.keyboard.press('Escape');assert.equal(state.dispatches,3);
+  assert.equal(state.dispatches,4,'cleanup review must not execute deletion');
+  await page.keyboard.press('Escape');assert.equal(state.dispatches,4);
   assert.deepEqual((await api('state',{taskId:preview.taskId})).json().job,failed.job);
+  assert.deepEqual((await api('state',{taskId:firstRepair})).json().job,failedRepair.job);
   assert.equal((await service('service-state',{instanceId:first.taskId,reconcile:false})).json().history.length,1);
   assert.deepEqual(errors,[]);
   console.log('Failed preview uses explicit repair scope, original resources, one dispatch and authenticated cleanup review; source and UNKNOWN history preserved.');

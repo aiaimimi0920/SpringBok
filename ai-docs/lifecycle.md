@@ -71,11 +71,17 @@ preview 成功要求所有资源 created、所有批准 urls、非空 snapshot�
 
 repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。
 
-仅修复原 preview 时，context 额外且必须包含 `preview`，其值为平台从已验证父回执及原计划
+修复 preview 或其失败 repair 时，context 额外且必须包含 `preview`，其值为平台从已验证父回执及原计划
 继承的完整 preview context（source、resources、urls）；客户端不能提供或替换。所选修复模板
 必须显式允许父 action=preview。源 SHA 必须与失败副本和新修复提交都不同；应用版本继续递增，
 runtime、原资源、配置、连接与秘密来源均保持。新任务原子接管原执行 lane，原 UNKNOWN/failed
 及其 run、request、result 摘要仍保留；在途、陈旧 head、无认证回执或重复派发继续拒绝。
+
+新控制面另附 `previewBaseline: {sourceSha, applicationVersion, instanceId}`，指向原副本候选和实例，而非最近失败
+repair 的版本。它由认证父请求继承；兼容首个旧 repair 无该字段时，从其 previous 取得原
+副本版本及原 parentTaskId。后续修复必须显式允许父动作 repair；账号 lane 认领再次校验原 preview 与 baseline，
+不能在请求中替换、重新取源快照或跳过父 UNKNOWN。原副本版本须高于源版本，且不高于父版本；
+SHA 不得为源或新候选，instanceId 必须为原副本，不能为源或新任务。旧首个 repair 请求可不含 baseline，普通实例 repair 不允许该字段。
 
 repair 成功必须通过 repair-completed、data-preserved、unchanged-resources-verified、service-ready。service-ready 证明应用声明的配置就绪范围，不自动证明用户已完成 Access、邮箱验证或后台登录。
 

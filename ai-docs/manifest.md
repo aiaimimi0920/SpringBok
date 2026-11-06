@@ -35,7 +35,7 @@ GitHub/Actions/Runner/SBA、Git/Node/npm/Python 等控制变量，以及 PATH、
 
 ## 可选修复描述
 
-每个 repairs 元素恰好包含以下字段：
+每个 repairs 元素包含以下必需字段，并且仅可额外声明 `fromActions`：
 
 | 字段 | 定义 |
 | --- | --- |
@@ -43,7 +43,13 @@ GitHub/Actions/Runner/SBA、Git/Node/npm/Python 等控制变量，以及 PATH、
 | name | 非空显示名，最多 80 字符 |
 | fromErrorCodes | 1–32 个唯一大写错误码，匹配 `[A-Z][A-Z0-9_]{1,79}` |
 | secretNames | 唯一名称数组，必须是 manifest.secrets 的子集；可以为空 |
+| fromActions | 可选，非空且唯一的动作数组，只允许 deploy、update、repair、preview；省略时为 deploy/update/repair，不包含 preview |
 
 repair 是更高版本固定提交对原失败任务的显式恢复，不是 rerun。未声明的修复操作、错误码或秘密不能凭 UI 推断。
+
+修复失败预升级副本必须显式声明 `fromActions: ["preview"]`（也可与其他允许动作组合）。
+平台将原 preview context 绑定到独立 repair 请求；应用必须核实持久备份、部分副作用及可恢复边界，
+不能仅凭错误码重放原任务。该新合同需要同时更新控制面和固定 executor；旧固定执行器不兼容此字段。
+源码与本地验证不代表平台已发布或真实应用修复成功。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[runtime.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/runtime.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。完整可校验样例见 [验证](validation.md)。

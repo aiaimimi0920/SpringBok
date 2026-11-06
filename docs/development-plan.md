@@ -3,6 +3,29 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
+## EMAIL-06：未完成预升级的独立修复（实施中，2026-11-06）
+
+负责人主 AI。EasyEmail 首次有数据 preview 在凭据重签时返回准确 UNKNOWN，源实例及
+持久认证备份保留，目标两 D1 尚无业务 schema、R2 已有附件；不清锁、不重放原任务或
+另建替代环境。本切片允许应用明确声明 `fromActions: ["preview"]` 的独立 repair，平台
+从已验证的父回执/原计划提供不可替换的 preview context、原资源/连接/秘密及 lane 移交。
+默认 repair 仍不接受 preview；业务空态、备份恢复、凭据转换和源未变证明由应用负责。
+成功修复必须同时证明 repair 与完整 preview 生命周期，保留父 UNKNOWN 历史，并允许
+原测试实例使用认证 provenance 走既有 destroy-preview；失败保持锁及不重放语义。
+先补合同、workerd 和真实浏览器回归，再实现并同步共享 AI/Pages 参考；正常精确 PR/main
+CI 后才更新控制面和新的固定 Windows executor，Linux pin 与旧任务 executor 不变。
+真实永久删除及正式域名/MX 切换仍待准确清单和明确批准，本切片不执行这些动作。
+
+本地合同/workerd/共享文档与安全检查 57 项通过；真实 Chrome/workerd 新 preview repair
+流程及原 repair、preview、同实例升级、四页 Neuro 回归均通过。新流程验证默认不允许
+preview 修复、原上下文/资源、一次派发、成功后原实例的清理审阅、父 UNKNOWN 与源实例
+保持。共享 `ai-docs/manifest.md`、`lifecycle.md` 同时供 Pages 渲染，示例（含 EasyEmail）
+校验和十页构建通过，actionlint 通过。宽范围 Windows 命令的 341 项中 310 passed、
+27 failed、4 skipped；失败集中在明确只支持 Linux 的 enrollment/journal/installer、
+对应级联断言及要求独立 TEMP 的测试，不修改其产品限制来制造绿灯。完整 Linux、
+Windows 执行器和浏览器仍须精确 PR/main CI 核验；本地结果不是平台发布或应用修复回执。
+证据在 `linshi/easyemail-springbok-20261106/email25-*`。
+
 ## EMAIL-05：固定实例生命周期的提交来源入口（实施中，2026-11-06）
 
 负责人主 AI。首次 EasyEmail UNKNOWN 保留账号执行 lane，独立新部署也在资源创建前

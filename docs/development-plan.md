@@ -21,6 +21,13 @@
 迟到的另一 SHA 不覆盖重开选择，保留失败记录，未放宽应用或权限断言。源码/合成
 验证不等于入口已上线，也不代表 EasyEmail 隔离应用部署或业务验收完成。
 
+精确 PR 首次浏览器 CI 在未改动 demo 的重启处超时；仅重跑失败 job 后 demo 已通过，
+但未改动 execution-review 无输出挂起至总时限取消。未跳过或放宽测试，给该步骤补充
+与 demo 相同的 Playwright 调用日志及 120 秒进程上限，便于准确定位下一次停点，不延长
+总超时。独立 Linux 临时副本以 Node 22.23.3 和官方 Playwright 镜像 Chromium 运行原
+execution-review 断言通过；它不等同 hosted Chrome/Node 22.23.4 精确 CI，也未证明
+云 runner 挂起的底层原因。旧 Windows demo 拒绝不支持的持久层，未记作本地通过。
+
 ## EMAIL-02：显式邮件目标、隔离预升级与先解绑删除（实施中，2026-11-06）
 
 负责人主 AI。范围仅为 v2 可空 email-routing 目标、Zone 单例身份锁、计划/提交只读

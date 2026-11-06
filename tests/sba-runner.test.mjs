@@ -125,6 +125,8 @@ $requestJson = [IO.File]::ReadAllText($RequestPath)
 Stage 'request-read'
 Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1" -ErrorAction Stop
 Stage 'utility-imported'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1" -ErrorAction Stop
+Stage 'management-imported'
 $request = $requestJson | ConvertFrom-Json
 Stage 'request-parsed'
 if ($request.action -ne 'update' -or $request.previous.applicationVersion -ne '1.0.0') { exit 7 }
@@ -252,6 +254,9 @@ test('native PowerShell receives spaced paths as arguments and has a bounded tim
 test('native executor validates checkout, invokes the entrypoint once and returns a bound receipt', { skip: process.platform !== 'win32' }, async t => {
   const f = await fixture(t);
   await writeFile(join(f.root, '.sba', 'springbok.ps1'), `param([string]$RequestPath,[string]$ResultPath)
+$ErrorActionPreference = 'Stop'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1" -ErrorAction Stop
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1" -ErrorAction Stop
 $input = Get-Content -LiteralPath $RequestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $result = [ordered]@{schemaVersion=2; taskId=$input.taskId; action=$input.action; sourceSha=$input.sourceSha; applicationVersion=$input.applicationVersion; status='deployed-unverified'; checks=@(@{id='fixture-ready'; passed=$true})}
 [IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 5 -Compress), [Text.UTF8Encoding]::new($false))

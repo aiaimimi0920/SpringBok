@@ -40,6 +40,15 @@ CI 和兼容控制面/新固定 Windows executor 发布；Linux 与历史任务 
 runner-images 历史延迟报告仅支持调查方向，不作为本次具体缓存故障的证明。
 当前仍未合并、未发布；须后续 hosted 证据核对该依赖初始化边界，不能预报修复成功。
 
+精确 PR `c5110bc` 的 hosted 阶段对照进一步收窄了原因：显式 Utility 导入后，原 preview
+和 update 均完成，首次 JSON 转换不再超时；同一 preview 到 destroy-preview 才在首次
+Management 命令 `Test-Path` 前停住，原 native executor 的首次 `Get-Content` 也超时。
+文件读取用时 10–19ms、显式 Utility 导入 32–443ms，已否定本地 JSON 文件读取迟滞。
+因此合成夹具改为显式导入实际所需的两个系统内置模块，第三个原生 executor 夹具也声明
+同一依赖。该对照支持 hosted 全局命令自动发现/加载路径的延迟，不证明具体缓存损坏或
+某个第三方模块负责；不修改产品的模块搜索策略，不绕过 JSON/文件/进程/生命周期断言。
+证据 `email28-native-job-128006478305/job.log`。修正后仍等精确完整 PR/main CI。
+
 ## EMAIL-06：未完成预升级的独立修复（已发布，应用修复未完成，2026-11-06）
 
 负责人主 AI。EasyEmail 首次有数据 preview 在凭据重签时返回准确 UNKNOWN，源实例及

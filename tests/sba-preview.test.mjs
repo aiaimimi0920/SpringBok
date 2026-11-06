@@ -66,6 +66,8 @@ $requestJson = [IO.File]::ReadAllText($RequestPath)
 Stage 'request-read'
 Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1" -ErrorAction Stop
 Stage 'utility-imported'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1" -ErrorAction Stop
+Stage 'management-imported'
 $r = $requestJson | ConvertFrom-Json
 Stage 'request-parsed'
 $checks = @(); $lifecycle = $null

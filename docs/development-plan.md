@@ -3,7 +3,7 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## EMAIL-07：失败副本修复的原基线继承（实施中，2026-11-06）
+## EMAIL-07：失败副本修复的原基线继承（实施中，2026-11-07）
 
 负责人主 AI。EMAIL-06 已正常合并、七工作流 PR/main CI 通过并发布兼容控制面和固定
 Windows executor。真实 EasyEmail repair 通过认证备份与原部分目标检查，但因当前源库和
@@ -22,6 +22,15 @@ CI 和兼容控制面/新固定 Windows executor 发布；Linux 与历史任务 
 继承原 baseline/实例、源与双 UNKNOWN 保留及成功副本清理审阅。普通和 EasyEmail 示例、
 十页共享文档构建通过；无 UI 布局改动，不新增解释型文案。当前仍待精确 PR/main 完整 CI、
 兼容控制面与新 Windows executor 发布，不能以本地流程代替真实 EasyEmail 云恢复。
+
+精确 PR `a382442` 的七工作流中六项通过，Deployment Contract Lab 的 Windows job
+有两个既有合成 PowerShell 用例在 60 秒应用时限到达后返回 `SBA_EXECUTION_TIMEOUT`；
+其余 41 项通过、1 项跳过。本机以同一六文件命令执行 43 passed/1 skipped，未复现。
+当前没有 hosted runner 进程栈或内部阶段证据，不能将原因定为新 repair 逻辑或偶发慢机。
+主 AI 仅给两个合成夹具加入固定阶段名/毫秒时间标记，失败时展示该标记及经校验的回执；
+不输出请求、环境或业务数据，不改产品执行器、成功断言、60 秒时限或工作流。AI/Pages
+共享参考不受测试诊断影响，无新增公开契约。仍须新精确 PR/main 完整 CI 后才发布。
+本地准确命令证据 `linshi/easyemail-springbok-20261106/email27-native-exact.log`。
 
 ## EMAIL-06：未完成预升级的独立修复（已发布，应用修复未完成，2026-11-06）
 

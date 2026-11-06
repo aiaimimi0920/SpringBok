@@ -60,14 +60,24 @@ test('native PowerShell copies and migrates a snapshot, updates fresh production
   await writeFile(join(checkout, '.sba', 'manifest.json'), JSON.stringify(previewManifest()), 'utf8');
   await writeFile(join(checkout, '.sba', 'entry.ps1'), `param([string]$RequestPath,[string]$ResultPath)
 $ErrorActionPreference = 'Stop'
+function Stage([string]$name) { [IO.File]::AppendAllText("$ResultPath.stages", "$name $([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())\n", [Text.UTF8Encoding]::new($false)) }
+Stage 'parse-request'
 $r = [IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
+Stage 'request-parsed'
 $checks = @(); $lifecycle = $null
 if ($r.action -eq 'preview') {
+  Stage 'copy-snapshot'
   $before = [IO.File]::ReadAllText($r.context.source.configuration.dataPath)
   [IO.File]::Copy($r.context.source.configuration.dataPath, $r.configuration.dataPath, $false)
   $data = [IO.File]::ReadAllText($r.configuration.dataPath) | ConvertFrom-Json
+  Stage 'snapshot-parsed'
   $data.schemaVersion = 2
-  [IO.File]::WriteAllText($r.configuration.dataPath, ($data | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+  $json = $data | ConvertTo-Json -Depth 8
+  Stage 'snapshot-serialized'
+  $encoding = New-Object Text.UTF8Encoding($false)
+  Stage 'snapshot-encoding'
+  [IO.File]::WriteAllText($r.configuration.dataPath, $json, $encoding)
+  Stage 'snapshot-written'
   if ($before -ne [IO.File]::ReadAllText($r.context.source.configuration.dataPath)) { exit 7 }
   foreach ($id in @('snapshot-copied','migration-verified','source-unchanged','side-effects-isolated')) { $checks += @{id=$id;passed=$true} }
   $digest = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($before))).Replace('-','').ToLowerInvariant()
@@ -85,13 +95,22 @@ if ($r.action -eq 'preview') {
 } else { exit 8 }
 $result = @{schemaVersion=3;taskId=$r.taskId;action=$r.action;sourceSha=$r.sourceSha;applicationVersion=$r.applicationVersion;status='succeeded';checks=$checks}
 if ($null -ne $lifecycle) { $result.lifecycle = $lifecycle }
+Stage 'write-result'
 [IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
+Stage 'result-written'
 `, 'utf8');
   const git = args => execFileSync('git', ['-C', checkout, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git(['init']); git(['config', 'user.name', 'SBA Test']); git(['config', 'user.email', 'test@example.invalid']); git(['config', 'core.autocrlf', 'false']);
   git(['remote', 'add', 'origin', 'https://github.com/example/application.git']); git(['add', '.sba']); git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'synthetic preview']);
   const request = previewRequest(); request.sourceSha = git(['rev-parse', 'HEAD']); request.configuration = { dataPath: target }; request.context.source.configuration = { dataPath: source };
-  const run = async input => { const output = await executeCheckout({ checkout, request: input, tempRoot: root, environment: process.env }); assert.equal(output.result.status, 'succeeded', JSON.stringify(output.result)); return output; };
+  const run = async input => {
+    const output = await executeCheckout({ checkout, request: input, tempRoot: root, environment: process.env });
+    if (output.result.status !== 'succeeded') {
+      const stages = await readFile(join(output.directory, 'application-result.json.stages'), 'utf8').catch(error => { if (error.code === 'ENOENT') return 'not-started'; throw error; });
+      t.diagnostic(`Synthetic PowerShell fixture stages: ${stages}`);
+    }
+    assert.equal(output.result.status, 'succeeded', JSON.stringify(output.result)); return output;
+  };
   await run(request);
   assert.deepEqual(JSON.parse(await readFile(source, 'utf8')), original);
   assert.deepEqual(JSON.parse(await readFile(target, 'utf8')), { ...original, schemaVersion: 2 });

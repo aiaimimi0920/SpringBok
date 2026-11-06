@@ -30,15 +30,16 @@ export function applicationSourceFields(container, load) {
     if (!fields.disabled && form.reportValidity()) void load({ connectionId: github.value, repository: repository.value, sourceSha: sourceSha.value });
   });
   return {
-    reset(connections = []) {
+    reset(connections = [], binding = null) {
       form.hidden = true; toggle.setAttribute('aria-expanded', 'false');
       github.replaceChildren(new Option('请选择连接', ''));
-      for (const row of connections.filter(row => row.provider === 'github' && row.state === 'verified' && row.deploymentAvailable !== false)) {
+      for (const row of connections.filter(row => row.provider === 'github' && row.state === 'verified' && row.deploymentAvailable !== false && (!binding || row.id === binding.connectionId))) {
         const option = new Option(row.name + ' · ' + row.target, row.id); option.dataset.target = row.target; github.append(option);
       }
       if (github.options.length === 2) github.selectedIndex = 1;
       const target = github.selectedOptions[0]?.dataset.target;
-      repository.value = target && !target.startsWith('@') ? target : ''; sourceSha.value = '';
+      github.disabled = !!binding; repository.readOnly = !!binding;
+      repository.value = binding?.repository ?? (target && !target.startsWith('@') ? target : ''); sourceSha.value = '';
     },
     sync({ hidden, disabled }) { container.hidden = hidden; fields.disabled = disabled; toggle.disabled = disabled; }
   };

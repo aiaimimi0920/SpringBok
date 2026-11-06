@@ -13,9 +13,17 @@ const confirm = async () => {
   await page.locator('#service-submit').evaluate(button => { button.click(); button.click(); });
   await page.waitForFunction(() => !document.getElementById('service-dialog').open);
 };
-const chooseVersion = async () => {
-  await page.waitForFunction(sha => document.querySelector(`#service-version option[value="${sha}"]`), updatedSha);
-  await page.locator('#service-version').selectOption(updatedSha);
+const chooseVersion = async (fixed = false) => {
+  if (fixed) {
+    await page.getByRole('button', { name: '指定来源', exact: true }).click();
+    assert.equal(await page.getByLabel('GitHub 连接', { exact: true }).isDisabled(), true);
+    assert.equal(await page.getByLabel('仓库', { exact: true }).inputValue(), 'owner/repo');
+    await page.getByLabel('提交 SHA', { exact: true }).fill(updatedSha);
+    await page.getByRole('button', { name: '读取版本', exact: true }).click();
+  } else {
+    await page.waitForFunction(sha => document.querySelector(`#service-version option[value="${sha}"]`), updatedSha);
+    await page.locator('#service-version').selectOption(updatedSha);
+  }
   await page.waitForFunction(() => !document.getElementById('service-submit').disabled);
 };
 try {
@@ -27,7 +35,7 @@ try {
   complete(await (await machine()).json()); await ready(page);
   const parent = page.locator(`[data-instance-id="${parentId}"]`);
   await parent.getByRole('button', { name: '预升级测试', exact: true }).click();
-  await chooseVersion();
+  await chooseVersion(true);
   assert.match(await page.locator('#service-environment').inputValue(), /^test-[a-f0-9]{12}$/);
   assert.equal(await page.locator('#service-environment').isDisabled(), true);
   await reviewService(page); assert.equal(state.dispatches, 1);
@@ -48,7 +56,7 @@ try {
   assert.equal(await preview.getByRole('link', { name: '测试地址', exact: true }).getAttribute('href'), isolated.url);
   assert.equal(await preview.getByRole('button', { name: '升级', exact: true }).count(), 0);
   await page.screenshot({ path: join(directory, 'upgrade-preview-instances-320.png') });
-  await parent.getByRole('button', { name: '升级', exact: true }).click(); await chooseVersion(); await reviewService(page); await confirm();
+  await parent.getByRole('button', { name: '升级', exact: true }).click(); await chooseVersion(true); await reviewService(page); await confirm();
   assert.equal(state.dispatches, 3); assert.equal(state.created.length, 2);
   assert.equal(state.request.action, 'update'); assert.deepEqual(state.request.configuration, original);
   complete(await (await machine()).json()); await ready(page);

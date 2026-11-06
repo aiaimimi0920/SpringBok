@@ -11,10 +11,32 @@ try{
   const original=(await service('plan',{...input,github,repository:'owner/repo'})).json();assert.equal((await submit(original)).status,200);
   receipt(await(await machine()).json(),'unknown',{errorCode:'ADMIN_PUBLISH_FAILED'});
   const parent=(await api('reconcile',{taskId:original.taskId})).json();
+  state.tagPages=[];
   await ready(page);await page.getByRole('button',{name:'修复',exact:true}).click();
   await page.locator('#service-repair').waitFor();assert.equal(await page.locator('#service-submit').isDisabled(),true);
   state.manifestOverride={schemaVersion:3,actions:{...previewManifest().actions,repair:{timeoutSeconds:300}},repairs:[{id:'admin-publish',name:'补发后台',fromErrorCodes:['ADMIN_PUBLISH_FAILED'],secretNames:['CLOUDFLARE_API_TOKEN']}]};
-  await page.locator('#service-version').selectOption(updatedSha);
+  await page.getByRole('button',{name:'指定来源',exact:true}).click();
+  assert.equal(await page.getByLabel('GitHub 连接',{exact:true}).isDisabled(),true);
+  assert.equal(await page.getByLabel('GitHub 连接',{exact:true}).inputValue(),github.id);
+  assert.equal(await page.getByLabel('仓库',{exact:true}).inputValue(),'owner/repo');
+  assert.equal(await page.getByLabel('仓库',{exact:true}).getAttribute('readonly'),'');
+  await page.getByLabel('提交 SHA',{exact:true}).fill(updatedSha);
+  const reads=()=>requests.filter(row=>row.path.endsWith('/application')).length, before=reads();
+  await page.getByLabel('仓库',{exact:true}).evaluate(input=>{input.value='owner/second';});
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.locator('#service-dialog-notice').filter({hasText:'来源必须与原实例的连接和仓库一致'}).waitFor();
+  assert.equal(reads(),before);
+  await page.getByLabel('仓库',{exact:true}).evaluate(input=>{input.value='owner/repo';});
+  state.manifestOverride.id='different-app';
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.locator('#service-dialog-notice').filter({hasText:'所选版本不是同一个服务'}).waitFor();
+  assert.equal(await page.locator('#service-submit').isDisabled(),true);delete state.manifestOverride.id;
+  await page.getByLabel('提交 SHA',{exact:true}).fill(parent.job.request.sourceSha);
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.locator('#service-dialog-notice').filter({hasText:'版本必须高于 v1.0.0'}).waitFor();
+  assert.equal(await page.locator('#service-submit').isDisabled(),true);
+  await page.getByLabel('提交 SHA',{exact:true}).fill(updatedSha);
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
   await page.waitForFunction(()=>!document.getElementById('service-submit').disabled);
   assert.equal(await page.locator('#service-repair').inputValue(),'admin-publish');
   await page.locator('#service-submit').click();await page.locator('#service-review').waitFor({state:'visible'});
@@ -23,7 +45,11 @@ try{
   for(const width of [1440,390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:join(directory,`service-repair-${width}.png`)});}
   await page.locator('#service-back').click();assert.equal(await page.locator('#service-review').isVisible(),false);
   await page.keyboard.press('Escape');assert.equal(await page.getByRole('button',{name:'修复',exact:true}).evaluate(el=>el===document.activeElement),true);assert.equal(state.dispatches,1);
-  await page.getByRole('button',{name:'修复',exact:true}).click();await page.locator('#service-version').selectOption(updatedSha);
+  await page.getByRole('button',{name:'修复',exact:true}).click();
+  await page.getByRole('button',{name:'指定来源',exact:true}).click();
+  assert.equal(await page.getByLabel('提交 SHA',{exact:true}).inputValue(),'');
+  await page.getByLabel('提交 SHA',{exact:true}).fill(updatedSha);
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
   await page.waitForFunction(()=>!document.getElementById('service-submit').disabled);
   await page.locator('#service-submit').click();await page.locator('#service-review').waitFor({state:'visible'});
   await page.locator('#service-submit').evaluate(button=>{button.click();button.click();});
@@ -33,5 +59,5 @@ try{
   await ready(page);assert.equal(await page.getByRole('button',{name:'修复',exact:true}).count(),0);
   assert.deepEqual((await api('state',{taskId:original.taskId})).json().job,parent.job);
   const repairPlans=requests.filter(r=>r.path.endsWith('/plan')&&r.body?.action==='repair');assert.equal(repairPlans.length,2);
-  assert.deepEqual(errors,[]);console.log('Repair fixed-version selection, preview/back/cancel, one dispatch, unchanged parent and responsive UI passed.');
+  assert.deepEqual(errors,[]);console.log('Repair bound repository/connection and fixed SHA without tags, preview/back/cancel, one dispatch, unchanged parent and responsive UI passed.');
 }finally{await suite.close();}

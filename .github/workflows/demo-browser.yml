@@ -78,6 +78,8 @@ jobs:
         run: node tests/browser/service-verification.mjs
       - name: Service repair browser flow
         run: node tests/browser/service-repair.mjs
+      - name: Failed preview independent repair and cleanup review
+        run: node tests/browser/preview-repair.mjs
       - name: Check bounded service discovery across slow repositories and pages
         run: node tests/browser/service-discovery.mjs
       - name: Check explicit immutable sources without default-branch application declarations

@@ -8,6 +8,7 @@ import { canVerifyService, verificationState } from './service-verification.mjs'
 import { repairEnabled, repairableJob } from './service-repair.mjs';
 import { recoverablePreparation } from './preparation-recovery.mjs';
 import { canRestartUpdate } from './unstarted-update-recovery.mjs';
+import { completedPreview } from './service-preview.mjs';
 
 async function deletionState(env, vault, owner, state) {
   const deletion = await vault.deletionRecord(owner, state.instance.id);
@@ -47,7 +48,7 @@ export async function serviceState(env, vault, owner, input) {
     canRestart: connectedEnabled(env) && canRestartUpdate(plan, record.job) && record.attempts.length < 3,
     canRepair: connectedEnabled(env) && repairEnabled(env) && repairableJob(plan, await connectedStub(env, latest.taskId).inspect(owner)),
     canPreview: connectedEnabled(env) && terminal && !previewInstance,
-    canDeletePreview: connectedEnabled(env) && terminal && plan.operation?.action === 'preview',
-    testUrls: plan.operation?.action === 'preview' && terminal ? record.job.result.lifecycle?.urls ?? [] : [],
+    canDeletePreview: connectedEnabled(env) && completedPreview(plan, record.job),
+    testUrls: completedPreview(plan, record.job) ? record.job.result.lifecycle.urls : [],
     ...(plan.operation?.action === 'destroy-preview' && record.job?.status === 'succeeded' ? { status: 'deleted' } : {}) });
 }

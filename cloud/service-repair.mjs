@@ -4,10 +4,11 @@ import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSba
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 import { compareVersions } from '../src/sba/contract.mjs';
 import { configureApplicationSecrets } from './application-secrets.mjs';
+import { repairActions } from '../src/sba/repair.mjs';
 
 export const repairEnabled = env => env.ENABLE_SERVICE_REPAIR === 'yes';
-export const repairableJob = (plan, job) => !plan.previewOf && !plan.verificationOf &&
-  ['deploy', 'update', 'repair'].includes(job?.request.action) && ['unknown', 'failed'].includes(job?.status) &&
+export const repairableJob = (plan, job) => !plan.verificationOf &&
+  (plan.previewOf ? job?.request.action === 'preview' : ['deploy', 'update', 'repair'].includes(job?.request.action)) && ['unknown', 'failed'].includes(job?.status) &&
   job.result?.status === job.status && typeof job.result.errorCode === 'string' && !!job.permitId && Number.isSafeInteger(job.runId);
 
 export async function serviceRepairDraft(vault, owner, input) {
@@ -28,9 +29,10 @@ export async function serviceRepairDraft(vault, owner, input) {
     application.repository === old.application.repository && compareVersions(application.manifest.version, job.request.applicationVersion) > 0 &&
     input.sourceSha !== job.request.sourceSha && canonicalSba(application.declaration) === canonicalSba(old.application.declaration));
   const repair = application.manifest.repairs?.find(row => row.id === input.repairId);
-  requireSba(repair && repair.fromErrorCodes.includes(job.result.errorCode));
+  requireSba(repair && repair.fromErrorCodes.includes(job.result.errorCode) && repairActions(repair).includes(job.request.action));
   const context = { repairId: repair.id, parentTaskId: input.previousTaskId, parentRunId: job.runId,
-    requestDigest: job.requestDigest, resultDigest: await sbaDigest(job.result), errorCode: job.result.errorCode };
+    requestDigest: job.requestDigest, resultDigest: await sbaDigest(job.result), errorCode: job.result.errorCode,
+    ...(old.previewOf ? { preview: structuredClone(job.request.context) } : {}) };
   const operation = { action: 'repair', instanceId: input.instanceId, previousTaskId: input.previousTaskId,
     previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };
   requireSba(canonicalSba(application.manifest.runtime) === canonicalSba(old.application.manifest.runtime));

@@ -4,9 +4,14 @@ import { deploymentTargets, deploymentValue } from './deployment-contract.mjs';
 import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSbaPolicy } from './sba-control.mjs';
 import { compareVersions } from '../src/sba/contract.mjs';
 import { resourceIdentity, validatePreviewInventory } from '../src/sba/preview.mjs';
+import { repairedPreview } from '../src/sba/repair.mjs';
 
 export const continuesInstance = plan => ['update', 'destroy-preview', 'repair'].includes(plan.operation?.action);
 export const createsResources = plan => !!plan.accounts && !continuesInstance(plan);
+export const completedPreview = (plan, job) => !!plan.previewOf &&
+  (plan.operation?.action === 'preview' || repairedPreview(job?.request ?? {})) &&
+  ['succeeded', 'deployed-unverified'].includes(job?.status) && job.result?.status === job.status &&
+  job.result.lifecycle?.resources.every(row => row.status === 'created');
 export function previewInventory(plan) {
   const accountId = deploymentValue(plan.configuration, plan.application.declaration.accountPath);
   return [...Object.entries(plan.resources).map(([key, row]) => ({ key: 'resource-' + key, kind: row.kind, accountId: row.accountId, remoteId: row.remoteId, name: row.name })),
@@ -32,10 +37,10 @@ export async function servicePreviewDraft(vault, owner, input) {
   exactSba(input, ['action', 'instanceId', 'previousTaskId', ...(remove ? [] : ['sourceSha', 'environment'])]);
   const { plan: old, job } = await currentSource(vault, owner, input);
   if (remove) {
-    requireSba(old.operation?.action === 'preview' && old.previewOf && job.result.lifecycle?.resources.every(row => row.status === 'created'));
+    requireSba(completedPreview(old, job));
     for (const reference of Object.values(old.connections)) vault.activeConnection(reference.id, reference.revision);
     const context = { instanceId: input.instanceId, previewTaskId: input.previousTaskId, resultDigest: await sbaDigest(job.result), resources: previewInventory(old) };
-    requireSba(canonicalSba(context.resources) === canonicalSba(job.request.context.resources));
+    requireSba(canonicalSba(context.resources) === canonicalSba((repairedPreview(job.request) ? job.request.context.preview : job.request.context).resources));
     const operation = { action: 'destroy-preview', instanceId: input.instanceId, previousTaskId: input.previousTaskId,
       previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };
     const executor = connectedSbaPolicy(vault.env, old.application.manifest.runtime).github;

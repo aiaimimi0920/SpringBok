@@ -145,11 +145,13 @@ export class DeploymentLocks extends DurableObject {
   async claimRepair(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,context){
     requireSba(this.env.ENABLE_SERVICE_REPAIR==='yes');
     exactSba(update,['instanceId','previousTaskId']);
-    exactSba(context,['repairId','parentTaskId','parentRunId','requestDigest','resultDigest','errorCode']);
+    exactSba(context,['repairId','parentTaskId','parentRunId','requestDigest','resultDigest','errorCode',...(Object.hasOwn(context,'preview')?['preview']:[])]);
     requireSba(context.parentTaskId===update.previousTaskId);
     const parent=connectedStub(this.env,update.previousTaskId),{plan}=await parent.bootstrap(owner),job=await parent.inspect(owner);
-    requireSba(!plan.previewOf&&!plan.verificationOf&&(plan.operation?.instanceId??update.previousTaskId)===update.instanceId&&
-      ['deploy','update','repair'].includes(job?.request.action)&&['unknown','failed'].includes(job?.status)&&job.result?.status===job.status&&!!job.permitId&&
+    requireSba(!plan.verificationOf&&(plan.operation?.instanceId??update.previousTaskId)===update.instanceId&&
+      (plan.previewOf?job?.request.action==='preview'&&canonicalSba(context.preview)===canonicalSba(job.request.context):
+        !Object.hasOwn(context,'preview')&&['deploy','update','repair'].includes(job?.request.action))&&
+      ['unknown','failed'].includes(job?.status)&&job.result?.status===job.status&&!!job.permitId&&
       job.runId===context.parentRunId&&job.requestDigest===context.requestDigest&&await sbaDigest(job.result)===context.resultDigest&&job.result.errorCode===context.errorCode);
     return this.#claim(owner,taskId,accountId,scope,resourceKeys,digest,observed,update,true);
   }

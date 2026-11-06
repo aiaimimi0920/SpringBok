@@ -27,7 +27,8 @@ function loading(delta) { loadingCount = Math.max(0, loadingCount + delta); $('s
 const ref = id => { const row = connections.find(row => row.id === id && row.state === 'verified' && row.deploymentAvailable !== false); if (!row) throw new Error('连接不可用，请检查连接设置'); return { id: row.id, revision: row.revision }; };
 const current = version => version === generation;
 const currentDialog = (version, pageVersion) => version === dialogGeneration && current(pageVersion) && $('service-dialog').open;
-const repairOptions = data => data?.manifest?.repairs?.filter(row => row.fromErrorCodes.includes(updateTarget?.job?.errorCode)) ?? [];
+const repairOptions = data => data?.manifest?.repairs?.filter(row => row.fromErrorCodes.includes(updateTarget?.job?.errorCode) &&
+  (row.fromActions ?? ['deploy','update','repair']).includes(updateTarget?.instance?.action)) ?? [];
 const sourceFields = applicationSourceFields($('service-source'), loadSource);
 
 function controls() {
@@ -142,10 +143,6 @@ function renderInstances() {
         const resume = focusKey(element('button', state.canRestart ? '恢复升级' : '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
         resume.addEventListener('click', () => { const version = generation; resume.disabled = true; void resumePreparation(state, resume, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }, !!state.canRestart); }); actions.append(resume);
       }
-      if(state?.canRepair){
-        const repair=focusKey(element('button','修复'),id+'/repair');repair.type='button';repair.disabled=!session;
-        repair.addEventListener('click',()=>void openDialog(state,repair,'repair'));actions.append(repair);
-      }
       if(state?.canVerify){
         const verify=focusKey(element('button','验证可用性'),id+'/verify');verify.type='button';verify.disabled=!session;
         verify.addEventListener('click',async()=>{
@@ -154,6 +151,10 @@ function renderInstances() {
           catch(error){if(current(version))notice(error.message,'error');}
         });actions.append(verify);
       }
+    }
+    if(state?.canRepair){
+      const repair=focusKey(element('button','修复'),id+'/repair');repair.type='button';repair.disabled=!session;
+      repair.addEventListener('click',()=>void openDialog(state,repair,'repair'));actions.append(repair);
     }
     row.append(title, version, target, badge, resource, actions); li.append(row);
     const detailPanel = element('div', undefined, 'service-details'); detailPanel.id = 'details-' + id; detailPanel.hidden = !expanded.has(id);

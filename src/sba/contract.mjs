@@ -1,6 +1,6 @@
 // 平台仅校验并调用应用契约，不解释迁移或业务实现。
 import { PREVIEW_ACTIONS, previewAction, validatePreviewContext, validatePreviewResult } from './preview.mjs';
-import { validateRepairs, validateRepairContext, validateRepairResult } from './repair.mjs';
+import { validateRepairs, validateRepairContext, validateRepairResult, repairedPreview } from './repair.mjs';
 import { runtimeProfile } from './runtime.mjs';
 export class SbaContractError extends Error {}
 const fail = message => { throw new SbaContractError(message); };
@@ -71,7 +71,7 @@ export function validateRequest(value, manifest) {
 }
 
 export function validateResult(value, request) {
-  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode', ...(previewAction(request.action) ? ['lifecycle'] : [])]);
+  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode', ...(previewAction(request.action) || repairedPreview(request) ? ['lifecycle'] : [])]);
   for (const key of ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion']) {
     if (value[key] !== request[key]) fail('result identity mismatch');
   }
@@ -88,6 +88,6 @@ export function validateResult(value, request) {
   }
   if (Object.hasOwn(value, 'errorCode') && (typeof value.errorCode !== 'string' || !/^[A-Z][A-Z0-9_]{1,79}$/.test(value.errorCode))) fail('invalid error code');
   if (previewAction(request.action)) validatePreviewResult(value, request);
-  if (request.action === 'repair') validateRepairResult(value);
+  if (request.action === 'repair') validateRepairResult(value, request);
   return structuredClone(value);
 }

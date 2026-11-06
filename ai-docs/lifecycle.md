@@ -27,7 +27,7 @@ update、preview、repair 必须比 previous 版本更高且 SHA 不同。verify
 | status | succeeded / deployed-unverified / failed / unknown |
 | checks | 最多 30 个唯一 `{id, passed}`；id 为小写标识，passed 为布尔值 |
 | errorCode | 可选安全错误码，匹配 `[A-Z][A-Z0-9_]{1,79}`；不得添加原异常文本 |
-| lifecycle | 仅预升级动作可用，结构见下文 |
+| lifecycle | 仅预升级动作及显式修复预升级副本可用，结构见下文 |
 
 succeeded 必须至少一项检查且全部为 true。退出码 0 并不能单独证明成功；非零、缺失、身份不符或格式错误均不能接受为成功。deployed-unverified 不等于业务验收通过，verify 和 repair 不允许该状态。
 
@@ -71,7 +71,19 @@ preview 成功要求所有资源 created、所有批准 urls、非空 snapshot�
 
 repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。
 
+仅修复原 preview 时，context 额外且必须包含 `preview`，其值为平台从已验证父回执及原计划
+继承的完整 preview context（source、resources、urls）；客户端不能提供或替换。所选修复模板
+必须显式允许父 action=preview。源 SHA 必须与失败副本和新修复提交都不同；应用版本继续递增，
+runtime、原资源、配置、连接与秘密来源均保持。新任务原子接管原执行 lane，原 UNKNOWN/failed
+及其 run、request、result 摘要仍保留；在途、陈旧 head、无认证回执或重复派发继续拒绝。
+
 repair 成功必须通过 repair-completed、data-preserved、unchanged-resources-verified、service-ready。service-ready 证明应用声明的配置就绪范围，不自动证明用户已完成 Access、邮箱验证或后台登录。
+
+修复预升级副本还必须提供完整 preview lifecycle，并通过其四项检查。成功后仍使用原副本
+instanceId，新 repair task 成为 head；后续 destroy-preview 的 previewTaskId/resultDigest 绑定
+新 repair 回执，资源仍是原副本清单，不获得源实例写权限。应用持久 provenance 也必须绑定
+原 instance 与新任务，不能把普通 repair 成功或旧 UNKNOWN 当作清理授权。该合同需新控制面与
+固定 executor 一起发布；真实修复与永久删除分别验收，不以本地测试替代。
 
 业务秘密的 repair 授权沿用原实例 profile，并与 repair 声明的 secretNames 取受限范围；
 不允许通过 repair 输入替换 profile、扩大名称或读取管理员 bootstrap 密码。未选名称在
@@ -79,7 +91,7 @@ repair 成功必须通过 repair-completed、data-preserved、unchanged-resource
 状态与具体版本边界见 [云套件](cloud-suite.md)。应用仍负责根据父证据和实际资源判断可
 修复边界，不得把取得凭据或平台继续持有的 lane 当作原云操作可以重放的证明。
 
-当前实例 head 的终态 repair 可以创建一次独立 verify，与 deploy/update 使用相同的
+普通实例 head 的终态 repair 可以创建一次独立 verify，与 deploy/update 使用相同的
 固定 SHA/version/config 和一次性 reservation。verify 请求不继承 repair context，全部
 秘密为 verification-not-applicable；在途任务、陈旧 head、preview 和 verify 自身不适用。
 验证成功不改写 repair 或原部署回执，不提升 UNKNOWN，也不释放其未知资源锁。此能力

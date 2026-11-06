@@ -40,6 +40,11 @@
 
 Worker 名称匹配 `[a-z][a-z0-9-]{1,62}`。域名目标必须为 HTTPS origin，无尾部斜线、路径、端口或凭据。Zone 是共享域名资源，不能随服务删除；部署配置引用域名不等于授权任意 DNS 更改。
 
+选择已登记 Zone 的子域部署时，计划和确认提交均重新核对归属及 DNS。完整列表中的同名
+MX/TXT 可保留，与 HTTP Worker Custom Domain 共存；平台不删除或修改这些邮件/验证
+记录。A/AAAA/CNAME、其他类型、返回外部主机名、不完整列表或超过 100 项仍拒绝，不
+覆盖已有 HTTP 地址。应用仍须自行核对 Custom Domain 占用和部署后的绑定/业务结果。
+
 Pages 项目名沿用同一保守名称规则。github-actions 目标值为 `.github/workflows/name.yml@instance`
 或 `.yaml`；文件名只接受字母、数字、下划线、连字符，环境后缀必须等于当前实例环境。
 repositoryPath 由平台填入已批准应用仓库，不能作为普通字段传入。凭据仅来自用户的来源

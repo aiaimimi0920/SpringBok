@@ -19,7 +19,9 @@ try{
     if(url.origin==='https://api.cloudflare.com'){
       if(url.pathname.startsWith('/client/v4/zones')){
         assert.equal(request.method,'GET');const zone={id:zoneId,name:'example.com',status:'active',account:{id:account}};
-        if(url.pathname.endsWith('/dns_records'))return dnsDenied?Response.json({error:'private-upstream-diagnostic'},{status:403}):Response.json({success:true,result:[],result_info:{total_count:0}});
+        if(url.pathname.endsWith('/dns_records'))return dnsDenied?Response.json({error:'private-upstream-diagnostic'},{status:403}):Response.json({success:true,result:[
+          {id:'mail-mx',name:'accounts.example.com',type:'MX',content:'route1.mx.cloudflare.net',priority:10},
+          {id:'mail-spf',name:'accounts.example.com',type:'TXT',content:'v=spf1 include:_spf.mx.cloudflare.net ~all'}],result_info:{total_count:2}});
         return Response.json({success:true,result:url.pathname.endsWith('/zones')?[zone]:zone});
       }
       if(url.pathname.endsWith('/workers/subdomain'))return Response.json({success:true,result:{subdomain:'test'}});

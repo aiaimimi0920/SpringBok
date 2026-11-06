@@ -56,7 +56,8 @@ async function domainFixture(){
       assert.equal(request.method,'GET');state.zoneReads++;
       if(url.pathname.endsWith('/dns_records')){
         if(state.dnsDenied)return Response.json({error:'synthetic-private-upstream-body'},{status:403});
-        return Response.json({success:true,result:state.dnsOccupied?[{id:'existing'}]:[],result_info:{total_count:state.dnsOccupied?1:0}});
+        const records=state.dnsRecords??(state.dnsOccupied?[{id:'existing'}]:[]);
+        return Response.json({success:true,result:records,result_info:{total_count:state.dnsTotal??records.length}});
       }
       return Response.json({success:true,result:url.pathname.endsWith('/zones')?[zone]:zone});
     }
@@ -116,6 +117,34 @@ test('selected Zone resolves a signed subdomain, is rechecked at submit and neve
     assert.equal(state.request.configuration.server.url,'https://accounts.example.com');assert.equal(state.dispatches,1);
     const permit=await(await machine()).json();assert.deepEqual(permit.secrets,{CLOUDFLARE_API_TOKEN:fakeToken});
     await f.restart();assert.equal((await submit(plan)).status,200);assert.equal(state.dispatches,1);
+  }finally{await f.close();}
+});
+test('mail DNS is preserved while HTTP domains are planned and submitted exactly once',async()=>{
+  const {f,state,preview,submit}=await domainFixture();
+  try{
+    state.dnsRecords=[{id:'mail-mx',name:'accounts.example.com',type:'MX',content:'route1.mx.cloudflare.net',priority:10},
+      {id:'mail-spf',name:'accounts.example.com',type:'TXT',content:'v=spf1 include:_spf.mx.cloudflare.net ~all'}];
+    const before=structuredClone(state.dnsRecords),plan=await preview();
+    assert.equal(plan.plan.configuration.server.url,'https://accounts.example.com');
+    assert.equal((await submit(plan)).status,200);assert.equal(state.dispatches,1);
+    assert.deepEqual(state.dnsRecords,before);assert.equal(state.creates.length,1);
+  }finally{await f.close();}
+});
+test('mail DNS allowance never hides HTTP conflicts, foreign names or incomplete DNS lists',async()=>{
+  const {f,state,input,api,preview,submit}=await domainFixture();
+  try{
+    for(const type of ['A','AAAA','CNAME','NS','HTTPS','SVCB','SRV','unknown']){
+      state.dnsRecords=[{id:'existing',name:'accounts.example.com',type,content:'foreign.example.com'}];
+      assert.equal((await api('plan',input)).json().error,'domain-dns-not-empty');
+    }
+    state.dnsRecords=[{id:'foreign',name:'other.example.com',type:'TXT',content:'verification'}];
+    assert.equal((await api('plan',input)).json().error,'domain-dns-not-empty');
+    state.dnsRecords=[];state.dnsTotal=1;
+    assert.equal((await api('plan',input)).json().error,'domain-dns-not-empty');
+    state.dnsTotal=0;const plan=await preview();
+    state.dnsRecords=[{id:'late',name:'accounts.example.com',type:'CNAME',content:'foreign.example.com'}];delete state.dnsTotal;
+    assert.equal((await submit(plan)).status,409);
+    assert.equal(state.creates.length,0);assert.equal(state.dispatches,0);
   }finally{await f.close();}
 });
 test('Zone ownership/status/DNS drift, arbitrary suffix and forged registration reject before any provisioning',async()=>{

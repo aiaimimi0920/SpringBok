@@ -95,7 +95,12 @@ try {
   assert.equal((await last()).aborted, false, 'Pagehide does not claim to cancel or roll back a mutation');
   await page.evaluate(() => { window.readProbe.release(); dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); }); await ready();
   assert.equal((await page.evaluate(() => window.readProbe.records)).filter(row => row.action === 'connect').length, 1, 'No automatic mutation replay');
+  await page.locator('#resource-dialog').evaluate(dialog => {
+    window.readProbe.dialogClosed = new Promise(resolve => dialog.addEventListener('close', () => resolve(), { once: true }));
+  });
   await page.keyboard.press('Escape');
+  await page.evaluate(() => window.readProbe.dialogClosed);
+  assert.equal(await page.locator('#resource-add').evaluate(button => document.activeElement === button), true, 'Wait for native close and focus restoration before the next keyboard action');
   await page.setViewportSize({ width: 320, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.locator('#resource-view-kind').focus(); await page.keyboard.press('Enter');

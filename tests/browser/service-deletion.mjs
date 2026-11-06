@@ -34,3 +34,29 @@ try {
   await ready(page); await page.getByText('已删除', { exact: true }).waitFor(); assert.equal(live.deletes.length, 3); assert.deepEqual(errors, []);
   console.log('Service deletion UI passed: exact inventory, cancel/focus, shared-resource rejection, responsive confirmation, persisted result (synthetic providers).');
 } finally { await s.close(); }
+
+const recovery = await serviceBrowser();
+try {
+  const { page, service, input, submit, machine, receipt, requests, errors } = recovery;
+  const initial = (await service('plan', input)).json(); await submit(initial); receipt(await (await machine()).json());
+  await service('service-state', { instanceId: initial.taskId, reconcile: true });
+  const live = deletionProvider(recovery), review = (await service('delete-plan', { instanceId: initial.taskId, previousTaskId: initial.taskId })).json();
+  live.lost = true;
+  assert.equal((await service('delete-submit', { ...review, acceptUnverifiedReferences: false })).json().status, 'delete-unknown');
+  await ready(page); const check = page.getByRole('button', { name: '核对删除结果', exact: true });
+  await check.evaluate(button => { button.click(); button.click(); });
+  await page.getByText('删除结果仍未确认', { exact: true }).waitFor();
+  await check.waitFor(); await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === '核对删除结果' && !button.disabled));
+  assert.equal(requests.filter(row => row.path.endsWith('/delete-reconcile')).length, 1);
+  assert.equal(live.database, true); assert.equal(live.deletes.length, 2);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: join(directory, `service-delete-reconcile-${width}.png`) });
+  }
+  live.database = false; await check.focus(); await page.keyboard.press('Enter');
+  await page.getByText('已删除', { exact: true }).waitFor(); assert.equal(await check.count(), 0);
+  await ready(page); await page.getByText('已删除', { exact: true }).waitFor();
+  assert.equal(live.deletes.length, 2); assert.deepEqual(errors, []);
+  console.log('Deletion reconciliation UI passed: one read-only check per double click, unknown while present, original inventory absent, history retained (synthetic providers).');
+} finally { await recovery.close(); }

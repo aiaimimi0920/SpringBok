@@ -140,6 +140,6 @@ passed check 解释成无写入。平台的上下文是执行证据，不代替�
 验证成功不改写 repair 或原部署回执，不提升 UNKNOWN，也不释放其未知资源锁。此能力
 已随 SUITE-06 发布控制面；平台上线和源码回归通过不是应用修复或线上验证回执。
 
-平台普通服务删除不是 manifest 中的第七个 destroy 动作；不要自行发明接口。删除流程核对平台持有的资源身份并由用户明确确认。源码新增的 R2 删除、邮件引用检查及 catch-all 先解绑支持与限制见 [部署声明](deployment.md)；本地测试通过不代表控制面已发布或真实实例已清理。
+平台普通服务删除不是 manifest 中的第七个 destroy 动作；不要自行发明接口。删除流程核对平台持有的资源身份并由用户明确确认。R2 删除、邮件引用检查、catch-all 先解绑及普通 delete-unknown 的只读核对收尾支持与限制见 [部署声明](deployment.md)；核对仅在原清单全部不存在后释放原 claim，不赋予重新删除权限。本地测试通过不代表控制面已发布或真实实例已清理。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[preview.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/preview.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。

@@ -92,3 +92,29 @@ export async function deleteService(vault, owner, input) {
   }
   record.updatedAt = Date.now(); save(vault, record); return record;
 }
+
+export async function reconcileDeletion(vault, owner, input) {
+  exactSba(input, ['instanceId', 'operationId']); connectedTaskId(input.operationId);
+  const record = deletionRecord(vault, owner, input.instanceId);
+  requireSba(record && record.operationId === input.operationId && ['delete-unknown', 'deleted'].includes(record.status));
+  if (record.status === 'deleted') return record;
+  const { instance } = await source(vault, owner, { instanceId: record.instanceId, previousTaskId: record.previousTaskId });
+  const tokens = await credentials(vault, owner, instance, record.resources);
+  const reconciliation = { checkedAt: Date.now(), previousStatus: record.status, status: 'unconfirmed', observations: [] };
+  try {
+    // Only observe the original persisted inventory. Never retry any provider DELETE.
+    for (const row of record.resources) reconciliation.observations.push({ kind: row.kind, accountId: row.accountId, remoteId: row.remoteId, absent: await resourceAbsent(row, tokens[row.accountId]) });
+    reconciliation.status = reconciliation.observations.every(row => row.absent) ? 'absent' : 'incomplete';
+    if (reconciliation.status === 'absent') {
+      for (const account of Object.keys(tokens).sort()) await accountStub(vault.env, account).finishDeletion(owner, record.instanceId, record.operationId, record.digest);
+      for (const resource of Object.values(instance.resources)) vault.ctx.storage.sql.exec("DELETE FROM resources WHERE kind=? AND remote_id=? AND json_extract(metadata,'$.accountId')=?", resource.kind, resource.remoteId, resource.accountId);
+      record.status = 'deleted';
+    }
+  } catch { reconciliation.status = 'unconfirmed'; }
+  // A concurrent successful observation must not be overwritten by an older failed read.
+  const latest = deletionRecord(vault, owner, record.instanceId);
+  if (latest.status === 'deleted') return latest;
+  requireSba(latest.operationId === record.operationId && latest.digest === record.digest && latest.status === 'delete-unknown');
+  record.reconciliation = reconciliation; record.updatedAt = Date.now(); save(vault, record);
+  return record;
+}

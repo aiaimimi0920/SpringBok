@@ -23,6 +23,10 @@ export function deletionProvider(suite) {
     if (path === '/workers/domains') return ok(live.domain ? [{ id: 'd'.repeat(32), hostname: 'app.example.invalid', service: 'test-worker' }] : []);
     if (path.endsWith('/settings')) return ok({ bindings: path.includes('/test-worker/') || live.shared ? [{ type: 'd1', id: resource.remoteId, name: 'DB' }] : [] });
     if (path === '/d1/database') return ok(live.database ? [{ uuid: resource.remoteId, name: resource.name }] : []);
+    if (path === '/d1/database/' + resource.remoteId) {
+      if (live.databaseReadError) return new Response(null, { status: 403 });
+      return live.database ? Response.json({ success: true, errors: [], result: { uuid: resource.remoteId, name: resource.name } }) : Response.json({ success: false, result: null, errors: [{ code: 7404, message: 'Database not found' }] }, { status: 404 });
+    }
     if (path === '/storage/kv/namespaces') return ok(live.kv ? [{ id: '1'.repeat(32), title: 'test-kv' }] : []);
     return prior(request, context);
   };

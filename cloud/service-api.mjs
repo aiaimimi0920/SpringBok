@@ -13,7 +13,7 @@ import { repairedCleanup } from '../src/sba/cleanup-repair.mjs';
 
 async function deletionState(env, vault, owner, state) {
   const deletion = await vault.deletionRecord(owner, state.instance.id);
-  if (deletion) return { ...state, deletion, status: deletion.status === 'deleting' && Date.now() - deletion.updatedAt > 120000 ? 'delete-unknown' : deletion.status, canUpdate: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false };
+  if (deletion) return { ...state, deletion, status: deletion.status === 'deleting' && Date.now() - deletion.updatedAt > 120000 ? 'delete-unknown' : deletion.status, canUpdate: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, canReconcileDeletion: connectedEnabled(env) && deletion.status === 'delete-unknown' };
   let supported = false; try { deletionInventory(state.instance); supported = !!state.instance.connections?.cloudflare; } catch { /* 未支持的资源不能部分销毁。 */ }
   return { ...state, canDelete: connectedEnabled(env) && supported && !state.instance.previewOf && (state.status === 'imported' || ['succeeded', 'deployed-unverified'].includes(state.job?.status)) };
 }

@@ -125,6 +125,22 @@ Routing DNS/settings 永不删除。显式 catch-all 的解绑流程见下文。
 阻止账号外部写入，也不会替用户禁用独立凭据。源码/合成 provider 验收不等于已发布控制面
 或完成真实云删除，发布状态见仓库开发计划。
 
+## 普通删除结果核对
+
+普通删除的 D1 不存在证明读取原 immutable UUID，而非依赖账号列表的即时计数。仅 HTTP
+404、success:false、result:null 且唯一错误码 7404 证明不存在；HTTP 200 必须是成功响应、
+errors 为空且 UUID/name 与原记录相同。权限、其他 404、畸形或身份漂移都不能证明已删除。
+
+持久状态为 delete-unknown 的普通实例可由原 owner 点击“核对删除结果”。此入口经原
+Access/CSRF 校验，仅接收 instanceId/operationId，读取原删除记录的清单和连接；不接受
+调用方替换清单，不执行 DELETE、不重试清理、不重建资源。任一资源仍存在或读取失败，
+原 unknown、错误、逐项进度及账号占用均保留。只有原清单全部独立不存在，才用原
+operationId/digest 经既有 finishDeletion 收尾、释放原占用并标记 deleted。原失败证据和
+部署历史保留，附加核对观察；重复核对 deleted 幂等。仍在 deleting 的记录（包括界面超时
+显示 unknown）不能借此中断在途删除；部分资源的实际后续清理仍需独立明确授权和身份核验。
+
+本能力只需兼容控制面，不移动 executor pin；源码/合成 provider 回归不是云端清理证明。
+
 ## 普通实例的收信解绑
 
 删除任何 Worker 前都按账号完整读取邮件规则（包含 catch-all 和 literal），不仅检查声明

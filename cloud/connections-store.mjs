@@ -15,7 +15,7 @@ import { importInput, importedId, inspectImported, sameImport } from './service-
 import { automaticDraft, provisionDeployment } from './deployment-provisioning.mjs';
 import { servicePreviewDraft, continuesInstance, createsResources } from './service-preview.mjs';
 import { serviceRepairDraft } from './service-repair.mjs';
-import { deletionPlan, deleteService, deletionRecord, assertNotDeleting } from './service-deletion.mjs';
+import { deletionPlan, deleteService, deletionRecord, reconcileDeletion, assertNotDeleting } from './service-deletion.mjs';
 import { adminProfiles, saveAdminProfile, reserveBootstrap, bootstrapCredential } from './admin-profiles.mjs';
 import { cancellationIdentity, cancellationRecord, sameCancellation } from './deployment-cancellation.mjs';
 import { applicationSecretProfiles, saveApplicationSecrets, reserveApplicationSecrets, applicationCredential } from './application-secrets.mjs';
@@ -23,6 +23,7 @@ import { applicationSecretProfiles, saveApplicationSecrets, reserveApplicationSe
 export class ConnectionVault extends DurableObject {
   deletionPlan(owner, input) { return deletionPlan(this, owner, input); }
   deleteService(owner, input) { return deleteService(this, owner, input); }
+  reconcileDeletion(owner, input) { return reconcileDeletion(this, owner, input); }
   deletionRecord(owner, instanceId) { return deletionRecord(this, owner, instanceId); }
   constructor(ctx, env) { super(ctx, env); this.env = env; }
   guard(owner) {

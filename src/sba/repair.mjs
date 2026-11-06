@@ -8,6 +8,9 @@ const errorCode = value => typeof value === 'string' && /^[A-Z][A-Z0-9_]{1,79}$/
 const requireRepair = value => { if (!value) throw new Error('SBA_REPAIR_INVALID'); };
 export const repairActions = repair => repair.fromActions ?? ['deploy', 'update', 'repair'];
 export const repairedPreview = request => request.action === 'repair' && Object.hasOwn(request.context ?? {}, 'preview');
+export const repairPreviewContext = request => request.action === 'preview' ? request.context : repairedPreview(request) ? request.context.preview : null;
+export const repairPreviewBaseline = request => request.action === 'preview' ? { sourceSha: request.sourceSha, applicationVersion: request.applicationVersion, instanceId: request.taskId }
+  : repairedPreview(request) ? request.context.previewBaseline ?? { ...request.previous, instanceId: request.context.parentTaskId } : null;
 export const previewRepairRequest = request => ({ ...request, action: 'preview', context: request.context.preview,
   previous: { sourceSha: request.context.preview.source.sourceSha, applicationVersion: request.context.preview.source.applicationVersion } });
 
@@ -31,9 +34,10 @@ export function validateRepairs(manifest) {
   }
 }
 
-export function validateRepairContext(request, manifest) {
+export function validateRepairContext(request, manifest, compareVersions) {
   const value = request.context;
-  requireRepair(exact(value, ['repairId', 'parentTaskId', 'parentRunId', 'requestDigest', 'resultDigest', 'errorCode', ...(repairedPreview(request) ? ['preview'] : [])]));
+  requireRepair(exact(value, ['repairId', 'parentTaskId', 'parentRunId', 'requestDigest', 'resultDigest', 'errorCode', ...(repairedPreview(request) ? ['preview'] : []),
+    ...(Object.hasOwn(value, 'previewBaseline') ? ['previewBaseline'] : [])]));
   requireRepair(identifier(value.repairId) && typeof value.parentTaskId === 'string' && /^dc-[a-f0-9]{32}$/.test(value.parentTaskId) && value.parentTaskId !== request.taskId &&
     Number.isSafeInteger(value.parentRunId) && value.parentRunId > 0 && digest(value.requestDigest) && digest(value.resultDigest) && errorCode(value.errorCode));
   const repair = manifest.repairs?.find(row => row.id === value.repairId);
@@ -43,7 +47,16 @@ export function validateRepairContext(request, manifest) {
     validatePreviewContext(previewRepairRequest(request));
     requireRepair(![value.preview.source.instanceId, value.preview.source.taskId].includes(value.parentTaskId));
     requireRepair(![request.sourceSha, request.previous.sourceSha].includes(value.preview.source.sourceSha));
-  } else requireRepair(repairActions(repair).some(action => action !== 'preview'));
+    if (Object.hasOwn(value, 'previewBaseline')) {
+      const baseline = value.previewBaseline;
+      requireRepair(exact(baseline, ['sourceSha', 'applicationVersion', 'instanceId']) && typeof baseline.sourceSha === 'string' && /^[a-f0-9]{40}$/.test(baseline.sourceSha) &&
+        typeof baseline.instanceId === 'string' && /^dc-[a-f0-9]{32}$/.test(baseline.instanceId) &&
+        ![request.taskId, value.preview.source.instanceId, value.preview.source.taskId].includes(baseline.instanceId));
+      requireRepair(![request.sourceSha, value.preview.source.sourceSha].includes(baseline.sourceSha) &&
+        compareVersions(baseline.applicationVersion, request.previous.applicationVersion) <= 0 &&
+        compareVersions(baseline.applicationVersion, value.preview.source.applicationVersion) > 0);
+    }
+  } else requireRepair(!Object.hasOwn(value, 'previewBaseline') && repairActions(repair).some(action => action !== 'preview'));
   requireRepair(new TextEncoder().encode(JSON.stringify(request)).length <= 49152);
 }
 

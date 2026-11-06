@@ -4,11 +4,11 @@ import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSba
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 import { compareVersions } from '../src/sba/contract.mjs';
 import { configureApplicationSecrets } from './application-secrets.mjs';
-import { repairActions } from '../src/sba/repair.mjs';
+import { repairActions, repairPreviewContext, repairPreviewBaseline } from '../src/sba/repair.mjs';
 
 export const repairEnabled = env => env.ENABLE_SERVICE_REPAIR === 'yes';
 export const repairableJob = (plan, job) => !plan.verificationOf &&
-  (plan.previewOf ? job?.request.action === 'preview' : ['deploy', 'update', 'repair'].includes(job?.request.action)) && ['unknown', 'failed'].includes(job?.status) &&
+  (plan.previewOf ? !!repairPreviewContext(job?.request ?? {}) : ['deploy', 'update', 'repair'].includes(job?.request.action)) && ['unknown', 'failed'].includes(job?.status) &&
   job.result?.status === job.status && typeof job.result.errorCode === 'string' && !!job.permitId && Number.isSafeInteger(job.runId);
 
 export async function serviceRepairDraft(vault, owner, input) {
@@ -32,9 +32,11 @@ export async function serviceRepairDraft(vault, owner, input) {
   requireSba(repair && repair.fromErrorCodes.includes(job.result.errorCode) && repairActions(repair).includes(job.request.action));
   const context = { repairId: repair.id, parentTaskId: input.previousTaskId, parentRunId: job.runId,
     requestDigest: job.requestDigest, resultDigest: await sbaDigest(job.result), errorCode: job.result.errorCode,
-    ...(old.previewOf ? { preview: structuredClone(job.request.context) } : {}) };
+    ...(old.previewOf ? { preview: structuredClone(repairPreviewContext(job.request)),
+      previewBaseline: structuredClone(repairPreviewBaseline(job.request)) } : {}) };
   const operation = { action: 'repair', instanceId: input.instanceId, previousTaskId: input.previousTaskId,
     previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };
+  if (old.previewOf) requireSba(context.previewBaseline.instanceId === input.instanceId);
   requireSba(canonicalSba(application.manifest.runtime) === canonicalSba(old.application.manifest.runtime));
   const base = connectedSbaPolicy(vault.env, application.manifest.runtime), credentials = {};
   // Resolve only the parent's original active profile; repair input cannot

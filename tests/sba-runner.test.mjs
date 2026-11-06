@@ -119,18 +119,37 @@ test('native SBA update calls the selected migration while retaining existing sy
   await writeFile(join(f.root, '.sba', 'manifest.json'), JSON.stringify(nextManifest), 'utf8');
   await writeFile(join(f.root, '.sba', 'springbok.ps1'), `param([string]$RequestPath,[string]$ResultPath)
 $ErrorActionPreference = 'Stop'
-$request = [IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
+function Stage([string]$name) { [IO.File]::AppendAllText("$ResultPath.stages", "$name $([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())\n", [Text.UTF8Encoding]::new($false)) }
+Stage 'parse-request'
+$requestJson = [IO.File]::ReadAllText($RequestPath)
+Stage 'request-read'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1" -ErrorAction Stop
+Stage 'utility-imported'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1" -ErrorAction Stop
+Stage 'management-imported'
+$request = $requestJson | ConvertFrom-Json
+Stage 'request-parsed'
 if ($request.action -ne 'update' -or $request.previous.applicationVersion -ne '1.0.0') { exit 7 }
 $data = [IO.File]::ReadAllText($request.configuration.dataPath) | ConvertFrom-Json
+Stage 'data-parsed'
 $data.schemaVersion = 2
-[IO.File]::WriteAllText($request.configuration.dataPath, ($data | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+$json = $data | ConvertTo-Json -Depth 8
+Stage 'data-serialized'
+$encoding = New-Object Text.UTF8Encoding($false)
+Stage 'data-encoding'
+[IO.File]::WriteAllText($request.configuration.dataPath, $json, $encoding)
+Stage 'data-written'
 $result = @{schemaVersion=2;taskId=$request.taskId;action=$request.action;sourceSha=$request.sourceSha;applicationVersion=$request.applicationVersion;status='succeeded';checks=@(@{id='synthetic-data-preserved';passed=($data.users[0].value -eq 'preserve-me')})}
+Stage 'write-result'
 [IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+Stage 'result-written'
 `, 'utf8');
   f.git(['add', '.sba']); f.git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'synthetic update']);
   const next = { ...f.input, taskId: 'task-update', action: 'update', sourceSha: f.git(['rev-parse', 'HEAD']), applicationVersion: '2.0.0', previous, configuration: { dataPath } };
   const result = await executeCheckout({ checkout: f.root, request: next, tempRoot: f.base, environment: { ...process.env, DEPLOY_TOKEN: 'synthetic-only' } });
-  assert.equal(result.result.status, 'succeeded'); assert.equal(result.result.action, 'update');
+  const stages = await readFile(join(result.directory, 'application-result.json.stages'), 'utf8').catch(error => { if (error.code === 'ENOENT') return 'not-started'; throw error; });
+  t.diagnostic(`Synthetic PowerShell fixture stages: ${stages}`);
+  assert.equal(result.result.status, 'succeeded', JSON.stringify(result.result)); assert.equal(result.result.action, 'update');
   assert.deepEqual(JSON.parse(await readFile(dataPath, 'utf8')), { ...data, schemaVersion: 2 });
 });
 
@@ -235,6 +254,9 @@ test('native PowerShell receives spaced paths as arguments and has a bounded tim
 test('native executor validates checkout, invokes the entrypoint once and returns a bound receipt', { skip: process.platform !== 'win32' }, async t => {
   const f = await fixture(t);
   await writeFile(join(f.root, '.sba', 'springbok.ps1'), `param([string]$RequestPath,[string]$ResultPath)
+$ErrorActionPreference = 'Stop'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1" -ErrorAction Stop
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1" -ErrorAction Stop
 $input = Get-Content -LiteralPath $RequestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $result = [ordered]@{schemaVersion=2; taskId=$input.taskId; action=$input.action; sourceSha=$input.sourceSha; applicationVersion=$input.applicationVersion; status='deployed-unverified'; checks=@(@{id='fixture-ready'; passed=$true})}
 [IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 5 -Compress), [Text.UTF8Encoding]::new($false))

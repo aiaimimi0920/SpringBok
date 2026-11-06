@@ -50,6 +50,11 @@ repair 是更高版本固定提交对原失败任务的显式恢复，不是 rer
 修复失败预升级副本必须显式声明 `fromActions: ["preview"]`（也可与其他允许动作组合）。
 平台将原 preview context 绑定到独立 repair 请求；应用必须核实持久备份、部分副作用及可恢复边界，
 不能仅凭错误码重放原任务。该新合同需要同时更新控制面和固定 executor；旧固定执行器不兼容此字段。
+
+失败的 preview repair 再次独立修复时，模板必须同时允许 `preview` 和父动作 `repair`，且匹配
+该父回执的准确错误码。平台继承原 `preview`，并提供不可由客户端替换的 `previewBaseline`
+（原副本候选的 sourceSha/applicationVersion 及原 instanceId）。应用必须分别核验当前部分目标、历史恢复点与
+本次操作前后源实例；不能把更高版本的失败 repair 当作已发布版本，或用新快照冒充旧备份。
 源码与本地验证不代表平台已发布或真实应用修复成功。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[runtime.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/runtime.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。完整可校验样例见 [验证](validation.md)。

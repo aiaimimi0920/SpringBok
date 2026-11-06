@@ -3,7 +3,53 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
-## EMAIL-06：未完成预升级的独立修复（实施中，2026-11-06）
+## EMAIL-07：失败副本修复的原基线继承（实施中，2026-11-07）
+
+负责人主 AI。EMAIL-06 已正常合并、七工作流 PR/main CI 通过并发布兼容控制面和固定
+Windows executor。真实 EasyEmail repair 通过认证备份与原部分目标检查，但因当前源库和
+旧备份相差一次先前验收 GET 产生的限流行而 UNKNOWN。原目标仍为 1.0.2/双空业务库，
+没有本次发布或导入。应用修复点是历史恢复点与本次源前后保护的职责分离，不忽略限流表。
+
+本切片仅让显式允许 preview+repair 的模板继续原失败副本，继承认证父请求的完整 preview
+和 previewBaseline；兼容旧首个 repair 从 previous 取得原副本候选。lane 再次精确核对二者，
+版本递增、固定 artifact、原资源/连接/秘密和单次派发保持。新旧 UNKNOWN 均保留，不清锁、
+不另建环境、不把失败修复版本当已发布目标。先补合同/workerd/浏览器回归，再精确 PR/main
+CI 和兼容控制面/新固定 Windows executor 发布；Linux 与历史任务 pins 不变。永久删除及
+正式域名/MX 仍待准确清单批准。当前本地及真实恢复结果须分别记录，不能预报成功。
+
+本地合同/workerd/共享文档 36 项通过，真实 Chrome/workerd 浏览器覆盖初次 preview 失败、
+第一次 repair 再失败、只声明 preview 不能继续、显式 preview+repair 后正常审阅/单次派发、
+继承原 baseline/实例、源与双 UNKNOWN 保留及成功副本清理审阅。普通和 EasyEmail 示例、
+十页共享文档构建通过；无 UI 布局改动，不新增解释型文案。当前仍待精确 PR/main 完整 CI、
+兼容控制面与新 Windows executor 发布，不能以本地流程代替真实 EasyEmail 云恢复。
+
+精确 PR `a382442` 的七工作流中六项通过，Deployment Contract Lab 的 Windows job
+有两个既有合成 PowerShell 用例在 60 秒应用时限到达后返回 `SBA_EXECUTION_TIMEOUT`；
+其余 41 项通过、1 项跳过。本机以同一六文件命令执行 43 passed/1 skipped，未复现。
+当前没有 hosted runner 进程栈或内部阶段证据，不能将原因定为新 repair 逻辑或偶发慢机。
+主 AI 仅给两个合成夹具加入固定阶段名/毫秒时间标记，失败时展示该标记及经校验的回执；
+不输出请求、环境或业务数据，不改产品执行器、成功断言、60 秒时限或工作流。AI/Pages
+共享参考不受测试诊断影响，无新增公开契约。仍须新精确 PR/main 完整 CI 后才发布。
+本地准确命令证据 `linshi/easyemail-springbok-20261106/email27-native-exact.log`。
+
+随后精确 PR `942b1a1` 的同两用例再次超时，静态标记均止于 `parse-request`，已确认
+子进程进入脚本，尚无证据越过首次 `[IO.File]::ReadAllText(...) | ConvertFrom-Json`。
+下一诊断将文件读取分开标记，并从 `$PSHOME` 显式导入夹具所需的系统内置 Utility 模块，
+避免依赖整台 hosted runner 的首次命令自动发现；公开所有固定阶段耗时，保留 JSON
+转换、原生进程、快照/更新/清理断言和时限。Microsoft 模块加载/分析缓存文档与
+runner-images 历史延迟报告仅支持调查方向，不作为本次具体缓存故障的证明。
+当前仍未合并、未发布；须后续 hosted 证据核对该依赖初始化边界，不能预报修复成功。
+
+精确 PR `c5110bc` 的 hosted 阶段对照进一步收窄了原因：显式 Utility 导入后，原 preview
+和 update 均完成，首次 JSON 转换不再超时；同一 preview 到 destroy-preview 才在首次
+Management 命令 `Test-Path` 前停住，原 native executor 的首次 `Get-Content` 也超时。
+文件读取用时 10–19ms、显式 Utility 导入 32–443ms，已否定本地 JSON 文件读取迟滞。
+因此合成夹具改为显式导入实际所需的两个系统内置模块，第三个原生 executor 夹具也声明
+同一依赖。该对照支持 hosted 全局命令自动发现/加载路径的延迟，不证明具体缓存损坏或
+某个第三方模块负责；不修改产品的模块搜索策略，不绕过 JSON/文件/进程/生命周期断言。
+证据 `email28-native-job-128006478305/job.log`。修正后仍等精确完整 PR/main CI。
+
+## EMAIL-06：未完成预升级的独立修复（已发布，应用修复未完成，2026-11-06）
 
 负责人主 AI。EasyEmail 首次有数据 preview 在凭据重签时返回准确 UNKNOWN，源实例及
 持久认证备份保留，目标两 D1 尚无业务 schema、R2 已有附件；不清锁、不重放原任务或

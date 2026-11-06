@@ -62,3 +62,29 @@ test('preview repair refuses implicit scopes, owner/CSRF changes, stale heads an
     assert.equal(f.state.dispatches,2);assert.equal(f.state.created.length,2);
   }finally{await f.f.close();}
 });
+
+test('a failed preview repair can only continue explicitly and inherits its original preview baseline',async()=>{
+  const f=await setup();
+  try{
+    const first=(await f.service('plan',f.body)).json();assert.equal((await f.submit(first)).status,200);
+    const permit=await(await f.machine()).json();
+    f.receipt(permit,'unknown',{checks:[],errorCode:'SOURCE_DATABASE_CHANGED'});
+    const failed=(await f.service('service-state',{instanceId:f.planned.taskId,reconcile:true})).json();
+    assert.equal(failed.canRepair,true);assert.equal(failed.canDeletePreview,false);
+    f.state.updateVersion='4.0.0';
+    f.state.manifestOverride.repairs[0].fromErrorCodes.push('SOURCE_DATABASE_CHANGED');
+    const input={...f.body,previousTaskId:first.taskId,sourceSha:'6'.repeat(40)};
+    assert.equal((await f.service('plan',input)).status,409,'preview permission alone cannot continue a repair');
+    f.state.manifestOverride.repairs[0].fromActions.push('repair');
+    const response=await f.service('plan',input);assert.equal(response.status,200,response.text);const next=response.json();
+    assert.deepEqual(next.plan.operation.context.preview,f.failed.job.request.context);
+    assert.deepEqual(next.plan.operation.context.previewBaseline,{sourceSha:updatedSha,applicationVersion:'2.0.0',instanceId:f.planned.taskId});
+    assert.deepEqual(next.plan.resources,first.plan.resources);assert.equal(next.plan.operation.instanceId,f.planned.taskId);
+    assert.equal((await f.submit(next)).status,200);assert.equal(f.state.dispatches,4);assert.equal(f.state.created.length,2);
+    const nextPermit=await(await f.machine()).json();assert.equal(nextPermit.request.context.parentTaskId,first.taskId);
+    assert.deepEqual(nextPermit.request.context.previewBaseline,next.plan.operation.context.previewBaseline);
+    assert.equal((await f.machine()).status,403);
+    assert.deepEqual((await f.api('state',{taskId:first.taskId})).json().job,failed.job);
+    assert.deepEqual((await f.api('state',{taskId:f.planned.taskId})).json().job,f.failed.job);
+  }finally{await f.f.close();}
+});

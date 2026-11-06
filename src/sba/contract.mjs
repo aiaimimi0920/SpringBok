@@ -66,7 +66,7 @@ export function validateRequest(value, manifest) {
     if (['verify', 'destroy-preview'].includes(value.action) && (comparison !== 0 || value.sourceSha !== value.previous.sourceSha)) fail('verify requires the selected deployed release');
   }
   if (previewAction(value.action)) validatePreviewContext(value);
-  if (value.action === 'repair') validateRepairContext(value, app);
+  if (value.action === 'repair') validateRepairContext(value, app, compareVersions);
   return structuredClone(value);
 }
 

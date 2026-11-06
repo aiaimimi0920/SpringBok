@@ -39,7 +39,7 @@ function controls() {
   $('service-back').hidden = !preview || deletingPreview; $('service-back').disabled = busy || submitting;
   $('service-edit').hidden = !!preview || application?.status !== 'ready'; $('service-review').hidden = !preview;
   for (const tab of $('service-tabs').children) tab.disabled = busy || submitting;
-  sourceFields.sync({ hidden: !!updateTarget || importing || deletingPreview || !!preview || !session, disabled: busy || selectionBusy || submitting });
+  sourceFields.sync({ hidden: importing || deletingPreview || !!preview || !session, disabled: busy || selectionBusy || submitting });
 }
 function clearPreview() { preview = null; $('service-review').replaceChildren(); controls(); }
 function restoreFocus() {
@@ -532,14 +532,20 @@ async function changeVersion() {
     application = data; $('service-selection').textContent = data.repository + ' · v' + data.manifest.version; buildFields(data); dialogNotice('');
     void loadVersions(row, version, pageVersion);
     await loadResources(version, pageVersion);
-    if (currentDialog(version,pageVersion) && updateTarget && !newerVersion(data.manifest.version,updateTarget.instance.application.version)) dialogNotice('版本必须高于 v' + updateTarget.instance.application.version,'warning');
-    else if (currentDialog(version,pageVersion) && rehearsing && (data.manifest.schemaVersion !== 3 || data.declaration.schemaVersion !== 2)) dialogNotice('此版本未声明预升级测试与清理能力', 'warning');
-    else if (currentDialog(version,pageVersion) && repairing && !repairOptions(data).length) dialogNotice('此版本没有匹配当前错误的修复操作', 'warning');
+    if (currentDialog(version,pageVersion)) versionNotice(data);
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
   finally { if (currentDialog(version, pageVersion)) { selectionBusy = false; controls(); } }
 }
+function versionNotice(data) {
+  if (updateTarget && !newerVersion(data.manifest.version,updateTarget.instance.application.version)) dialogNotice('版本必须高于 v' + updateTarget.instance.application.version,'warning');
+  else if (rehearsing && (data.manifest.schemaVersion !== 3 || data.declaration.schemaVersion !== 2)) dialogNotice('此版本未声明预升级测试与清理能力', 'warning');
+  else if (repairing && !repairOptions(data).length) dialogNotice('此版本没有匹配当前错误的修复操作', 'warning');
+}
 async function loadSource({ connectionId, repository, sourceSha }) {
-  if (!session || busy || selectionBusy || submitting || updateTarget || importing) return;
+  if (!session || busy || selectionBusy || submitting || importing || deletingPreview || preview) return;
+  if (updateTarget && (connectionId !== updateTarget.instance.connections.github.id || repository !== updateTarget.instance.application.repository)) {
+    dialogNotice('来源必须与原实例的连接和仓库一致', 'error'); return;
+  }
   const version = ++dialogGeneration, pageVersion = generation;
   busy = true; application = null; selected = null; selectedResources = new Map(); prepareApplicationSecrets = null;
   $('service-selection').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
@@ -548,7 +554,9 @@ async function loadSource({ connectionId, repository, sourceSha }) {
     const data = await request(api + 'application', { github: ref(connectionId), repository, sourceSha }, 45000);
     if (!currentDialog(version, pageVersion)) return;
     if (data.status !== 'ready') throw new Error('此版本的 .sba 声明无效或不受支持');
-    busy = false; catalog.set(data.repository.toLowerCase(), data); await selectService(data);
+    if (updateTarget && data.manifest.id !== updateTarget.instance.application.id) throw new Error('所选版本不是同一个服务');
+    busy = false; if (!updateTarget) catalog.set(data.repository.toLowerCase(), data); await selectService(data);
+    if ($('service-dialog').open && application === data) versionNotice(data);
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
   finally { if (currentDialog(version, pageVersion)) { busy = false; controls(); } }
 }
@@ -558,7 +566,7 @@ async function openDialog(state = null, trigger = $('service-add'), mode = 'depl
   rehearsing = mode === 'rehearse'; repairing = mode === 'repair'; deletingPreview = false;
   testEnvironment = rehearsing ? 'test-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : null;
   updateTarget = state; returnFocus = trigger; selected = null; application = null; selectedResources = new Map(); dialogGeneration++; clearPreview();
-  sourceFields.reset(connections);
+  sourceFields.reset(connections, state ? { connectionId: state.instance.connections.github.id, repository: state.instance.application.repository } : null);
   $('service-dialog-title').textContent = state ? (repairing ? '修复 · ' : rehearsing ? '预升级测试 · ' : '升级 · ') + state.instance.application.name : importing ? '导入服务' : '部署服务';
   $('service-selection').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); dialogNotice(session ? '' : '身份尚未就绪');
   $('service-dialog').showModal(); $('service-close').focus(); renderTabs();

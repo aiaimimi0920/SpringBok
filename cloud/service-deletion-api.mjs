@@ -5,6 +5,7 @@ const consentScope = plan => plan.unverifiedReferences.length ? 'delete-and-acce
 
 export async function serviceDeletionRequest(env, vault, session, action, input) {
   requireSba(connectedEnabled(env));
+  if (action === 'delete-reconcile') return vault.reconcileDeletion(session.actor, input);
   if (action === 'delete-plan') {
     const plan = await vault.deletionPlan(session.actor, input), operationId = 'dc-' + crypto.randomUUID().replaceAll('-', ''), expiresAt = Date.now() + 120000;
     return { operationId, plan, expiresAt, confirmation: await signSession(session, 'service-delete', [operationId, plan.digest, expiresAt, consentScope(plan)]) };

@@ -103,9 +103,21 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
 export async function resourceAbsent(row, token, transport = fetch) {
   if (row.kind === 'email-routing') return deletionEmailAbsent(row, token, transport);
   if (row.kind === 'r2') return deletionBucketAbsent(row, token, transport);
-  const path = { worker: '/workers/scripts', domain: '/workers/domains', d1: '/d1/database?per_page=1000&page=1', kv: '/storage/kv/namespaces?per_page=1000&page=1' }[row.kind];
+  if (row.kind === 'd1') {
+    let missing = false;
+    const body = await readJson(endpoint(row.accountId, '/d1/database/' + encodeURIComponent(row.remoteId)), token, false, async (url, options) => {
+      const response = await transport(url, options);
+      if (response.status !== 404) return response;
+      missing = true;
+      return new Response(response.body, { status: 200, headers: response.headers });
+    });
+    if (missing) requireSba(body.success === false && body.result === null && Array.isArray(body.errors) && body.errors.length === 1 && body.errors[0]?.code === 7404);
+    else requireSba(body.success === true && Array.isArray(body.errors) && body.errors.length === 0 && body.result?.uuid === row.remoteId && body.result.name === row.name);
+    return missing;
+  }
+  const path = { worker: '/workers/scripts', domain: '/workers/domains', kv: '/storage/kv/namespaces?per_page=1000&page=1' }[row.kind];
   const rows = await list(row.accountId, token, path, transport);
-  return !rows.some(r => (row.kind === 'd1' ? r.uuid : r.id) === row.remoteId);
+  return !rows.some(r => r.id === row.remoteId);
 }
 export async function removeResource(row, token, transport = fetch) {
   if (row.kind === 'email-routing') return unbindEmailRouting(row, token, transport);

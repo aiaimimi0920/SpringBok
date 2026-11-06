@@ -24,7 +24,7 @@ export async function adminDeploymentRequest(request,env,session,readBody){
   if(request.method==='GET'&&url.pathname==='/api/admin/deployments/services'){
     try{return reply({services:await serviceIndex(vault,session.actor),executionEnabled:connectedEnabled(env)});}catch{return reply({error:'service-index-unavailable'},409);}
   }
-  if(request.method!=='POST'||!['plan','submit','state','reconcile','cancel-unstarted','catalog','versions','application','service-state','verify','resume-plan','resume-submit','restart-plan','restart-submit','import-preview','import-submit','delete-plan','delete-submit'].some(route=>url.pathname==='/api/admin/deployments/'+route))return reply({error:'unknown-route'},404);
+  if(request.method!=='POST'||!['plan','submit','state','reconcile','cancel-unstarted','catalog','versions','application','service-state','verify','resume-plan','resume-submit','restart-plan','restart-submit','import-preview','import-submit','delete-plan','delete-submit','delete-reconcile'].some(route=>url.pathname==='/api/admin/deployments/'+route))return reply({error:'unknown-route'},404);
   if(request.headers.get('origin')!==session.origin||!sameProof(request.headers.get('x-csrf-token'),await signSession(session,'csrf',null)))return reply({error:'refresh-session'},403);
   try{
     const input=await readBody(request,131072);
@@ -38,7 +38,7 @@ export async function adminDeploymentRequest(request,env,session,readBody){
     if (['restart-plan','restart-submit'].some(route => url.pathname.endsWith('/' + route))) return reply(await restartUpdateRequest(env,vault,session,url.pathname.split('/').at(-1),input));
     if (['resume-plan','resume-submit'].some(route => url.pathname.endsWith('/' + route))) return reply(await preparationRecoveryRequest(env,vault,session,url.pathname.split('/').at(-1),input));
     if(url.pathname.endsWith('/verify')){if(!connectedEnabled(env))return reply({error:'deployment-disabled'},503);return reply(await startServiceVerification(env,vault,session.actor,input));}
-    if (['delete-plan','delete-submit'].some(route => url.pathname.endsWith('/' + route))) return reply(await serviceDeletionRequest(env, vault, session, url.pathname.split('/').at(-1), input));
+    if (['delete-plan','delete-submit','delete-reconcile'].some(route => url.pathname.endsWith('/' + route))) return reply(await serviceDeletionRequest(env, vault, session, url.pathname.split('/').at(-1), input));
     if (['import-preview','import-submit'].some(route => url.pathname.endsWith('/' + route))) return reply(await serviceImportRequest(env, session, url.pathname.split('/').at(-1), input));
     if(['catalog','versions','application'].some(route=>url.pathname.endsWith('/'+route)))return reply(await vault.serviceCatalog(session.actor,url.pathname.split('/').at(-1),input));
     if(url.pathname.endsWith('/service-state'))return reply(await serviceState(env,vault,session.actor,input));

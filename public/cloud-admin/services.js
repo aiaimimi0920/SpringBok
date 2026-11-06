@@ -21,6 +21,7 @@ let deletionReview = null, deletionGeneration = 0, deletionSubmitting = false, d
 let rehearsing = false, repairing = false, deletingPreview = false, testEnvironment = null;
 let returnFocus = null, pollTimer = null, listBusy = false, selectedResources = new Map();
 const expanded = new Set(), statistics = new Set(), usagePending = new Set();
+const deletionChecks = new Set();
 const notice = (text, tone = 'info') => { $('service-notice').textContent = text; $('service-notice').dataset.tone = tone; };
 const dialogNotice = (text, tone = 'info') => { $('service-dialog-notice').textContent = text; $('service-dialog-notice').dataset.tone = tone; };
 function loading(delta) { loadingCount = Math.max(0, loadingCount + delta); $('service-loading').textContent = loadingCount ? '正在读取账户与云资源' : ''; }
@@ -53,6 +54,7 @@ function restoreFocus() {
 }
 function invalidate() {
   deletionGeneration++; deletionReview = null; $('service-delete-dialog').close();
+  deletionChecks.clear();
   generation++; dialogGeneration++; session = null; clearTimeout(pollTimer); loadingCount = 0; loading(0);
   catalog.clear(); catalogOrder.clear(); instances.clear(); states.clear(); usage.clear(); historyRecords.clear(); usagePending.clear();
   registeredResources = []; adminProfiles = []; adminOverride = null;
@@ -142,6 +144,18 @@ function renderInstances() {
       test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
       const remove = focusKey(element('button', '删除', 'danger'), id + '/delete'); remove.type = 'button'; remove.disabled = !state?.canDelete || !session;
       remove.addEventListener('click', () => void openDeleteService(state, remove)); actions.append(remove);
+      if (state?.canReconcileDeletion) {
+        const check = focusKey(element('button', '核对删除结果'), id + '/delete-reconcile'); check.type = 'button'; check.disabled = !session || deletionChecks.has(id);
+        check.addEventListener('click', async () => {
+          if (!session || deletionChecks.has(id)) return;
+          const version = generation; deletionChecks.add(id); check.disabled = true;
+          try {
+            const result = await request(api + 'delete-reconcile', { instanceId: id, operationId: state.deletion.operationId });
+            if (current(version)) notice(result.status === 'deleted' ? '服务及关联数据已删除' : '删除结果仍未确认', result.status === 'deleted' ? 'success' : 'warning');
+          } catch (error) { if (current(version)) notice(error.message, 'error'); }
+          finally { if (current(version)) { deletionChecks.delete(id); await refreshInstances(); } }
+        }); actions.append(check);
+      }
       if (state?.canResume || state?.canRestart) {
         const resume = focusKey(element('button', state.canRestart ? '恢复升级' : '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
         resume.addEventListener('click', () => { const version = generation; resume.disabled = true; void resumePreparation(state, resume, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }, !!state.canRestart); }); actions.append(resume);
@@ -237,7 +251,7 @@ async function refreshInstances(activeOnly = false) {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
         if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
-      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canResume: false, canRestart: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
+      } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canResume: false, canRestart: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, canReconcileDeletion: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
     });
   } catch (error) { if (current(version)) notice(error.message, 'error'); }
   finally {

@@ -62,7 +62,11 @@ test('native PowerShell copies and migrates a snapshot, updates fresh production
 $ErrorActionPreference = 'Stop'
 function Stage([string]$name) { [IO.File]::AppendAllText("$ResultPath.stages", "$name $([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())\n", [Text.UTF8Encoding]::new($false)) }
 Stage 'parse-request'
-$r = [IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
+$requestJson = [IO.File]::ReadAllText($RequestPath)
+Stage 'request-read'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1" -ErrorAction Stop
+Stage 'utility-imported'
+$r = $requestJson | ConvertFrom-Json
 Stage 'request-parsed'
 $checks = @(); $lifecycle = $null
 if ($r.action -eq 'preview') {
@@ -105,10 +109,8 @@ Stage 'result-written'
   const request = previewRequest(); request.sourceSha = git(['rev-parse', 'HEAD']); request.configuration = { dataPath: target }; request.context.source.configuration = { dataPath: source };
   const run = async input => {
     const output = await executeCheckout({ checkout, request: input, tempRoot: root, environment: process.env });
-    if (output.result.status !== 'succeeded') {
-      const stages = await readFile(join(output.directory, 'application-result.json.stages'), 'utf8').catch(error => { if (error.code === 'ENOENT') return 'not-started'; throw error; });
-      t.diagnostic(`Synthetic PowerShell fixture stages: ${stages}`);
-    }
+    const stages = await readFile(join(output.directory, 'application-result.json.stages'), 'utf8').catch(error => { if (error.code === 'ENOENT') return 'not-started'; throw error; });
+    t.diagnostic(`Synthetic PowerShell fixture stages: ${stages}`);
     assert.equal(output.result.status, 'succeeded', JSON.stringify(output.result)); return output;
   };
   await run(request);

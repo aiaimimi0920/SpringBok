@@ -121,7 +121,11 @@ test('native SBA update calls the selected migration while retaining existing sy
 $ErrorActionPreference = 'Stop'
 function Stage([string]$name) { [IO.File]::AppendAllText("$ResultPath.stages", "$name $([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())\n", [Text.UTF8Encoding]::new($false)) }
 Stage 'parse-request'
-$request = [IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
+$requestJson = [IO.File]::ReadAllText($RequestPath)
+Stage 'request-read'
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1" -ErrorAction Stop
+Stage 'utility-imported'
+$request = $requestJson | ConvertFrom-Json
 Stage 'request-parsed'
 if ($request.action -ne 'update' -or $request.previous.applicationVersion -ne '1.0.0') { exit 7 }
 $data = [IO.File]::ReadAllText($request.configuration.dataPath) | ConvertFrom-Json
@@ -141,10 +145,8 @@ Stage 'result-written'
   f.git(['add', '.sba']); f.git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'synthetic update']);
   const next = { ...f.input, taskId: 'task-update', action: 'update', sourceSha: f.git(['rev-parse', 'HEAD']), applicationVersion: '2.0.0', previous, configuration: { dataPath } };
   const result = await executeCheckout({ checkout: f.root, request: next, tempRoot: f.base, environment: { ...process.env, DEPLOY_TOKEN: 'synthetic-only' } });
-  if (result.result.status !== 'succeeded') {
-    const stages = await readFile(join(result.directory, 'application-result.json.stages'), 'utf8').catch(error => { if (error.code === 'ENOENT') return 'not-started'; throw error; });
-    t.diagnostic(`Synthetic PowerShell fixture stages: ${stages}`);
-  }
+  const stages = await readFile(join(result.directory, 'application-result.json.stages'), 'utf8').catch(error => { if (error.code === 'ENOENT') return 'not-started'; throw error; });
+  t.diagnostic(`Synthetic PowerShell fixture stages: ${stages}`);
   assert.equal(result.result.status, 'succeeded', JSON.stringify(result.result)); assert.equal(result.result.action, 'update');
   assert.deepEqual(JSON.parse(await readFile(dataPath, 'utf8')), { ...data, schemaVersion: 2 });
 });

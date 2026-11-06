@@ -32,6 +32,14 @@ CI 和兼容控制面/新固定 Windows executor 发布；Linux 与历史任务 
 共享参考不受测试诊断影响，无新增公开契约。仍须新精确 PR/main 完整 CI 后才发布。
 本地准确命令证据 `linshi/easyemail-springbok-20261106/email27-native-exact.log`。
 
+随后精确 PR `942b1a1` 的同两用例再次超时，静态标记均止于 `parse-request`，已确认
+子进程进入脚本，尚无证据越过首次 `[IO.File]::ReadAllText(...) | ConvertFrom-Json`。
+下一诊断将文件读取分开标记，并从 `$PSHOME` 显式导入夹具所需的系统内置 Utility 模块，
+避免依赖整台 hosted runner 的首次命令自动发现；公开所有固定阶段耗时，保留 JSON
+转换、原生进程、快照/更新/清理断言和时限。Microsoft 模块加载/分析缓存文档与
+runner-images 历史延迟报告仅支持调查方向，不作为本次具体缓存故障的证明。
+当前仍未合并、未发布；须后续 hosted 证据核对该依赖初始化边界，不能预报修复成功。
+
 ## EMAIL-06：未完成预升级的独立修复（已发布，应用修复未完成，2026-11-06）
 
 负责人主 AI。EasyEmail 首次有数据 preview 在凭据重签时返回准确 UNKNOWN，源实例及

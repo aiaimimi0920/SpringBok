@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startDemo } from '../../src/demo/server.mjs';
+import { closeBrowserServer } from '../helpers/browser-server-close.mjs';
 
 const directory = mkdtempSync(join(tmpdir(), 'springbok-browser-'));
 let app;
@@ -55,7 +56,7 @@ try {
   await forum.getByRole('button', { name: '模拟测试通过', exact: true }).click(); await approve(forum);
   const oldOrigin = app.origin;
   const port = Number(new URL(oldOrigin).port);
-  await app.close(); app = await startDemo({ directory, port });
+  await closeBrowserServer(app); app = await startDemo({ directory, port });
   // The still-open browser has a stale in-memory token and must not promote.
   await forum.getByRole('button', { name: '模拟晋级', exact: true }).click();
   await check(page, 'Refresh this demo session'); await check(forum, '待模拟验收');
@@ -110,5 +111,5 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   console.log('PASS: real Chrome UI, four cards, keyboard acceptance, failure/retry, v1/v2/rollback, reload/restart, stale session/tab, repeated click, read-only plan preview/unknown/rollback/stale responses, mobile layout');
 } finally {
-  await browser?.close(); await app?.close(); rmSync(directory, { recursive: true, force: true });
+  await browser?.close(); if (app) await closeBrowserServer(app); rmSync(directory, { recursive: true, force: true });
 }

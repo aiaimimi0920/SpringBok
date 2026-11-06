@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { openTestController } from '../../src/test-console/controller.mjs';
 import { startTestConsole } from '../../src/test-console/server.mjs';
 import { catalog, fakeBackend, image } from '../helpers/execution.mjs';
+import { closeBrowserServer } from '../helpers/browser-server-close.mjs';
 
 // Real browser and real controller; backend calls are simulated. No Docker/login.
 const directory = mkdtempSync(join(tmpdir(), 'springbok-review-browser-'));
@@ -122,7 +123,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector('dialog').scrollWidth <= document.querySelector('dialog').clientWidth), true);
   await page.screenshot({ path: 'test-results/execution-review-mock-mobile.png', fullPage: true });
   // Restart invalidates the old HTTP token and unused acceptance, no extra Deploy.
-  const port = Number(new URL(app.origin).port); await app.close(); controller.close();
+  const port = Number(new URL(app.origin).port); await closeBrowserServer(app); controller.close();
   controller = openTestController(options); app = await startTestConsole({ controller, port });
   await confirm.click(); await page.getByText('Refresh this test session', { exact: true }).waitFor();
   await gateway.locator('.phase').filter({ hasText: /^待测试验收$/ }).waitFor();
@@ -218,4 +219,4 @@ try {
   assert.deepEqual(controller.snapshot(), beforeHistory); assert.deepEqual(backend.calls, historyCalls);
   assert.deepEqual(errors, []);
   console.log('PASS M7/M8/M9 real Chrome with fake backend: cancel/close/Escape/late response/Back/Forward/reopen/stale tab/double confirm/restart/mobile; queued/unhealthy/ready/configuration-unknown inspections never write or unblock; fixed resource checks repeat/cancel/reopen without writes, unknown config and cached status; no Docker or credentials');
-} finally { await browser?.close(); await app?.close(); controller.close(); rmSync(directory, { recursive: true, force: true }); }
+} finally { await browser?.close(); if (app) await closeBrowserServer(app); controller.close(); rmSync(directory, { recursive: true, force: true }); }

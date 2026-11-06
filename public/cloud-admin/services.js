@@ -32,11 +32,12 @@ const repairOptions = data => data?.manifest?.repairs?.filter(row => row.fromErr
 const sourceFields = applicationSourceFields($('service-source'), loadSource);
 
 function controls() {
+  const cleanupRepair = repairing && !!preview?.plan.operation.context.cleanup;
   $('service-fields').disabled = !session || busy || selectionBusy || submitting || deletingPreview;
   const versionReady = deletingPreview || (!updateTarget || newerVersion(application?.manifest?.version, updateTarget.instance.application.version)) && (!rehearsing || application?.manifest?.schemaVersion === 3 && application?.declaration?.schemaVersion === 2);
   $('service-submit').disabled = !session || busy || selectionBusy || submitting || !application || application.status !== 'ready' || !versionReady || (repairing && !repairOptions(application).some(row => row.id === $('service-repair')?.value)) || (!preview && !selectedResources.ready) || (preview && !importing && !preview.executionEnabled);
-  $('service-submit').textContent = deletingPreview ? '确认删除测试环境' : repairing ? (preview ? '确认修复' : '预览修复') : rehearsing ? (preview ? '确认预升级测试' : '预升级测试') : importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认升级' : '确认部署') : (updateTarget ? '升级' : '部署');
-  $('service-submit').classList.toggle('danger', deletingPreview); $('service-submit').classList.toggle('primary', !deletingPreview);
+  $('service-submit').textContent = deletingPreview || cleanupRepair ? '确认删除测试环境' : repairing ? (preview ? '确认修复' : '预览修复') : rehearsing ? (preview ? '确认预升级测试' : '预升级测试') : importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认升级' : '确认部署') : (updateTarget ? '升级' : '部署');
+  $('service-submit').classList.toggle('danger', deletingPreview || cleanupRepair); $('service-submit').classList.toggle('primary', !deletingPreview && !cleanupRepair);
   $('service-back').hidden = !preview || deletingPreview; $('service-back').disabled = busy || submitting;
   $('service-edit').hidden = !!preview || application?.status !== 'ready'; $('service-review').hidden = !preview;
   for (const tab of $('service-tabs').children) tab.disabled = busy || submitting;
@@ -114,7 +115,7 @@ function renderInstances() {
     version.append(element('span', confirmed ? 'v' + confirmed.version : instance?.action === 'import' ? '版本未知' : app ? '目标 v' + app.version : '—'));
     if (instance?.action === 'update' && !['succeeded', 'deployed-unverified'].includes(status)) version.append(element('small', ' → v' + app.version));
     const target = element('div'); target.append(element('span', instance?.environment ?? '—'), element('small', connections.find(row => row.id === instance?.connections?.cloudflare.id)?.accountName ?? instance?.accountId ?? '—'));
-    const label = instance?.action === 'destroy-preview' ? ({ running: '正在清理', failed: '清理失败', unknown: '清理结果未确认' })[status] : null;
+    const label = instance?.action === 'destroy-preview' || state?.job?.request?.context?.cleanup ? ({ running: '正在清理', failed: '清理失败', unknown: '清理结果未确认' })[status] : null;
     const availability = state?.verification?.status === 'succeeded' && !state?.deletion;
     const verifying = ['dispatching','dispatched','running'].includes(state?.verification?.status);
     const badge = element('span', availability ? '可用性已验证' : verifying ? '验证中' : label ?? statusText(status), 'service-status'); badge.dataset.tone = availability ? 'success' : statusTone(status);
@@ -605,8 +606,11 @@ async function prepare(event) {
       if(!currentDialog(version,pageVersion))return;
       preview = result; const details = element('dl'), plan = result.plan;
       for(const [label,value] of [['修复操作',plan.application.manifest.repairs.find(row=>row.id===repairId).name],['原任务',plan.operation.previousTaskId],['错误代码',plan.operation.context.errorCode],['目标版本',`v${plan.application.manifest.version} · ${plan.application.sourceSha}`],['环境',plan.policy.environment],['绑定资源',Object.values(plan.resources).map(row=>`${row.name} · ${row.remoteId}`).join('、') || '—'],['目标',updateTarget.instance.targets.map(row=>row.value).join('、') || '—']])details.append(element('dt',label),element('dd',value));
-      const risk = element('p','将运行所选版本的修复代码并修改目标云资源；失败可能留下部分变更，不会自动重试。');risk.dataset.tone='warning';
-      $('service-review').replaceChildren(details,risk);dialogNotice('');return;
+      const cleanup = plan.operation.context.cleanup;
+      const risk = element('p', cleanup ? '将永久删除以上测试资源及其中的数据，不删除原线上环境。' : '将运行所选版本的修复代码并修改目标云资源；失败可能留下部分变更，不会自动重试。');risk.dataset.tone='warning';
+      const list = element('ul');
+      if (cleanup) for (const row of cleanup.context.resources) list.append(element('li', `${row.kind} · ${row.name} · ${row.accountId}`));
+      $('service-review').replaceChildren(details,...(cleanup ? [list] : []),risk);dialogNotice('');return;
     }
     if (rehearsing) {
       const result = await request(api + 'plan', { action: 'rehearse', instanceId: updateTarget.instance.id, previousTaskId: updateTarget.taskId, sourceSha: data.sourceSha, environment: testEnvironment });

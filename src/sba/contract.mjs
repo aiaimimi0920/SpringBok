@@ -2,6 +2,7 @@
 import { PREVIEW_ACTIONS, previewAction, validatePreviewContext, validatePreviewResult } from './preview.mjs';
 import { validateRepairs, validateRepairContext, validateRepairResult, repairedPreview } from './repair.mjs';
 import { runtimeProfile } from './runtime.mjs';
+import { repairedCleanup } from './cleanup-repair.mjs';
 export class SbaContractError extends Error {}
 const fail = message => { throw new SbaContractError(message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -71,7 +72,7 @@ export function validateRequest(value, manifest) {
 }
 
 export function validateResult(value, request) {
-  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode', ...(previewAction(request.action) || repairedPreview(request) ? ['lifecycle'] : [])]);
+  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode', ...(previewAction(request.action) || repairedPreview(request) || repairedCleanup(request) ? ['lifecycle'] : [])]);
   for (const key of ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion']) {
     if (value[key] !== request[key]) fail('result identity mismatch');
   }

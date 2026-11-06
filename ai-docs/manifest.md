@@ -43,7 +43,7 @@ GitHub/Actions/Runner/SBA、Git/Node/npm/Python 等控制变量，以及 PATH、
 | name | 非空显示名，最多 80 字符 |
 | fromErrorCodes | 1–32 个唯一大写错误码，匹配 `[A-Z][A-Z0-9_]{1,79}` |
 | secretNames | 唯一名称数组，必须是 manifest.secrets 的子集；可以为空 |
-| fromActions | 可选，非空且唯一的动作数组，只允许 deploy、update、repair、preview；省略时为 deploy/update/repair，不包含 preview |
+| fromActions | 可选，非空且唯一的动作数组，允许 deploy、update、repair、preview、destroy-preview；省略时为 deploy/update/repair，不包含 preview 或 destroy-preview |
 
 repair 是更高版本固定提交对原失败任务的显式恢复，不是 rerun。未声明的修复操作、错误码或秘密不能凭 UI 推断。
 
@@ -56,5 +56,12 @@ repair 是更高版本固定提交对原失败任务的显式恢复，不是 rer
 （原副本候选的 sourceSha/applicationVersion 及原 instanceId）。应用必须分别核验当前部分目标、历史恢复点与
 本次操作前后源实例；不能把更高版本的失败 repair 当作已发布版本，或用新快照冒充旧备份。
 源码与本地验证不代表平台已发布或真实应用修复成功。
+
+清理恢复模板必须显式允许 `destroy-preview`，只能再与 `repair` 组合，不得混入发布或
+预升级权限。控制面只接受准确父动作、错误码与认证失败回执，继承原清理基线到
+`context.cleanup`；unknown 或提供了部分生命周期的失败仍不能恢复。应用须重新认证
+原 provenance、完整目标身份及尚未消费的一次性清理权限；不能把无 lifecycle 当作零写入
+证明。清理恢复成功使用 removed 生命周期，不要求与删除矛盾的保数据/就绪检查，见
+[生命周期](lifecycle.md)。新控制面与固定 executor 必须兼容后方可使用。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[runtime.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/runtime.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。完整可校验样例见 [验证](validation.md)。

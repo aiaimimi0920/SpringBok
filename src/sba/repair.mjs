@@ -1,5 +1,6 @@
 // 修复是独立执行，不是重新运行原任务或把未知结果改成成功。
 import { validatePreviewContext, validatePreviewResult } from './preview.mjs';
+import { repairedCleanup, validateCleanupRepairContext, validateCleanupRepairResult } from './cleanup-repair.mjs';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const exact = (value, keys) => object(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 const identifier = value => typeof value === 'string' && /^[a-z][a-z0-9-]{1,62}$/.test(value);
@@ -30,18 +31,26 @@ export function validateRepairs(manifest) {
       repair.secretNames.every(name => manifest.secrets.includes(name)));
     const actions = repairActions(repair);
     requireRepair(Array.isArray(actions) && actions.length > 0 && new Set(actions).size === actions.length &&
-      actions.every(action => ['deploy', 'update', 'repair', 'preview'].includes(action)));
+      actions.every(action => ['deploy', 'update', 'repair', 'preview', 'destroy-preview'].includes(action)));
+    requireRepair(!actions.includes('destroy-preview') || actions.every(action => ['destroy-preview', 'repair'].includes(action)));
   }
 }
 
 export function validateRepairContext(request, manifest, compareVersions) {
   const value = request.context;
   requireRepair(exact(value, ['repairId', 'parentTaskId', 'parentRunId', 'requestDigest', 'resultDigest', 'errorCode', ...(repairedPreview(request) ? ['preview'] : []),
-    ...(Object.hasOwn(value, 'previewBaseline') ? ['previewBaseline'] : [])]));
+    ...(Object.hasOwn(value, 'previewBaseline') ? ['previewBaseline'] : []), ...(repairedCleanup(request) ? ['cleanup'] : [])]));
   requireRepair(identifier(value.repairId) && typeof value.parentTaskId === 'string' && /^dc-[a-f0-9]{32}$/.test(value.parentTaskId) && value.parentTaskId !== request.taskId &&
     Number.isSafeInteger(value.parentRunId) && value.parentRunId > 0 && digest(value.requestDigest) && digest(value.resultDigest) && errorCode(value.errorCode));
   const repair = manifest.repairs?.find(row => row.id === value.repairId);
   requireRepair(repair && repair.fromErrorCodes.includes(value.errorCode));
+  if (repairedCleanup(request)) {
+    requireRepair(repairActions(repair).includes('destroy-preview'));
+    validateCleanupRepairContext(request, compareVersions);
+    requireRepair(new TextEncoder().encode(JSON.stringify(request)).length <= 49152);
+    return;
+  }
+  requireRepair(!repairActions(repair).includes('destroy-preview'));
   if (repairedPreview(request)) {
     requireRepair(repairActions(repair).includes('preview'));
     validatePreviewContext(previewRepairRequest(request));
@@ -63,6 +72,7 @@ export function validateRepairContext(request, manifest, compareVersions) {
 export function validateRepairResult(value, request) {
   // 修复不能仅以发布命令退出或 HTTP 登录重定向认定成功。
   requireRepair(value.status !== 'deployed-unverified');
+  if (repairedCleanup(request)) { validateCleanupRepairResult(value, request); return; }
   if (repairedPreview(request)) validatePreviewResult(value, previewRepairRequest(request));
   if (value.status === 'succeeded') {
     for (const id of ['repair-completed', 'data-preserved', 'unchanged-resources-verified', 'service-ready']) {

@@ -69,7 +69,38 @@ try{
   await page.keyboard.press('Escape');assert.equal(state.dispatches,4);
   assert.deepEqual((await api('state',{taskId:preview.taskId})).json().job,failed.job);
   assert.deepEqual((await api('state',{taskId:firstRepair})).json().job,failedRepair.job);
+  await page.getByRole('button',{name:'删除测试环境',exact:true}).click();
+  await page.getByRole('button',{name:'确认删除测试环境',exact:true}).click();
+  await page.waitForFunction(()=>!document.getElementById('service-dialog').open);assert.equal(state.dispatches,5);
+  permit=await(await machine()).json();const cleanupContext=permit.request.context,cleanupTask=permit.request.taskId;
+  receipt(permit,'failed',{checks:[],errorCode:'SHARED_OR_UNVERIFIED'});
+  const failedCleanup=(await service('service-state',{instanceId:preview.taskId,reconcile:true})).json();
+  state.updateVersion='5.0.0';state.manifestOverride.repairs=[{id:'cleanup-copy',name:'清理测试副本',
+    fromErrorCodes:['SHARED_OR_UNVERIFIED'],fromActions:['destroy-preview','repair'],secretNames:['CLOUDFLARE_API_TOKEN']}];
+  await ready(page);await page.getByRole('button',{name:'修复',exact:true}).click();
+  await page.getByRole('button',{name:'指定来源',exact:true}).click();
+  await page.getByLabel('提交 SHA',{exact:true}).fill('7'.repeat(40));
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.waitForFunction(()=>!document.getElementById('service-submit').disabled);
+  await page.locator('#service-submit').click();
+  await page.locator('#service-review').filter({hasText:'将永久删除以上测试资源及其中的数据'}).waitFor({state:'visible'});
+  assert.equal(await page.locator('#service-review li').count(),cleanupContext.resources.length);
+  assert.match(await page.locator('#service-submit').getAttribute('class'),/danger/);
+  assert.equal(await page.locator('#service-submit').textContent(),'确认删除测试环境');
+  await page.screenshot({path:join(directory,'cleanup-repair-review.png')});
+  await page.locator('#service-submit').evaluate(button=>{button.click();button.click();});
+  await page.waitForFunction(()=>!document.getElementById('service-dialog').open);assert.equal(state.dispatches,6);
+  permit=await(await machine()).json();assert.deepEqual(permit.request.context.cleanup,{sourceSha:'6'.repeat(40),applicationVersion:'4.0.0',context:cleanupContext});
+  assert.equal(state.created.length,2);assert.equal((await machine()).status,403);
+  receipt(permit,'succeeded',{checks:[{id:'repair-completed',passed:true}],lifecycle:{
+    resources:cleanupContext.resources.map(item=>({key:item.key,status:'removed'}))}});
+  await ready(page);const deleted=page.locator(`[data-instance-id="${preview.taskId}"]`);
+  await deleted.getByText('已删除',{exact:true}).waitFor();
+  assert.equal(await deleted.getByRole('button',{name:'删除测试环境',exact:true}).isDisabled(),true);
+  assert.equal(await deleted.getByText('v5.0.0',{exact:true}).count(),0,'cleanup code was not published as a deployment');
+  assert.deepEqual((await api('state',{taskId:cleanupTask})).json().job,failedCleanup.job);
+  await page.screenshot({path:join(directory,'cleanup-repair-deleted.png')});
   assert.equal((await service('service-state',{instanceId:first.taskId,reconcile:false})).json().history.length,1);
   assert.deepEqual(errors,[]);
-  console.log('Failed preview uses explicit repair scope, original resources, one dispatch and authenticated cleanup review; source and UNKNOWN history preserved.');
+  console.log('Preview and prewrite cleanup use distinct authenticated repairs, immutable histories, bounded deletion review and single dispatch.');
 }finally{await suite.close();}

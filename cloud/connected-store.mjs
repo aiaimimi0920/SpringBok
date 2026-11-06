@@ -6,6 +6,7 @@ import { importedId } from './service-import.mjs';
 import { cancellationRecord } from './deployment-cancellation.mjs';
 import { deploymentScope } from './deployment-suite.mjs';
 import { repairPreviewContext, repairPreviewBaseline } from '../src/sba/repair.mjs';
+import { repairCleanupContext, cleanupRepairable } from '../src/sba/cleanup-repair.mjs';
 export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));return value; };
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
 export const accountStub = (env,accountId) => {requireSba(deploymentScope(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
@@ -147,11 +148,14 @@ export class DeploymentLocks extends DurableObject {
     requireSba(this.env.ENABLE_SERVICE_REPAIR==='yes');
     exactSba(update,['instanceId','previousTaskId']);
     exactSba(context,['repairId','parentTaskId','parentRunId','requestDigest','resultDigest','errorCode',...(Object.hasOwn(context,'preview')?['preview']:[]),
-      ...(Object.hasOwn(context,'previewBaseline')?['previewBaseline']:[])]);
+      ...(Object.hasOwn(context,'previewBaseline')?['previewBaseline']:[]),...(Object.hasOwn(context,'cleanup')?['cleanup']:[])]);
     requireSba(context.parentTaskId===update.previousTaskId);
     const parent=connectedStub(this.env,update.previousTaskId),{plan}=await parent.bootstrap(owner),job=await parent.inspect(owner);
     requireSba(!plan.verificationOf&&(plan.operation?.instanceId??update.previousTaskId)===update.instanceId&&
-      (plan.previewOf?!!repairPreviewContext(job?.request??{})&&canonicalSba(context.preview)===canonicalSba(repairPreviewContext(job.request))&&
+      (Object.hasOwn(context,'cleanup') ? !!plan.previewOf&&cleanupRepairable(job)&&
+        !Object.hasOwn(context,'preview')&&!Object.hasOwn(context,'previewBaseline')&&
+        canonicalSba(context.cleanup)===canonicalSba(repairCleanupContext(job.request))&&context.cleanup.context.instanceId===update.instanceId :
+      plan.previewOf?!!repairPreviewContext(job?.request??{})&&canonicalSba(context.preview)===canonicalSba(repairPreviewContext(job.request))&&
         (Object.hasOwn(context,'previewBaseline')?canonicalSba(context.previewBaseline)===canonicalSba(repairPreviewBaseline(job.request)):job.request.action==='preview'):
         !Object.hasOwn(context,'preview')&&!Object.hasOwn(context,'previewBaseline')&&['deploy','update','repair'].includes(job?.request.action))&&
       ['unknown','failed'].includes(job?.status)&&job.result?.status===job.status&&!!job.permitId&&

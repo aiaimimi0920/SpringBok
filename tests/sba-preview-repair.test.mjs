@@ -28,7 +28,7 @@ test('default repair never opts into preview, while preview-only repair cannot o
   const plain=manifest();delete plain.repairs[0].fromActions;
   assert.throws(()=>validateRequest(request(),plain));
   const missing=request();delete missing.context.preview;assert.throws(()=>validateRequest(missing,manifest()));
-  for(const actions of [[],['preview','preview'],['destroy-preview'],['verify'],['arbitrary']]){
+  for(const actions of [[],['preview','preview'],['destroy-preview','preview'],['verify'],['arbitrary']]){
     const value=manifest();value.repairs[0].fromActions=actions;assert.throws(()=>validateManifest(value));
   }
 });

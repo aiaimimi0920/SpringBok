@@ -27,7 +27,7 @@ update、preview、repair 必须比 previous 版本更高且 SHA 不同。verify
 | status | succeeded / deployed-unverified / failed / unknown |
 | checks | 最多 30 个唯一 `{id, passed}`；id 为小写标识，passed 为布尔值 |
 | errorCode | 可选安全错误码，匹配 `[A-Z][A-Z0-9_]{1,79}`；不得添加原异常文本 |
-| lifecycle | 仅预升级动作及显式修复预升级副本可用，结构见下文 |
+| lifecycle | 仅预升级动作、显式修复预升级副本或其写前失败清理可用，结构见下文 |
 
 succeeded 必须至少一项检查且全部为 true。退出码 0 并不能单独证明成功；非零、缺失、身份不符或格式错误均不能接受为成功。deployed-unverified 不等于业务验收通过，verify 和 repair 不允许该状态。
 
@@ -83,13 +83,30 @@ repair 的版本。它由认证父请求继承；兼容首个旧 repair 无该�
 不能在请求中替换、重新取源快照或跳过父 UNKNOWN。原副本版本须高于源版本，且不高于父版本；
 SHA 不得为源或新候选，instanceId 必须为原副本，不能为源或新任务。旧首个 repair 请求可不含 baseline，普通实例 repair 不允许该字段。
 
-repair 成功必须通过 repair-completed、data-preserved、unchanged-resources-verified、service-ready。service-ready 证明应用声明的配置就绪范围，不自动证明用户已完成 Access、邮箱验证或后台登录。
+普通 repair 及副本 repair 成功必须通过 repair-completed、data-preserved、unchanged-resources-verified、service-ready。service-ready 证明应用声明的配置就绪范围，不自动证明用户已完成 Access、邮箱验证或后台登录。
 
 修复预升级副本还必须提供完整 preview lifecycle，并通过其四项检查。成功后仍使用原副本
 instanceId，新 repair task 成为 head；后续 destroy-preview 的 previewTaskId/resultDigest 绑定
 新 repair 回执，资源仍是原副本清单，不获得源实例写权限。应用持久 provenance 也必须绑定
 原 instance 与新任务，不能把普通 repair 成功或旧 UNKNOWN 当作清理授权。该合同需新控制面与
 固定 executor 一起发布；真实修复与永久删除分别验收，不以本地测试替代。
+
+写前失败的测试清理采用独立判别分支：repair context 只额外包含
+`cleanup: {sourceSha, applicationVersion, context}`。其中 context 是原 destroy-preview 的
+完整 context，SHA/version 是原清理绑定的已部署版本；后续清理 repair 逐代继承它，不能
+改成最近失败 repair 的候选版本。该分支不得同时含 preview/previewBaseline。外层仍是
+更高版本的固定修复代码，但不意味着发布该版本的 Worker。
+
+仅 preview 实例、认证父结果为 failed 且未提供 lifecycle 时，平台才允许此种恢复，并需
+候选模板显式允许 destroy-preview 及实际父动作、准确错误码。无 lifecycle 不是零写入
+证明，应用仍必须认证原持久 provenance、原完整资源/状态、未消费的一次性 authority
+及未被共享等前置；任何不确定删除或已消费权限不得再次清理。平台在计划与账号 lane
+接管时均重核父证据，保留旧 failed，不解锁或重放原任务。客户端不能替换 cleanup。
+
+清理 repair 成功必须通过 repair-completed，提供与原清单完全匹配且全部 removed/absent
+的 destroy-preview lifecycle；不要求虚假的 data-preserved/service-ready。控制面将实例标为
+deleted，不返回测试地址、不把清理代码当已部署版本。unknown/部分删除保持不可恢复。
+本合同需要兼容控制面及固定 executor 发布，源码测试不等于真实永久删除验收。
 
 业务秘密的 repair 授权沿用原实例 profile，并与 repair 声明的 secretNames 取受限范围；
 不允许通过 repair 输入替换 profile、扩大名称或读取管理员 bootstrap 密码。未选名称在

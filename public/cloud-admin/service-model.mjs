@@ -39,6 +39,7 @@ export function resourceCountText(instance) {
 }
 export function confirmedVersion(state) {
   const job = state?.job, previous = state?.instance?.previous;
+  if (state?.status === 'deleted' || job?.request?.context?.cleanup) return null;
   if (['succeeded', 'deployed-unverified'].includes(job?.status)) return { version: job.request.applicationVersion, sourceSha: job.request.sourceSha };
   if (state?.instance?.action === 'repair') return null;
   return previous ? { version: previous.applicationVersion, sourceSha: previous.sourceSha } : null;

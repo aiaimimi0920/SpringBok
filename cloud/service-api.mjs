@@ -9,6 +9,7 @@ import { repairEnabled, repairableJob } from './service-repair.mjs';
 import { recoverablePreparation } from './preparation-recovery.mjs';
 import { canRestartUpdate } from './unstarted-update-recovery.mjs';
 import { completedPreview } from './service-preview.mjs';
+import { repairedCleanup } from '../src/sba/cleanup-repair.mjs';
 
 async function deletionState(env, vault, owner, state) {
   const deletion = await vault.deletionRecord(owner, state.instance.id);
@@ -50,5 +51,5 @@ export async function serviceState(env, vault, owner, input) {
     canPreview: connectedEnabled(env) && terminal && !previewInstance,
     canDeletePreview: connectedEnabled(env) && completedPreview(plan, record.job),
     testUrls: completedPreview(plan, record.job) ? record.job.result.lifecycle.urls : [],
-    ...(plan.operation?.action === 'destroy-preview' && record.job?.status === 'succeeded' ? { status: 'deleted' } : {}) });
+    ...((plan.operation?.action === 'destroy-preview' || repairedCleanup(record.job?.request ?? {})) && record.job?.status === 'succeeded' ? { status: 'deleted' } : {}) });
 }

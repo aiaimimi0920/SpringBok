@@ -49,7 +49,9 @@ jobs:
         env:
           DEBUG: pw:api
       - name: Exercise execution confirmation with a fake backend (no containers or credentials)
-        run: node tests/browser/execution-review.mjs
+        run: timeout 120s node tests/browser/execution-review.mjs
+        env:
+          DEBUG: pw:api
       - name: Check local user configuration UI without deployment or credentials
         run: node tests/browser/config-review.mjs
       - name: Check private cloud management with synthetic Access JWTs and actual workerd
@@ -78,6 +80,8 @@ jobs:
         run: node tests/browser/service-repair.mjs
       - name: Check bounded service discovery across slow repositories and pages
         run: node tests/browser/service-discovery.mjs
+      - name: Check explicit immutable sources without default-branch application declarations
+        run: node tests/browser/service-source.mjs
       - name: Check read-only service import and persistent imported instances
         run: node tests/browser/service-import.mjs
       - name: Check automatic resource creation and retained-resource service updates

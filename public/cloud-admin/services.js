@@ -3,6 +3,7 @@ import { resourceLabels } from './resource-model.mjs';
 import { importFields, importWorkerOptions, importDraft, importReview, importedDetails } from './service-import.js';
 import { resumePreparation } from './preparation-recovery.js';
 import { applicationSecretFields } from './service-secrets.js';
+import { applicationSourceFields } from './service-source.js';
 
 const $ = id => document.getElementById(id);
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
@@ -27,6 +28,7 @@ const ref = id => { const row = connections.find(row => row.id === id && row.sta
 const current = version => version === generation;
 const currentDialog = (version, pageVersion) => version === dialogGeneration && current(pageVersion) && $('service-dialog').open;
 const repairOptions = data => data?.manifest?.repairs?.filter(row => row.fromErrorCodes.includes(updateTarget?.job?.errorCode)) ?? [];
+const sourceFields = applicationSourceFields($('service-source'), loadSource);
 
 function controls() {
   $('service-fields').disabled = !session || busy || selectionBusy || submitting || deletingPreview;
@@ -37,6 +39,7 @@ function controls() {
   $('service-back').hidden = !preview || deletingPreview; $('service-back').disabled = busy || submitting;
   $('service-edit').hidden = !!preview || application?.status !== 'ready'; $('service-review').hidden = !preview;
   for (const tab of $('service-tabs').children) tab.disabled = busy || submitting;
+  sourceFields.sync({ hidden: !!updateTarget || importing || deletingPreview || !!preview || !session, disabled: busy || selectionBusy || submitting });
 }
 function clearPreview() { preview = null; $('service-review').replaceChildren(); controls(); }
 function restoreFocus() {
@@ -53,6 +56,7 @@ function invalidate() {
   application = null; preview = null; selectedResources = new Map(); busy = false; selectionBusy = false; submitting = false;
   $('service-list').replaceChildren(); $('service-tabs').replaceChildren(); $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); $('service-review').replaceChildren();
   $('service-dialog').close(); controls();
+  sourceFields.reset();
 }
 async function request(path, body, timeoutMs = 0) {
   const version = generation;
@@ -534,12 +538,27 @@ async function changeVersion() {
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
   finally { if (currentDialog(version, pageVersion)) { selectionBusy = false; controls(); } }
 }
+async function loadSource({ connectionId, repository, sourceSha }) {
+  if (!session || busy || selectionBusy || submitting || updateTarget || importing) return;
+  const version = ++dialogGeneration, pageVersion = generation;
+  busy = true; application = null; selected = null; selectedResources = new Map(); prepareApplicationSecrets = null;
+  $('service-selection').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren();
+  clearPreview(); dialogNotice('正在读取版本…');
+  try {
+    const data = await request(api + 'application', { github: ref(connectionId), repository, sourceSha }, 45000);
+    if (!currentDialog(version, pageVersion)) return;
+    if (data.status !== 'ready') throw new Error('此版本的 .sba 声明无效或不受支持');
+    busy = false; catalog.set(data.repository.toLowerCase(), data); await selectService(data);
+  } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
+  finally { if (currentDialog(version, pageVersion)) { busy = false; controls(); } }
+}
 async function openDialog(state = null, trigger = $('service-add'), mode = 'deploy') {
   if (busy || submitting) return;
   importing = mode === 'import';
   rehearsing = mode === 'rehearse'; repairing = mode === 'repair'; deletingPreview = false;
   testEnvironment = rehearsing ? 'test-' + crypto.randomUUID().replaceAll('-', '').slice(0, 12) : null;
   updateTarget = state; returnFocus = trigger; selected = null; application = null; selectedResources = new Map(); dialogGeneration++; clearPreview();
+  sourceFields.reset(connections);
   $('service-dialog-title').textContent = state ? (repairing ? '修复 · ' : rehearsing ? '预升级测试 · ' : '升级 · ') + state.instance.application.name : importing ? '导入服务' : '部署服务';
   $('service-selection').textContent = ''; $('service-inputs').replaceChildren(); $('service-resources').replaceChildren(); dialogNotice(session ? '' : '身份尚未就绪');
   $('service-dialog').showModal(); $('service-close').focus(); renderTabs();
@@ -721,7 +740,7 @@ async function openDeletePreview(state, trigger) {
 $('service-add').addEventListener('click', () => void openDialog());
 $('service-import').addEventListener('click', () => void openDialog(null, $('service-import'), 'import'));
 $('service-close').addEventListener('click', () => $('service-dialog').close());
-$('service-dialog').addEventListener('close', () => { dialogGeneration++; busy = false; selectionBusy = false; preview = null; application = null; selected = null; controls(); restoreFocus(); });
+$('service-dialog').addEventListener('close', () => { dialogGeneration++; busy = false; selectionBusy = false; preview = null; application = null; selected = null; sourceFields.reset(); controls(); restoreFocus(); });
 $('service-form').addEventListener('submit', event => void prepare(event));
 $('service-back').addEventListener('click', clearPreview);
 $('service-version').addEventListener('change', () => void changeVersion());

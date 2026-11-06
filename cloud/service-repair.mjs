@@ -6,10 +6,11 @@ import { compareVersions } from '../src/sba/contract.mjs';
 import { configureApplicationSecrets } from './application-secrets.mjs';
 import { repairActions, repairPreviewContext, repairPreviewBaseline } from '../src/sba/repair.mjs';
 import { repairCleanupContext, cleanupRepairable } from '../src/sba/cleanup-repair.mjs';
+import { partialCleanupRepairable, repairCleanupProgress } from '../src/sba/cleanup-progress.mjs';
 
 export const repairEnabled = env => env.ENABLE_SERVICE_REPAIR === 'yes';
 export const repairableJob = (plan, job) => !plan.verificationOf &&
-  (plan.previewOf ? (!!repairPreviewContext(job?.request ?? {}) || cleanupRepairable(job)) : ['deploy', 'update', 'repair'].includes(job?.request.action)) && ['unknown', 'failed'].includes(job?.status) &&
+  (plan.previewOf ? (!!repairPreviewContext(job?.request ?? {}) || cleanupRepairable(job) || partialCleanupRepairable(job)) : ['deploy', 'update', 'repair'].includes(job?.request.action)) && ['unknown', 'failed'].includes(job?.status) &&
   job.result?.status === job.status && typeof job.result.errorCode === 'string' && !!job.permitId && Number.isSafeInteger(job.runId);
 
 export async function serviceRepairDraft(vault, owner, input) {
@@ -33,9 +34,11 @@ export async function serviceRepairDraft(vault, owner, input) {
   requireSba(repair && repair.fromErrorCodes.includes(job.result.errorCode) && repairActions(repair).includes(job.request.action));
   const cleanup = repairCleanupContext(job.request);
   requireSba(!!cleanup === repairActions(repair).includes('destroy-preview'));
+  const cleanupProgress = cleanup ? repairCleanupProgress(job) : null;
+  requireSba(!cleanupProgress || repair.resumeCleanup === true);
   const context = { repairId: repair.id, parentTaskId: input.previousTaskId, parentRunId: job.runId,
     requestDigest: job.requestDigest, resultDigest: await sbaDigest(job.result), errorCode: job.result.errorCode,
-    ...(cleanup ? { cleanup: structuredClone(cleanup) } : old.previewOf ? { preview: structuredClone(repairPreviewContext(job.request)),
+    ...(cleanup ? { cleanup: structuredClone(cleanup), ...(cleanupProgress ? { cleanupProgress } : {}) } : old.previewOf ? { preview: structuredClone(repairPreviewContext(job.request)),
       previewBaseline: structuredClone(repairPreviewBaseline(job.request)) } : {}) };
   const operation = { action: 'repair', instanceId: input.instanceId, previousTaskId: input.previousTaskId,
     previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion }, previousResultDigest: context.resultDigest, context };

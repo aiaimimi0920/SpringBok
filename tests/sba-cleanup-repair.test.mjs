@@ -48,3 +48,24 @@ test('cleanup repair success requires full removal evidence and repair check, ne
     const value = result(); mutate(value); assert.throws(() => validateResult(value, request()));
   }
 });
+
+test('partial cleanup recovery is an explicit cleanup-only declaration with bounded parent evidence', () => {
+  const m = manifest(); m.repairs[0].resumeCleanup = true;
+  assert.deepEqual(validateManifest(m), m);
+  for (const mutate of [r => r.resumeCleanup = false, r => r.resumeCleanup = 'true',
+    r => delete r.fromActions, r => r.fromActions = ['repair']]) {
+    const invalid = structuredClone(m); mutate(invalid.repairs[0]); assert.throws(() => validateManifest(invalid));
+  }
+  const r = request();
+  const parent = { schemaVersion: 3, taskId: r.context.parentTaskId, action: 'destroy-preview',
+    ...r.previous, status: 'unknown', checks: ['preview-authority-verified', 'preview-ingress-stopped'].map(id => ({ id, passed: true })),
+    errorCode: r.context.errorCode, lifecycle: { resources: r.context.cleanup.context.resources.map(row => ({ key: row.key, status: 'unknown' })) } };
+  r.context.cleanupProgress = { consumedTaskId: r.context.parentTaskId, permitAt: 1793923200000, journalTaskId: null, parentResult: parent };
+  assert.deepEqual(validateRequest(r, m), r);
+  assert.throws(() => validateRequest(r, manifest()));
+  for (const mutate of [v => v.permitAt = 0, v => v.consumedTaskId = r.taskId,
+    v => v.journalTaskId = r.taskId, v => v.parentResult.taskId = r.taskId,
+    v => v.parentResult.lifecycle.resources.pop(), v => v.extra = true]) {
+    const invalid = structuredClone(r); mutate(invalid.context.cleanupProgress); assert.throws(() => validateRequest(invalid, m));
+  }
+});

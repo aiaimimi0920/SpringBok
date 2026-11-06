@@ -28,7 +28,9 @@ const ref = id => { const row = connections.find(row => row.id === id && row.sta
 const current = version => version === generation;
 const currentDialog = (version, pageVersion) => version === dialogGeneration && current(pageVersion) && $('service-dialog').open;
 const repairOptions = data => data?.manifest?.repairs?.filter(row => row.fromErrorCodes.includes(updateTarget?.job?.errorCode) &&
-  (row.fromActions ?? ['deploy','update','repair']).includes(updateTarget?.instance?.action)) ?? [];
+  (row.fromActions ?? ['deploy','update','repair']).includes(updateTarget?.instance?.action) &&
+  (!(updateTarget?.job?.request?.context?.cleanupProgress ||
+    (updateTarget?.instance?.action === 'destroy-preview' || updateTarget?.job?.request?.context?.cleanup) && updateTarget?.job?.result?.lifecycle) || row.resumeCleanup === true)) ?? [];
 const sourceFields = applicationSourceFields($('service-source'), loadSource);
 
 function controls() {

@@ -3,6 +3,25 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
+## EMAIL-10：已消费授权的部分清理恢复（实施中，2026-11-07）
+
+负责人主 AI。只处理已批准的原测试副本及同类显式声明的部分清理：认证父 artifact、
+原签名 provenance/消费记录和准确剩余身份，保留父 unknown、原 lane 和一次性派发。
+应用使用待删 platform D1 内的签名恢复日志，先持久化独立 claim，再处理尚在的获批资源，
+该 D1 最后删除；不重新开放 Worker、不重建副本、不重放旧 DELETE 或清锁。未声明部分
+恢复能力的旧模板继续拒绝 unknown。平台只认证/编排，不接管邮件迁移或业务删除逻辑。
+已实现显式 resumeCleanup、由认证父派生 cleanupProgress 和 lane 双核，原 baseline/消费
+task/permitAt 保持；前端拒绝未 opt-in 候选，原八项危险确认与单次派发保留。共享 AI/Pages
+manifest/lifecycle 已同步，不另建协议定义。合同/workerd/文档 31 项通过，真实 Chrome/workerd
+覆盖部分 UNKNOWN→候选拒绝→显式恢复→已删除、旧历史和源保持；普通 repair 与四页五宽度
+Neuro 回归通过。应用完整 Python 219 项及新增父摘要边界 3 项通过；原生 D1/R2 证实 INSERT
+提交丢响应后可沿精确父签名行继续，对象读取/删除不依赖活 Worker。完整打包原生套件
+31 项通过（含三个原 preview/repair 生命周期、原生数据与新恢复回归），没有失败或跳过。
+真实 Cloudflare GET-only 对剩余 email Worker、两库两桶的关闭/绑定/无共享前置通过；修正
+真实 schedules 对象和 json 静态绑定形状。没有写 journal 或继续删云资源。CREATE-only 无签名
+行明确停止，不冒充无写入；日志库最后删除、全 absent 的只读终态有回归。精确 CI/固定
+executor 发布和真实剩余清理仍待完成。名称 DELETE 的外部并发重建和跨系统时间限制保留。
+
 ## EMAIL-09：写前失败清理的独立恢复（已发布，云清理部分完成，2026-11-07）
 
 最新：PR #134 精确 head 与合并后 `974d9ae` 七门禁通过，兼容控制面和同 SHA 的受保护

@@ -1,6 +1,7 @@
 // 修复是独立执行，不是重新运行原任务或把未知结果改成成功。
 import { validatePreviewContext, validatePreviewResult } from './preview.mjs';
 import { repairedCleanup, validateCleanupRepairContext, validateCleanupRepairResult } from './cleanup-repair.mjs';
+import { validateCleanupProgress } from './cleanup-progress.mjs';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const exact = (value, keys) => object(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 const identifier = value => typeof value === 'string' && /^[a-z][a-z0-9-]{1,62}$/.test(value);
@@ -22,7 +23,8 @@ export function validateRepairs(manifest) {
   requireRepair(manifest.schemaVersion === 3 && Array.isArray(manifest.repairs) && manifest.repairs.length > 0 && manifest.repairs.length <= 10);
   const seen = new Set();
   for (const repair of manifest.repairs) {
-    requireRepair(exact(repair, ['id', 'name', 'fromErrorCodes', 'secretNames', ...(Object.hasOwn(repair, 'fromActions') ? ['fromActions'] : [])]) && identifier(repair.id) && !seen.has(repair.id));
+    requireRepair(exact(repair, ['id', 'name', 'fromErrorCodes', 'secretNames', ...(Object.hasOwn(repair, 'fromActions') ? ['fromActions'] : []),
+      ...(Object.hasOwn(repair, 'resumeCleanup') ? ['resumeCleanup'] : [])]) && identifier(repair.id) && !seen.has(repair.id));
     seen.add(repair.id);
     requireRepair(typeof repair.name === 'string' && repair.name.trim().length > 0 && repair.name.length <= 80 && !/[\x00-\x1f]/.test(repair.name));
     requireRepair(Array.isArray(repair.fromErrorCodes) && repair.fromErrorCodes.length > 0 && repair.fromErrorCodes.length <= 32 &&
@@ -33,13 +35,15 @@ export function validateRepairs(manifest) {
     requireRepair(Array.isArray(actions) && actions.length > 0 && new Set(actions).size === actions.length &&
       actions.every(action => ['deploy', 'update', 'repair', 'preview', 'destroy-preview'].includes(action)));
     requireRepair(!actions.includes('destroy-preview') || actions.every(action => ['destroy-preview', 'repair'].includes(action)));
+    if (Object.hasOwn(repair, 'resumeCleanup')) requireRepair(repair.resumeCleanup === true && actions.includes('destroy-preview'));
   }
 }
 
 export function validateRepairContext(request, manifest, compareVersions) {
   const value = request.context;
   requireRepair(exact(value, ['repairId', 'parentTaskId', 'parentRunId', 'requestDigest', 'resultDigest', 'errorCode', ...(repairedPreview(request) ? ['preview'] : []),
-    ...(Object.hasOwn(value, 'previewBaseline') ? ['previewBaseline'] : []), ...(repairedCleanup(request) ? ['cleanup'] : [])]));
+    ...(Object.hasOwn(value, 'previewBaseline') ? ['previewBaseline'] : []), ...(repairedCleanup(request) ? ['cleanup'] : []),
+    ...(Object.hasOwn(value, 'cleanupProgress') ? ['cleanupProgress'] : [])]));
   requireRepair(identifier(value.repairId) && typeof value.parentTaskId === 'string' && /^dc-[a-f0-9]{32}$/.test(value.parentTaskId) && value.parentTaskId !== request.taskId &&
     Number.isSafeInteger(value.parentRunId) && value.parentRunId > 0 && digest(value.requestDigest) && digest(value.resultDigest) && errorCode(value.errorCode));
   const repair = manifest.repairs?.find(row => row.id === value.repairId);
@@ -47,10 +51,12 @@ export function validateRepairContext(request, manifest, compareVersions) {
   if (repairedCleanup(request)) {
     requireRepair(repairActions(repair).includes('destroy-preview'));
     validateCleanupRepairContext(request, compareVersions);
+    if (Object.hasOwn(value, 'cleanupProgress')) { requireRepair(repair.resumeCleanup === true); validateCleanupProgress(request); }
     requireRepair(new TextEncoder().encode(JSON.stringify(request)).length <= 49152);
     return;
   }
   requireRepair(!repairActions(repair).includes('destroy-preview'));
+  requireRepair(!Object.hasOwn(value, 'cleanupProgress'));
   if (repairedPreview(request)) {
     requireRepair(repairActions(repair).includes('preview'));
     validatePreviewContext(previewRepairRequest(request));

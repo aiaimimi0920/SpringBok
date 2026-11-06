@@ -7,6 +7,11 @@ import { updatedSha } from '../cloud/service-fixture.mjs';
 
 const suite = configurePreviewFixture(await serviceBrowser());
 const { page, state, complete, machine, errors } = suite;
+state.declaration.defaults.optionalConfig = null;
+state.declaration.fields.push(
+  { path: ['optionalConfig'], label: '可空配置', type: 'json', required: false, template: null },
+  { path: ['unspecifiedConfig'], label: '缺省配置', type: 'json', required: false, template: null },
+);
 const directory = process.env.UI_EVIDENCE_DIR ?? 'test-results'; await mkdir(directory, { recursive: true });
 const confirm = async () => {
   await page.waitForFunction(() => !document.getElementById('service-submit').disabled);
@@ -30,8 +35,11 @@ try {
   state.missingSba.add('owner/second');
   await ready(page); await page.locator('#service-add').click();
   await page.locator('[role=tab][data-repository="owner/repo"]').click();
+  assert.equal(await page.getByLabel('可空配置', { exact: true }).inputValue(), 'null', 'explicit JSON null is not an empty object');
+  assert.equal(await page.getByLabel('缺省配置', { exact: true }).inputValue(), '{}', 'undefined retains the existing empty-object default');
   await reviewService(page); await confirm();
   const parentId = state.request.taskId, original = structuredClone(state.request.configuration);
+  assert.equal(original.optionalConfig, null); assert.deepEqual(original.unspecifiedConfig, {});
   complete(await (await machine()).json()); await ready(page);
   const parent = page.locator(`[data-instance-id="${parentId}"]`);
   await parent.getByRole('button', { name: '预升级测试', exact: true }).click();
@@ -56,7 +64,10 @@ try {
   assert.equal(await preview.getByRole('link', { name: '测试地址', exact: true }).getAttribute('href'), isolated.url);
   assert.equal(await preview.getByRole('button', { name: '升级', exact: true }).count(), 0);
   await page.screenshot({ path: join(directory, 'upgrade-preview-instances-320.png') });
-  await parent.getByRole('button', { name: '升级', exact: true }).click(); await chooseVersion(true); await reviewService(page); await confirm();
+  await parent.getByRole('button', { name: '升级', exact: true }).click(); await chooseVersion(true);
+  assert.equal(await page.getByLabel('可空配置', { exact: true }).isDisabled(), true);
+  assert.equal(await page.getByLabel('可空配置', { exact: true }).inputValue(), 'null', 'locked update configuration preserves explicit null');
+  await reviewService(page); await confirm();
   assert.equal(state.dispatches, 3); assert.equal(state.created.length, 2);
   assert.equal(state.request.action, 'update'); assert.deepEqual(state.request.configuration, original);
   complete(await (await machine()).json()); await ready(page);

@@ -407,7 +407,7 @@ function buildFields(data) {
   for (const [index, field] of (importing || rehearsing || repairing ? [] : data.declaration.fields).entries()) {
     if (automatic && field.template !== null) continue;
     const input = element(field.type === 'json' ? 'textarea' : 'input'), initial = valueAt(config, field.path);
-    input.required = field.required; input.value = field.type === 'json' ? JSON.stringify(initial ?? {}, null, 2) : String(initial ?? '');
+    input.required = field.required; input.value = field.type === 'json' ? JSON.stringify(initial === undefined ? {} : initial, null, 2) : String(initial ?? '');
     if (field.type === 'json') input.rows = 3; else input.maxLength = 8192;
     input.disabled = !!updateTarget; addField($('service-inputs'), 'service-field-' + index, field.label, input);
   }

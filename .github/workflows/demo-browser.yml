@@ -78,6 +78,8 @@ jobs:
         run: node tests/browser/service-repair.mjs
       - name: Check bounded service discovery across slow repositories and pages
         run: node tests/browser/service-discovery.mjs
+      - name: Check explicit immutable sources without default-branch application declarations
+        run: node tests/browser/service-source.mjs
       - name: Check read-only service import and persistent imported instances
         run: node tests/browser/service-import.mjs
       - name: Check automatic resource creation and retained-resource service updates

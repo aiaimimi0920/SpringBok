@@ -33,9 +33,10 @@ export async function resolveDeploymentDomains(vault, owner, input, declaration,
       result.result.status === 'active' && result.result.name === zone.name && hostname(zone.name), 'domain-zone-mismatch');
     const domain = `${choice.subdomain}.${zone.name}`;
     requireSba(hostname(domain) && !names.has(domain)); names.add(domain);
-    const dns = await domainRead(`https://api.cloudflare.com/client/v4/zones/${zone.remoteId}/dns_records?name=${encodeURIComponent(domain)}&per_page=5`, token, transport, 'domain-dns-read-failed');
+    const dns = await domainRead(`https://api.cloudflare.com/client/v4/zones/${zone.remoteId}/dns_records?name=${encodeURIComponent(domain)}&per_page=100`, token, transport, 'domain-dns-read-failed');
     check(dns.success === true && Array.isArray(dns.result) && Number.isSafeInteger(dns.result_info?.total_count), 'domain-dns-read-failed');
-    check(dns.result.length === 0 && dns.result_info.total_count === 0, 'domain-dns-not-empty');
+    check(dns.result.length <= 100 && dns.result.length === dns.result_info.total_count && dns.result.every(record =>
+      record && record.name === domain && ['MX', 'TXT'].includes(record.type)), 'domain-dns-not-empty');
     vault.activeConnection(row.id, row.revision);
     const current = vault.ctx.storage.sql.exec('SELECT metadata FROM resources WHERE id=?', reference.id).toArray()[0];
     check(current && JSON.parse(current.metadata).revision === reference.revision, 'domain-registration-stale');

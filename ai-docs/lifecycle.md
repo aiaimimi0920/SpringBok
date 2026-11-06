@@ -97,16 +97,36 @@ instanceId，新 repair task 成为 head；后续 destroy-preview 的 previewTas
 改成最近失败 repair 的候选版本。该分支不得同时含 preview/previewBaseline。外层仍是
 更高版本的固定修复代码，但不意味着发布该版本的 Worker。
 
-仅 preview 实例、认证父结果为 failed 且未提供 lifecycle 时，平台才允许此种恢复，并需
+默认仅 preview 实例、认证父结果为 failed 且未提供 lifecycle 时，平台才允许此种恢复，并需
 候选模板显式允许 destroy-preview 及实际父动作、准确错误码。无 lifecycle 不是零写入
 证明，应用仍必须认证原持久 provenance、原完整资源/状态、未消费的一次性 authority
-及未被共享等前置；任何不确定删除或已消费权限不得再次清理。平台在计划与账号 lane
+及未被共享等前置；该默认路径不能再次使用已消费权限。平台在计划与账号 lane
 接管时均重核父证据，保留旧 failed，不解锁或重放原任务。客户端不能替换 cleanup。
 
 清理 repair 成功必须通过 repair-completed，提供与原清单完全匹配且全部 removed/absent
 的 destroy-preview lifecycle；不要求虚假的 data-preserved/service-ready。控制面将实例标为
-deleted，不返回测试地址、不把清理代码当已部署版本。unknown/部分删除保持不可恢复。
+deleted，不返回测试地址、不把清理代码当已部署版本。未声明下述能力的模板仍不能恢复 unknown/部分删除。
 本合同需要兼容控制面及固定 executor 发布，源码测试不等于真实永久删除验收。
+
+### 显式部分清理恢复
+
+仅 `resumeCleanup: true` 的清理模板可承接有完整 artifact 认证的 completed failed/unknown
+父执行。首次父回执须含 passed 的 `preview-authority-verified`、`preview-ingress-stopped`
+及合法的完整清单 lifecycle；后续父必须已持有该恢复上下文。准确父动作、错误码、递增
+固定应用版本、原连接/秘密/资源及原 lane 规则不变，不重跑旧任务、清锁或改写旧回执。
+
+平台派生只读 `context.cleanupProgress`，恰好含 `consumedTaskId`（原消费任务）、`permitAt`
+（该任务原许可时间，毫秒）、`journalTaskId`（已认证的持久 claim anchor 或 null）和
+`parentResult`（完整认证父结果）；`context.cleanup` 始终是原清理基线，不随修复版本替换。
+有 passed `cleanup-resume-claim-persisted` 时 anchor 更新为该父任务，否则继承已有 anchor。
+应用必须检查父摘要，并在 INSERT 回执丢失时优先读取精确父 task 的签名行，不把缺少
+passed check 解释成无写入。平台的上下文是执行证据，不代替应用持久防重复机制。
+
+应用须在删除前持久化并独立读回绑定本任务、认证父链、原消费身份及完整 witness 的
+唯一 claim。仅删除仍在且身份相等的获批目标；缺失项只读确认。日志不可被提前删除；
+只有日志所在资源最后一项未确认、父回执其他项均完成、全部清单及入口独立不存在时，
+可仅以只读核验收尾。其他日志丢失、签名不符、目标重建/新增内容或共享引用均停止，
+不重新采样证据、不建替代资源。具体日志存储及业务删除仍由应用实现，不由平台接管。
 
 业务秘密的 repair 授权沿用原实例 profile，并与 repair 声明的 secretNames 取受限范围；
 不允许通过 repair 输入替换 profile、扩大名称或读取管理员 bootstrap 密码。未选名称在

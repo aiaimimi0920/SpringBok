@@ -35,7 +35,7 @@ GitHub/Actions/Runner/SBA、Git/Node/npm/Python 等控制变量，以及 PATH、
 
 ## 可选修复描述
 
-每个 repairs 元素包含以下必需字段，并且仅可额外声明 `fromActions`：
+每个 repairs 元素包含以下必需字段，并且仅可额外声明 `fromActions`、`resumeCleanup`：
 
 | 字段 | 定义 |
 | --- | --- |
@@ -44,6 +44,7 @@ GitHub/Actions/Runner/SBA、Git/Node/npm/Python 等控制变量，以及 PATH、
 | fromErrorCodes | 1–32 个唯一大写错误码，匹配 `[A-Z][A-Z0-9_]{1,79}` |
 | secretNames | 唯一名称数组，必须是 manifest.secrets 的子集；可以为空 |
 | fromActions | 可选，非空且唯一的动作数组，允许 deploy、update、repair、preview、destroy-preview；省略时为 deploy/update/repair，不包含 preview 或 destroy-preview |
+| resumeCleanup | 可选，只能为 true；仅限显式允许 destroy-preview 的清理模板。声明支持已消费权限的独立部分清理恢复，不是重试旧任务或自动删除授权 |
 
 repair 是更高版本固定提交对原失败任务的显式恢复，不是 rerun。未声明的修复操作、错误码或秘密不能凭 UI 推断。
 
@@ -59,9 +60,14 @@ repair 是更高版本固定提交对原失败任务的显式恢复，不是 rer
 
 清理恢复模板必须显式允许 `destroy-preview`，只能再与 `repair` 组合，不得混入发布或
 预升级权限。控制面只接受准确父动作、错误码与认证失败回执，继承原清理基线到
-`context.cleanup`；unknown 或提供了部分生命周期的失败仍不能恢复。应用须重新认证
+`context.cleanup`；默认仍拒绝 unknown 或提供了部分生命周期的失败。应用须重新认证
 原 provenance、完整目标身份及尚未消费的一次性清理权限；不能把无 lifecycle 当作零写入
 证明。清理恢复成功使用 removed 生命周期，不要求与删除矛盾的保数据/就绪检查，见
 [生命周期](lifecycle.md)。新控制面与固定 executor 必须兼容后方可使用。
+
+需要恢复已消费 authority/部分删除时，候选必须额外声明 `resumeCleanup: true`。平台仅对
+具备认证历史检查或继承恢复上下文的 completed 父任务派生 `context.cleanupProgress`，并
+在原账号 lane 再核一次；应用仍负责签名证据、精确剩余身份和持久单次 claim。旧模板
+不会获得此上下文，客户端不能提供或替换它。源码声明不等于控制面、executor 或应用已发布。
 
 事实来源：[contract.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/contract.mjs)、[runtime.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/runtime.mjs)、[repair.mjs](https://github.com/aiaimimi0920/SpringBok/blob/main/src/sba/repair.mjs)。完整可校验样例见 [验证](validation.md)。

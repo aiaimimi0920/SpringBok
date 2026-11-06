@@ -92,12 +92,37 @@ try{
   await page.waitForFunction(()=>!document.getElementById('service-dialog').open);assert.equal(state.dispatches,6);
   permit=await(await machine()).json();assert.deepEqual(permit.request.context.cleanup,{sourceSha:'6'.repeat(40),applicationVersion:'4.0.0',context:cleanupContext});
   assert.equal(state.created.length,2);assert.equal((await machine()).status,403);
+  const partialCleanupTask=permit.request.taskId;
+  receipt(permit,'unknown',{checks:['preview-authority-verified','preview-ingress-stopped'].map(id=>({id,passed:true})),errorCode:'SHARED_OR_UNVERIFIED',lifecycle:{
+    resources:cleanupContext.resources.map(item=>({key:item.key,status:item.kind==='domain'?'removed':'unknown'}))}});
+  const partialCleanup=(await service('service-state',{instanceId:preview.taskId,reconcile:true})).json();
+  state.updateVersion='6.0.0';
+  await ready(page);await page.getByRole('button',{name:'修复',exact:true}).click();
+  await page.getByRole('button',{name:'指定来源',exact:true}).click();
+  await page.getByLabel('提交 SHA',{exact:true}).fill('8'.repeat(40));
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.locator('#service-dialog-notice').filter({hasText:'此版本没有匹配当前错误的修复操作'}).waitFor();
+  assert.equal(await page.locator('#service-submit').isDisabled(),true);assert.equal(state.dispatches,6);
+  state.manifestOverride.repairs[0].resumeCleanup=true;
+  await page.getByRole('button',{name:'读取版本',exact:true}).click();
+  await page.waitForFunction(()=>!document.getElementById('service-submit').disabled);
+  await page.locator('#service-submit').click();
+  await page.locator('#service-review').filter({hasText:'将永久删除以上测试资源及其中的数据'}).waitFor({state:'visible'});
+  assert.equal(await page.locator('#service-review li').count(),cleanupContext.resources.length);
+  await page.screenshot({path:join(directory,'cleanup-partial-resume-review.png')});
+  await page.locator('#service-submit').evaluate(button=>{button.click();button.click();});
+  await page.waitForFunction(()=>!document.getElementById('service-dialog').open);assert.equal(state.dispatches,7);
+  permit=await(await machine()).json();assert.equal((await machine()).status,403);
+  assert.equal(permit.request.context.cleanupProgress.consumedTaskId,partialCleanupTask);
+  assert.deepEqual(permit.request.context.cleanupProgress.parentResult,partialCleanup.job.result);
+  assert.deepEqual(permit.request.context.cleanup,partialCleanup.job.request.context.cleanup);
   receipt(permit,'succeeded',{checks:[{id:'repair-completed',passed:true}],lifecycle:{
     resources:cleanupContext.resources.map(item=>({key:item.key,status:'removed'}))}});
   await ready(page);const deleted=page.locator(`[data-instance-id="${preview.taskId}"]`);
   await deleted.getByText('已删除',{exact:true}).waitFor();
   assert.equal(await deleted.getByRole('button',{name:'删除测试环境',exact:true}).isDisabled(),true);
-  assert.equal(await deleted.getByText('v5.0.0',{exact:true}).count(),0,'cleanup code was not published as a deployment');
+  assert.equal(await deleted.getByText('v6.0.0',{exact:true}).count(),0,'cleanup code was not published as a deployment');
+  assert.deepEqual((await api('state',{taskId:partialCleanupTask})).json().job,partialCleanup.job);
   assert.deepEqual((await api('state',{taskId:cleanupTask})).json().job,failedCleanup.job);
   await page.screenshot({path:join(directory,'cleanup-repair-deleted.png')});
   assert.equal((await service('service-state',{instanceId:first.taskId,reconcile:false})).json().history.length,1);

@@ -4,6 +4,8 @@ import { exactSba, requireSba, sbaDigest, canonicalSba } from './sba-control.mjs
 import { openToken } from './connections-crypto.mjs';
 import { resourceAbsent } from './service-deletion-provider.mjs';
 import { readJson } from './connections-provider.mjs';
+import { githubScope } from './deployment-suite.mjs';
+import { applicationRepository } from './service-catalog.mjs';
 
 // 独立登记投影；不修改部署历史、执行 lane、资源 claim 或业务回执。
 export function retirementIndex(vault, owner) {
@@ -37,7 +39,7 @@ function retirementInventory(instance) {
   requireSba(name(workers[0].value) && name(pages[0].value));
   const repository = instance.application.repository;
   requireSba(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)
-    && actions[0].accountId === 'github:' + repository && /^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml@[a-z][a-z0-9-]{1,62}$/.test(actions[0].value));
+    && actions[0].accountId === githubScope(repository) && /^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml@[a-z][a-z0-9-]{1,62}$/.test(actions[0].value));
   requireSba(targets.every(t => t.kind === 'github-actions' || t.accountId === instance.accountId));
   for (const t of targets) {
     if (['worker','pages','github-actions'].includes(t.kind)) continue;
@@ -51,9 +53,11 @@ function retirementInventory(instance) {
     ...[...workers, ...pages, ...actions].map(t => ({ kind: t.kind, accountId: t.accountId, remoteId: t.value, name: t.value }))];
 }
 async function token(vault, owner, instance, provider) {
-  const ref = instance.connections[provider], { row, sealed } = vault.activeConnection(ref.id, ref.revision);
+  // 只读核验使用原连接 ID 的当前已验证凭据；历史部署引用不变。
+  const ref = instance.connections[provider], { row, sealed } = vault.activeConnection(ref.id);
   requireSba(row.provider === provider && (provider !== 'cloudflare' || row.target === instance.accountId));
-  return openToken(vault.env.CONNECTIONS_ENCRYPTION_KEY, owner, row, sealed);
+  if (provider === 'github') applicationRepository(row, instance.application.repository);
+  return { credential: await openToken(vault.env.CONNECTIONS_ENCRYPTION_KEY, owner, row, sealed), ref: { id: row.id, revision: row.revision } };
 }
 async function absentPages(row, credential) {
   let missing = false;
@@ -82,11 +86,13 @@ export async function retirementPlan(vault, owner, input) {
   const current = await source(vault, owner, input), resources = retirementInventory(current.instance);
   const cloudflare = await token(vault, owner, current.instance, 'cloudflare'), github = await token(vault, owner, current.instance, 'github');
   for (const row of resources) {
-    if (row.kind === 'pages') await absentPages(row, cloudflare);
-    else if (row.kind === 'github-actions') await absentActions(row, github);
-    else requireSba(await resourceAbsent(row, cloudflare));
+    if (row.kind === 'pages') await absentPages(row, cloudflare.credential);
+    else if (row.kind === 'github-actions') await absentActions(row, github.credential);
+    else requireSba(await resourceAbsent(row, cloudflare.credential));
   }
-  const plan = { ...input, ...current, resources: resources.map(row => ({ ...row, absent: true })) };
+  const connections = { cloudflare: cloudflare.ref, github: github.ref };
+  for (const ref of Object.values(connections)) vault.activeConnection(ref.id, ref.revision);
+  const plan = { ...input, ...current, connections, resources: resources.map(row => ({ ...row, absent: true })) };
   return { ...plan, digest: await sbaDigest(plan) };
 }
 export async function retireService(vault, owner, input) {
@@ -98,7 +104,7 @@ export async function retireService(vault, owner, input) {
   return vault.ctx.storage.transactionSync(() => {
     assertNotRetired(vault, owner, fresh.instanceId);
     requireSba(!vault.deletionRecord(owner, fresh.instanceId) && serviceEntries(vault.deploymentIndex(owner), fresh.instanceId)[0]?.taskId === fresh.previousTaskId);
-    for (const ref of Object.values(fresh.instance.connections)) vault.activeConnection(ref.id, ref.revision);
+    for (const ref of Object.values(fresh.connections)) vault.activeConnection(ref.id, ref.revision);
     const record = { ...fresh, operationId: input.operationId, status: 'retired', retiredAt: Date.now() };
     vault.ctx.storage.sql.exec('INSERT INTO service_retirements VALUES(?,?)', fresh.instanceId, JSON.stringify(record));
     return record;

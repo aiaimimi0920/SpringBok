@@ -32,11 +32,13 @@ try {
     await page.setViewportSize({ width, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.screenshot({ path: join(directory, `retirement-${width}.png`) });
   }
-  await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
+  await dialog.evaluate(el => { window.retirementClosed = false; el.addEventListener('close', () => { window.retirementClosed = true; }, { once: true }); });
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => window.retirementClosed === true);
   assert.equal(await retire.evaluate(el => el === document.activeElement), true);
   present = true; await retire.click(); await page.getByText('无法证明资源均已不存在，请检查资源状态与连接权限', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: '确认退役登记' }).isDisabled(), true);
-  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await dialog.evaluate(el => { window.retirementClosed = false; el.addEventListener('close', () => { window.retirementClosed = true; }, { once: true }); });
+  await page.getByRole('button', { name: '取消', exact: true }).click(); await page.waitForFunction(() => window.retirementClosed === true);
   present = false; await retire.click(); await page.waitForFunction(() => [...document.querySelectorAll('dialog[open] button')].some(b => b.textContent === '确认退役登记' && !b.disabled));
   await page.getByRole('button', { name: '确认退役登记' }).focus(); await page.keyboard.press('Enter');
   await page.getByText('旧服务登记已退役', { exact: true }).waitFor(); await page.locator('[data-instance-id]').waitFor({ state: 'detached' });

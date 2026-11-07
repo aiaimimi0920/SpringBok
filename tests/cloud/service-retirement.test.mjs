@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { suiteFixture } from './suite-fixture.mjs';
 import { updatedSha } from './service-fixture.mjs';
 
-async function absentSuite() {
-  const s = await suiteFixture(), first = await s.preview();
+async function absentSuite(repository) {
+  const s = await suiteFixture();
+  if (repository) s.input.repository = repository;
+  const first = await s.preview();
   await s.submit(first); s.complete(await (await s.machine()).json());
   await s.service('service-state', { instanceId: first.taskId, reconcile: true });
   const prior = s.state.provider, live = { present: false, denied: false, incomplete: false, writes: [] };
@@ -57,6 +59,55 @@ test('absent suite retirement changes only active projection, preserves history/
     await assert.rejects(locks.claim(s.auth.ownerId, 'dc-' + 'c'.repeat(32), 'a'.repeat(32), 'another/env', [], 'c'.repeat(64)));
     await assert.rejects(locks.claim('f'.repeat(64), 'dc-' + 'e'.repeat(32), 'a'.repeat(32), 'foreign/app/env', ['identity:testing-worker'], 'e'.repeat(64)));
     assert.equal((await s.service('state', { taskId: s.first.taskId })).status, 200);
+  } finally { await s.f.close(); }
+});
+
+test('retirement accepts canonical Actions scope for mixed-case repository', async () => {
+  const s = await absentSuite('owner/Repo');
+  try {
+    const state = (await s.service('service-state', { instanceId: s.first.taskId, reconcile: false })).json();
+    assert.equal(state.canRetire, true);
+    const review = await s.service('retire-plan', s.identity);
+    assert.equal(review.status, 200, review.text);
+    assert.equal(review.json().plan.instance.application.repository, 'owner/Repo');
+    assert.equal((await s.service('retire-submit', review.json())).status, 200);
+    assert.deepEqual(s.live.writes, []);
+  } finally { await s.f.close(); }
+});
+
+test('retirement binds same-ID current verified revisions without rewriting history', async () => {
+  const s = await absentSuite();
+  try {
+    const before = (await s.service('service-state', { instanceId: s.first.taskId, reconcile: false })).json();
+    const ref = before.instance.connections.cloudflare;
+    const verify = revision => s.f.call('/api/admin/connections', { ...s.session, body: { action: 'verify', id: ref.id, revision } });
+    assert.equal((await verify(1)).status, 200);
+    const review = await s.service('retire-plan', s.identity);
+    assert.equal(review.status, 200, review.text);
+    assert.deepEqual(review.json().plan.connections.cloudflare, { id: ref.id, revision: 2 });
+    assert.deepEqual(review.json().plan.instance.connections, before.instance.connections);
+    assert.equal((await verify(2)).status, 200);
+    assert.equal((await s.service('retire-submit', review.json())).status, 409);
+    const fresh = await s.service('retire-plan', s.identity);
+    assert.equal(fresh.status, 200, fresh.text);
+    assert.equal((await s.service('retire-submit', fresh.json())).status, 200);
+    const after = (await s.service('service-state', { instanceId: s.first.taskId, reconcile: false })).json();
+    assert.deepEqual(after.instance.connections, before.instance.connections);
+    assert.deepEqual(after.history, before.history);
+    assert.deepEqual(s.live.writes, []);
+  } finally { await s.f.close(); }
+});
+
+for (const state of ['failed', 'disabled']) test(`retirement rejects current ${state} connection`, async () => {
+  const s = await absentSuite();
+  try {
+    const ref = s.input.cloudflare;
+    if (state === 'failed') s.state.reject = true;
+    const response = await s.f.call('/api/admin/connections', { ...s.session, body: { action: state === 'failed' ? 'verify' : 'disable', id: ref.id, revision: 1 } });
+    assert.equal(response.status, 200, response.text);
+    s.state.reject = false;
+    assert.equal((await s.service('retire-plan', s.identity)).status, 409);
+    assert.equal((await s.service('services')).json().services.length, 1);
   } finally { await s.f.close(); }
 });
 

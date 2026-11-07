@@ -19,8 +19,13 @@ import { deletionPlan, deleteService, deletionRecord, reconcileDeletion, assertN
 import { adminProfiles, saveAdminProfile, reserveBootstrap, bootstrapCredential } from './admin-profiles.mjs';
 import { cancellationIdentity, cancellationRecord, sameCancellation } from './deployment-cancellation.mjs';
 import { applicationSecretProfiles, saveApplicationSecrets, reserveApplicationSecrets, applicationCredential } from './application-secrets.mjs';
+import { retirementIndex, retirementRecord, retirementPlan, retireService, assertNotRetired } from './service-retirement.mjs';
 
 export class ConnectionVault extends DurableObject {
+  retirementIndex(owner) { return retirementIndex(this, owner); }
+  retirementRecord(owner, instanceId) { return retirementRecord(this, owner, instanceId); }
+  retirementPlan(owner, input) { return retirementPlan(this, owner, input); }
+  retireService(owner, input) { return retireService(this, owner, input); }
   deletionPlan(owner, input) { return deletionPlan(this, owner, input); }
   deleteService(owner, input) { return deleteService(this, owner, input); }
   reconcileDeletion(owner, input) { return reconcileDeletion(this, owner, input); }
@@ -195,6 +200,7 @@ export class ConnectionVault extends DurableObject {
       this.deploymentGuard(owner);const sql=this.ctx.storage.sql,prior=sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).toArray()[0];
       requireSba(!this.deploymentCancellation(owner,taskId));
       const record={taskId,digest:plan.digest,connections:plan.connections,accountId:null,createdAt:Date.now(),service:serviceSummary(taskId,plan)};
+      assertNotRetired(this,owner,record.service.id);
       // 声明路径可能嵌套；账号身份以已核验的 Cloudflare 连接为准。
       const cloudflare=this.row(plan.connections.cloudflare.id);requireSba(cloudflare);record.accountId=JSON.parse(cloudflare.metadata).target;
       if(prior){const old=JSON.parse(prior.record);requireSba(old.digest===record.digest);return {...old,alreadyReserved:true};}

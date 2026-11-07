@@ -4,6 +4,7 @@ import { importFields, importWorkerOptions, importDraft, importReview, importedD
 import { resumePreparation } from './preparation-recovery.js';
 import { applicationSecretFields } from './service-secrets.js';
 import { applicationSourceFields } from './service-source.js';
+import { retireService } from './service-retirement.js';
 
 const $ = id => document.getElementById(id);
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
@@ -144,6 +145,10 @@ function renderInstances() {
       test.addEventListener('click', () => void openDialog(state, test, 'rehearse')); actions.append(update, test);
       const remove = focusKey(element('button', '删除', 'danger'), id + '/delete'); remove.type = 'button'; remove.disabled = !state?.canDelete || !session;
       remove.addEventListener('click', () => void openDeleteService(state, remove)); actions.append(remove);
+      if (state?.canRetire) {
+        const retire = focusKey(element('button', '退役登记'), id + '/retire'); retire.type = 'button'; retire.disabled = !session;
+        retire.addEventListener('click', () => { const version = generation; void retireService(state, retire, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }); }); actions.append(retire);
+      }
       if (state?.canReconcileDeletion) {
         const check = focusKey(element('button', '核对删除结果'), id + '/delete-reconcile'); check.type = 'button'; check.disabled = !session || deletionChecks.has(id);
         check.addEventListener('click', async () => {
@@ -244,7 +249,8 @@ async function refreshInstances(activeOnly = false) {
   try {
     if (!activeOnly) {
       const result = await request(api + 'services'); if (!current(version)) return;
-      for (const entry of result.services) instances.set(entry.id, entry);
+      instances = new Map(result.services.map(entry => [entry.id, entry]));
+      states = new Map([...states].filter(([id]) => instances.has(id)));
     }
     instances = new Map([...instances].sort((a, b) => b[1].createdAt - a[1].createdAt)); renderInstances();
     await pool([...instances.keys()].filter(id => !activeOnly || activeInstance(states.get(id))), async id => {

@@ -24,6 +24,7 @@ export async function verificationState(env, owner, parent, reconcile) {
 export async function startServiceVerification(env, vault, owner, input) {
   exactSba(input, ['instanceId', 'previousTaskId']);
   requireSba(!await vault.deletionRecord(owner,input.instanceId));
+  requireSba(!await vault.retirementRecord(owner,input.instanceId));
   const entries = serviceEntries(await vault.deploymentIndex(owner), input.instanceId);
   requireSba(entries.length && entries[0].taskId === input.previousTaskId);
   const parent = connectedStub(env, input.previousTaskId), { plan } = await parent.bootstrap(owner), job = await parent.inspect(owner);

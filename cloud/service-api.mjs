@@ -10,12 +10,15 @@ import { recoverablePreparation } from './preparation-recovery.mjs';
 import { canRestartUpdate } from './unstarted-update-recovery.mjs';
 import { completedPreview } from './service-preview.mjs';
 import { repairedCleanup } from '../src/sba/cleanup-repair.mjs';
+import { retirementSupported } from './service-retirement.mjs';
 
 async function deletionState(env, vault, owner, state) {
+  const retirement = await vault.retirementRecord(owner, state.instance.id);
+  if (retirement) return { ...state, retirement, status: 'retired', canUpdate: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, canVerify: false, canRestart: false, canResume: false, canRetire: false };
   const deletion = await vault.deletionRecord(owner, state.instance.id);
   if (deletion) return { ...state, deletion, status: deletion.status === 'deleting' && Date.now() - deletion.updatedAt > 120000 ? 'delete-unknown' : deletion.status, canUpdate: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, canReconcileDeletion: connectedEnabled(env) && deletion.status === 'delete-unknown' };
   let supported = false; try { deletionInventory(state.instance); supported = !!state.instance.connections?.cloudflare; } catch { /* 未支持的资源不能部分销毁。 */ }
-  return { ...state, canDelete: connectedEnabled(env) && supported && !state.instance.previewOf && (state.status === 'imported' || ['succeeded', 'deployed-unverified'].includes(state.job?.status)) };
+  return { ...state, canRetire: connectedEnabled(env) && retirementSupported(state.instance) && ['succeeded', 'deployed-unverified'].includes(state.job?.status), canDelete: connectedEnabled(env) && supported && !state.instance.previewOf && (state.status === 'imported' || ['succeeded', 'deployed-unverified'].includes(state.job?.status)) };
 }
 
 export function importedState(record) {
@@ -25,7 +28,7 @@ export function importedState(record) {
 }
 
 export async function serviceIndex(vault, owner) {
-  const index = await vault.deploymentIndex(owner), seen = new Set(), services = [];
+  const index = await vault.deploymentIndex(owner), seen = new Set((await vault.retirementIndex(owner)).map(row => row.instanceId)), services = [];
   for (const entry of index) {
     const id = serviceId(entry); if (seen.has(id)) continue; seen.add(id);
     services.push({ id, taskId: entry.taskId, createdAt: entry.createdAt, summary: entry.service ?? null });

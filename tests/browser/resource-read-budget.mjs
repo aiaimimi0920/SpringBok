@@ -31,7 +31,7 @@ try {
     window.fetch = (path, options = {}) => {
       const body = options.body ? JSON.parse(options.body) : null, action = body?.action ?? 'get';
       const probe = window.readProbe, mode = probe.next;
-      if (!mode || action !== mode.action) {
+      if (!mode || action !== mode.action || mode.kind && body?.kind !== mode.kind) {
         probe.normalPending++;
         return original(path, options).then(response => {
           if (!response.ok) { probe.normalPending--; return response; }
@@ -41,7 +41,7 @@ try {
         }, error => { probe.normalPending--; throw error; });
       }
       probe.next = null;
-      const record = { action, signal: !!options.signal, aborted: !!options.signal?.aborted };
+      const record = { action, kind: body?.kind, signal: !!options.signal, aborted: !!options.signal?.aborted };
       probe.records.push(record);
       const pending = new Promise((resolve, reject) => {
         probe.release = () => resolve(new Response('{}', { status: mode.status ?? 200 }));
@@ -67,8 +67,9 @@ try {
   const last = () => page.evaluate(() => window.readProbe.records.at(-1));
   await page.goto(origin + '/resources'); await ready();
   const baselineErrors = await page.locator('.inventory-status[data-tone=error]').count();
-  for (const mode of [{ action: 'inventory', deadline: 15000 }, { action: 'usage', deadline: 45000 }, { action: 'inventory', deadline: 15000, json: true }, { action: 'usage', deadline: 45000, json: true }]) {
+  for (const mode of [{ action: 'inventory', deadline: 15000 }, { action: 'usage', kind: 'worker', deadline: 45000 }, { action: 'inventory', deadline: 15000, json: true }, { action: 'usage', kind: 'worker', deadline: 45000, json: true }]) {
     await hold(mode); assert.equal((await last()).signal, true, 'Only reads receive a controller');
+    if (mode.kind) assert.equal((await last()).kind, mode.kind, 'Timeout the same resource kind checked below');
     await page.clock.runFor(mode.deadline - 1); assert.equal((await last()).aborted, false, 'Do not cut a read short');
     await page.clock.runFor(2);
     assert.equal((await last()).aborted, true, 'Read deadline aborts fetch or body consumption'); await ready();

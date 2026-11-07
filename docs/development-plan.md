@@ -20,6 +20,12 @@ revision 漂移、保留历史/claims/held lane 的相邻 28 项通过。共享 
 退役流程覆盖双击、取消/焦点、拒绝、键盘、三宽度及持久列表移除并通过（合成 provider）。
 精确 PR/main CI、发布及真实退役仍待分别验收。
 
+PR #141 首次精确 head 的 Demo Browser 在既有读取预算回归失败：probe 拦截任意 kind 的
+首个 usage，但断言固定检查 Worker；两个并发读取通道下首个 usage 不保证是 Worker。
+当次 Worker 仍显示 321 次，不将其误认成退役实现回归或用量被错误归零。测试仅把两项
+usage timeout probe 精确绑定 worker，并断言实际拦截 kind，保留原 deadline/unknown
+语义与严格断言；不改产品逻辑，不重跑旧失败赌绿。其余门禁状态仍按新 head 重新验收。
+
 ## EP-OPS-01：已不存在混合套件的登记退役（实施中，2026-11-07）
 
 负责人主 AI。用户要求 EasyProxy 仅保留当前正式套件，并已批准仅退役旧实例登记、保留

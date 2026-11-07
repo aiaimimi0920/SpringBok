@@ -22,8 +22,8 @@ const boundedManifest = count => {
   return value;
 };
 
-test('repair accepts ten explicit historical scopes without weakening per-scope or runner secret checks', () => {
-  for (const count of [1, 8, 9, 10]) {
+test('repair accepts eleven explicit historical scopes without weakening per-scope or runner secret checks', () => {
+  for (const count of [1, 8, 9, 10, 11]) {
     const value = boundedManifest(count);
     assert.deepEqual(validateManifest(value), value);
     const selected = request(); selected.context.repairId = value.repairs.at(-1).id;
@@ -38,15 +38,15 @@ test('repair accepts ten explicit historical scopes without weakening per-scope 
   }
 });
 
-test('repair remains bounded at ten and validates the last scope fully', () => {
-  assert.throws(() => validateManifest(boundedManifest(11)));
-  for (const change of [m => { m.repairs[9].id = m.repairs[0].id; },
-    m => { m.repairs[9].secretNames = ['OTHER_SECRET']; }, m => { m.repairs[9].fromErrorCodes = ['bad']; },
-    m => { m.repairs[9].unexpected = true; }]) {
-    const value = boundedManifest(10); change(value); assert.throws(() => validateManifest(value));
+test('repair remains bounded at eleven and validates the last scope fully', () => {
+  assert.throws(() => validateManifest(boundedManifest(12)));
+  for (const change of [m => { m.repairs[10].id = m.repairs[0].id; },
+    m => { m.repairs[10].secretNames = ['OTHER_SECRET']; }, m => { m.repairs[10].fromErrorCodes = ['bad']; },
+    m => { m.repairs[10].unexpected = true; }]) {
+    const value = boundedManifest(11); change(value); assert.throws(() => validateManifest(value));
   }
-  const selected = request(); selected.context.repairId = 'admin-publish-9'; selected.context.errorCode = 'OTHER_FAILURE';
-  assert.throws(() => validateRequest(selected, boundedManifest(10)));
+  const selected = request(); selected.context.repairId = 'admin-publish-10'; selected.context.errorCode = 'OTHER_FAILURE';
+  assert.throws(() => validateRequest(selected, boundedManifest(11)));
 });
 
 test('repair explicitly declares capabilities and requires parent evidence fields', () => {

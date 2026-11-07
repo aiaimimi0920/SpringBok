@@ -39,11 +39,21 @@ try{
   await page.getByRole('button',{name:'读取版本',exact:true}).click();
   await page.waitForFunction(()=>!document.getElementById('service-submit').disabled);
   assert.equal(await page.locator('#service-repair').inputValue(),'admin-publish');
+  await page.clock.install({time:new Date()});
   await page.locator('#service-submit').click();await page.locator('#service-review').waitFor({state:'visible'});
   assert.match(await page.locator('#service-review').textContent(),/ADMIN_PUBLISH_FAILED/);
   assert.match(await page.locator('#service-review').textContent(),new RegExp(original.taskId));assert.equal(state.dispatches,1);
   for(const width of [1440,390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:join(directory,`service-repair-${width}.png`)});}
+  const submitsBefore=requests.filter(row=>row.path.endsWith('/submit')).length;
+  await page.clock.fastForward(121000);
+  await page.locator('#service-dialog-notice').filter({hasText:'计划已过期'}).waitFor();
+  assert.equal(await page.locator('#service-submit').isDisabled(),true);
+  await page.locator('#service-form').evaluate(form=>form.requestSubmit());
+  assert.equal(requests.filter(row=>row.path.endsWith('/submit')).length,submitsBefore);
+  assert.equal(state.dispatches,1);
+  await page.screenshot({path:join(directory,'service-repair-expired.png')});
   await page.locator('#service-back').click();assert.equal(await page.locator('#service-review').isVisible(),false);
+  await page.clock.setFixedTime(new Date());
   await page.keyboard.press('Escape');assert.equal(await page.getByRole('button',{name:'修复',exact:true}).evaluate(el=>el===document.activeElement),true);assert.equal(state.dispatches,1);
   await page.getByRole('button',{name:'修复',exact:true}).click();
   await page.getByRole('button',{name:'指定来源',exact:true}).click();

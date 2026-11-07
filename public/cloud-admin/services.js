@@ -21,6 +21,9 @@ let importing = false;
 let deletionReview = null, deletionGeneration = 0, deletionSubmitting = false, deletionFocus = null;
 let rehearsing = false, repairing = false, deletingPreview = false, testEnvironment = null;
 let returnFocus = null, pollTimer = null, listBusy = false, selectedResources = new Map();
+let previewExpiryTimer = null;
+const expiredPreview = () => !!preview && !importing && preview.expiresAt <= Date.now();
+const expiryMessage = '计划已过期，请重新预览';
 const expanded = new Set(), statistics = new Set(), usagePending = new Set();
 const deletionChecks = new Set();
 const notice = (text, tone = 'info') => { $('service-notice').textContent = text; $('service-notice').dataset.tone = tone; };
@@ -36,10 +39,20 @@ const repairOptions = data => data?.manifest?.repairs?.filter(row => row.fromErr
 const sourceFields = applicationSourceFields($('service-source'), loadSource);
 
 function controls() {
+  clearTimeout(previewExpiryTimer); previewExpiryTimer = null;
+  const expired = expiredPreview();
+  if (preview && !importing && !expired && !submitting && $('service-dialog').open) {
+    const saved = preview;
+    previewExpiryTimer = setTimeout(() => {
+      if (preview === saved && $('service-dialog').open && !submitting) {
+        controls(); if (expiredPreview()) dialogNotice(expiryMessage, 'error');
+      }
+    }, preview.expiresAt - Date.now());
+  }
   const cleanupRepair = repairing && !!preview?.plan.operation.context.cleanup;
   $('service-fields').disabled = !session || busy || selectionBusy || submitting || deletingPreview;
   const versionReady = deletingPreview || (!updateTarget || newerVersion(application?.manifest?.version, updateTarget.instance.application.version)) && (!rehearsing || application?.manifest?.schemaVersion === 3 && application?.declaration?.schemaVersion === 2);
-  $('service-submit').disabled = !session || busy || selectionBusy || submitting || !application || application.status !== 'ready' || !versionReady || (repairing && !repairOptions(application).some(row => row.id === $('service-repair')?.value)) || (!preview && !selectedResources.ready) || (preview && !importing && !preview.executionEnabled);
+  $('service-submit').disabled = !session || busy || selectionBusy || submitting || expired || !application || application.status !== 'ready' || !versionReady || (repairing && !repairOptions(application).some(row => row.id === $('service-repair')?.value)) || (!preview && !selectedResources.ready) || (preview && !importing && !preview.executionEnabled);
   $('service-submit').textContent = deletingPreview || cleanupRepair ? '确认删除测试环境' : repairing ? (preview ? '确认修复' : '预览修复') : rehearsing ? (preview ? '确认预升级测试' : '预升级测试') : importing ? (preview ? '确认导入' : '读取服务') : preview ? (updateTarget ? '确认升级' : '确认部署') : (updateTarget ? '升级' : '部署');
   $('service-submit').classList.toggle('danger', deletingPreview || cleanupRepair); $('service-submit').classList.toggle('primary', !deletingPreview && !cleanupRepair);
   $('service-back').hidden = !preview || deletingPreview; $('service-back').disabled = busy || submitting;
@@ -47,7 +60,7 @@ function controls() {
   for (const tab of $('service-tabs').children) tab.disabled = busy || submitting;
   sourceFields.sync({ hidden: importing || deletingPreview || !!preview || !session, disabled: busy || selectionBusy || submitting });
 }
-function clearPreview() { preview = null; $('service-review').replaceChildren(); controls(); }
+function clearPreview() { preview = null; $('service-review').replaceChildren(); dialogNotice(''); controls(); }
 function restoreFocus() {
   const key = returnFocus?.dataset.focusKey;
   const replacement = key && document.querySelector(`[data-focus-key="${CSS.escape(key)}"]`);
@@ -720,6 +733,7 @@ async function prepare(event) {
 async function submit() {
   if (importing) { await submitImport(); return; }
   if (!preview?.executionEnabled || submitting) return;
+  if (expiredPreview()) { controls(); dialogNotice(expiryMessage, 'error'); return; }
   const saved = preview, version = generation, instanceId = saved.plan.operation?.instanceId ?? saved.taskId;
   preview = null; submitting = true; controls(); dialogNotice('正在提交…');
   const plan = saved.plan;

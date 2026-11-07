@@ -4,6 +4,7 @@ import { importedId } from './service-import.mjs';
 import { openToken } from './connections-crypto.mjs';
 import { requireSba, exactSba, sbaDigest } from './sba-control.mjs';
 import { deletionInventory, inspectDeletion, sameDeletion, removeResource, resourceAbsent } from './service-deletion-provider.mjs';
+import { assertNotRetired } from './service-retirement.mjs';
 
 export function deletionGuard(vault, owner) {
   vault.resourceGuard(owner);
@@ -15,7 +16,7 @@ export function deletionRecord(vault, owner, instanceId) {
   return row ? JSON.parse(row.record) : null;
 }
 function save(vault, record) { vault.ctx.storage.sql.exec('INSERT INTO service_deletions VALUES(?,?) ON CONFLICT(instance) DO UPDATE SET record=excluded.record', record.instanceId, JSON.stringify(record)); }
-export function assertNotDeleting(vault, owner, instanceId) { requireSba(!deletionRecord(vault, owner, instanceId)); }
+export function assertNotDeleting(vault, owner, instanceId) { assertNotRetired(vault, owner, instanceId); requireSba(!deletionRecord(vault, owner, instanceId)); }
 async function source(vault, owner, input) {
   exactSba(input, ['instanceId', 'previousTaskId']);
   if (importedId(input.instanceId)) {

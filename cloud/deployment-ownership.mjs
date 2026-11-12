@@ -1,5 +1,10 @@
 import { deploymentTargets } from './deployment-contract.mjs';
 
+export function legacyIdentities(value) {
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, item]) => typeof item === 'string' && ['name', 'url', 'id', 'kvId', 'databaseId', 'bucket', 'bucketName'].includes(key) ? [item] : legacyIdentities(item));
+}
+
 function strings(value) {
   return typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : [];
 }

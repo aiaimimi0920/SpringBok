@@ -3,6 +3,19 @@
 更新日期：2026-10-07（历史产品盘点开始于 2026-10-04）。代码盘点基线：`52178c7b829af194b7a128d9229c1f4f9194c7ae`，默认分支 `main`。
 本页是后续 AI 的总入口；源码、测试及精确版本运行证据优先于描述。每次实施只推进一个可验收子任务，并同步本页。
 
+## CLEANUP-02：闲置样式与重复身份提取（实施中，2026-11-12）
+
+负责人主 AI。范围为三个已无页面/控制器消费者的解释型 UI 样式，以及 connected 提交与
+准备恢复两路径重复的 legacyIdentities；抽取到现有 deployment-ownership 模块，不新增
+抽象层、不改变字段选择、递归顺序、重复值或两路径各自的校验。保留现有拒绝冲突、
+UNKNOWN、一次性许可与数据历史。Access 会话继承改动仍不纳入提交。
+修改前 Node 22.22.2 的 connected/preparation/UI-copy 共 21 项通过，四页五宽度真实
+Chrome/workerd Neuro 回归通过（合成身份/provider）。修改后同组、邮件归属、提取边界与
+共享文档共 32 项通过，零失败/跳过；四页五宽度 Chrome/workerd、示例校验和十页构建通过。
+精确 PR/main CI 尚待完成，不宣称本地合成 provider 验证为生产验收。
+公开 SBA 字段、配置、权限、生命周期和使用方式不变；无需改共享 AI/Pages 合同定义，
+但仍执行文档、示例与站点检查。整体清理继续，不以本子任务替代全仓审查。
+
 ## CLEANUP-01：架构演进后的代码、测试与文档清理（调查中，2026-11-12）
 
 负责人主 AI。用户已批准按当前源码和有效产品契约，清理冗余实现、失效测试及过期文档，
@@ -22,7 +35,9 @@ Windows/Linux 解释器；README 将固定 Access 入口标为历史切片；存
 五个有效 workerd 回归（application/cleanup/preview/service repair 与 service verification）
 原先遗漏于默认测试清单，现已补齐；不删除这些覆盖秘密、父链、UNKNOWN 与一次性许可的测试。
 Windows 明确使用 Node 22.22.2，五文件 24 项通过；文档与安全基线共 19 项通过，零跳过，
-示例校验与十页静态构建通过。完整 Linux CI、scoped 提交及远端验证仍待完成。
+示例校验与十页静态构建通过。PR #148 精确 head `1915bd0` 的七工作流全部通过，
+精确 head 代码审阅无未解决发现；正常合并为 `3fd98b97eb09072ec710acaaf773947ac7975893`。
+远程 SHA 与本地已核对；合并 main 的七工作流正在单独验证，不继承 PR 结果冒充通过。
 
 下一批待核实处理：删除已无 HTML/JS 消费者的 `.field-note`、`.section-note`、
 `.legacy-note` 三条样式并运行四页浏览器回归；合并 connected-api/preparation-recovery

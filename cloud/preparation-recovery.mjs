@@ -2,7 +2,7 @@ import { connectedEnabled, executeReserved } from './connected-api.mjs';
 import { connectedStub, connectedTaskId } from './connected-store.mjs';
 import { canonicalSba, connectedSbaPolicy, exactSba, requireSba, sbaPolicy } from './sba-control.mjs';
 import { signSession, sameProof } from './access.mjs';
-import { deploymentIdentities } from './deployment-ownership.mjs';
+import { deploymentIdentities, legacyIdentities } from './deployment-ownership.mjs';
 
 export function recoverablePreparation(record) {
   const preparation = record?.preparation, plan = preparation?.intent;
@@ -27,11 +27,6 @@ export function beginPreparationRecovery(vault, owner, taskId, digest, recoveryI
     sql.exec('UPDATE connection_deployments SET record=? WHERE task=?', JSON.stringify(record), taskId);
     return record;
   });
-}
-
-function legacyIdentities(value) {
-  if (!value || typeof value !== 'object') return [];
-  return Object.entries(value).flatMap(([key, item]) => typeof item === 'string' && ['name', 'url', 'id', 'kvId', 'databaseId', 'bucket', 'bucketName'].includes(key) ? [item] : legacyIdentities(item));
 }
 
 export async function preparationRecoveryRequest(env, vault, session, action, input) {

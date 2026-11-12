@@ -8,14 +8,13 @@ import { sbaMachineRequest } from './sba-api.mjs';
 import { signSession, sameProof } from './access.mjs';
 import { deploymentTargets } from './deployment-contract.mjs';
 import { continuesInstance, createsResources } from './service-preview.mjs';
-import { deploymentIdentities } from './deployment-ownership.mjs';
+import { deploymentIdentities, legacyIdentities } from './deployment-ownership.mjs';
 import { sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
 import { missingDeadlineReceipt } from './late-receipt.mjs';
 export const connectedEnabled=env=>env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!!env.CONNECTED_TASKS&&!!env.DEPLOYMENT_LOCKS;
 const vaultFor=(env,owner)=>env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const reply=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
 const verifyOidc=createSbaOidcVerifier();
-function legacyIdentities(value){if(!value||typeof value!=='object')return [];return Object.entries(value).flatMap(([key,item])=>typeof item==='string'&&['name','url','id','kvId','databaseId','bucket','bucketName'].includes(key)?[item]:legacyIdentities(item));}
 export async function submitConnected(env,session,input){
   requireSba(connectedEnabled(env));exactSba(input,['taskId','draft','plan','expiresAt','confirmation']);connectedTaskId(input.taskId);
   requireSba(Number.isSafeInteger(input.expiresAt)&&input.expiresAt>Date.now()&&input.expiresAt<=Date.now()+120000&&sameProof(input.confirmation,await signSession(session,'deployment-confirm',[input.taskId,input.draft,input.plan.digest,input.expiresAt])));

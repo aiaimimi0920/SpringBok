@@ -119,8 +119,9 @@ try{
   receipt(permit,'succeeded',{checks:[{id:'repair-completed',passed:true}],lifecycle:{
     resources:cleanupContext.resources.map(item=>({key:item.key,status:'removed'}))}});
   await ready(page);const deleted=page.locator(`[data-instance-id="${preview.taskId}"]`);
-  await deleted.getByText('已删除',{exact:true}).waitFor();
-  assert.equal(await deleted.getByRole('button',{name:'删除测试环境',exact:true}).isDisabled(),true);
+  await deleted.waitFor({state:'detached'});
+  assert.equal((await service('service-state',{instanceId:preview.taskId,reconcile:false})).json().status,'deleted');
+  await page.locator(`[data-instance-id="${first.taskId}"]`).waitFor({state:'visible'});
   assert.equal(await deleted.getByText('v6.0.0',{exact:true}).count(),0,'cleanup code was not published as a deployment');
   assert.deepEqual((await api('state',{taskId:partialCleanupTask})).json().job,partialCleanup.job);
   assert.deepEqual((await api('state',{taskId:cleanupTask})).json().job,failedCleanup.job);

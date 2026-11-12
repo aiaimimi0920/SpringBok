@@ -29,10 +29,11 @@ try {
   assert.equal(await remove.evaluate(el => el === document.activeElement), true);
   await remove.click(); await page.waitForFunction(() => !document.getElementById('service-delete-submit').disabled);
   await page.locator('#service-delete-submit').click();
-  await page.getByText('已删除', { exact: true }).waitFor();
+  await page.locator('#service-empty').waitFor({ state: 'visible' });
   assert.equal(s.r2.objects.size, 0); assert.equal(s.live.deletes.length, 6);
-  assert.equal(await remove.isDisabled(), true);
-  await ready(page); await page.getByText('已删除', { exact: true }).waitFor();
+  assert.equal(await remove.count(), 0);
+  await ready(page); await page.locator('#service-empty').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#service-list > li').count(), 0);
   assert.equal(s.live.deletes.length, 6); assert.deepEqual(s.errors, []);
   console.log('R2 deletion UI passed: bounded private-object counts, exact two-bucket inventory, cancel/focus, responsive layout and persisted result (synthetic providers).');
 } finally { await browser.close(); }

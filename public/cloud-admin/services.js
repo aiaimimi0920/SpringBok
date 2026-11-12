@@ -124,6 +124,7 @@ function renderInstances() {
   const rows = [];
   for (const [id, entry] of instances) {
     const state = states.get(id), instance = state?.instance ?? entry.summary, app = instance?.application;
+    if (state?.status === 'deleted') continue;
     const status = state?.status ?? state?.job?.status ?? 'loading', confirmed = confirmedVersion(state);
     const li = element('li'); li.dataset.instanceId = id;
     const row = element('div', undefined, 'service-row');
@@ -166,12 +167,15 @@ function renderInstances() {
         const check = focusKey(element('button', '核对删除结果'), id + '/delete-reconcile'); check.type = 'button'; check.disabled = !session || deletionChecks.has(id);
         check.addEventListener('click', async () => {
           if (!session || deletionChecks.has(id)) return;
-          const version = generation; deletionChecks.add(id); check.disabled = true;
+          const version = generation, hadFocus = document.activeElement === check; deletionChecks.add(id); check.disabled = true;
           try {
             const result = await request(api + 'delete-reconcile', { instanceId: id, operationId: state.deletion.operationId });
             if (current(version)) notice(result.status === 'deleted' ? '服务及关联数据已删除' : '删除结果仍未确认', result.status === 'deleted' ? 'success' : 'warning');
           } catch (error) { if (current(version)) notice(error.message, 'error'); }
-          finally { if (current(version)) { deletionChecks.delete(id); await refreshInstances(); } }
+          finally { if (current(version)) {
+            deletionChecks.delete(id); await refreshInstances();
+            if (current(version) && hadFocus && states.get(id)?.status === 'deleted' && document.activeElement === document.body) $('service-add').focus({ preventScroll: true });
+          } }
         }); actions.append(check);
       }
       if (state?.canResume || state?.canRestart) {
@@ -208,6 +212,7 @@ function renderInstances() {
         const metrics = element('dl');
         for (const metric of resourceMetrics(instance, bound, usage)) metrics.append(element('dt', metric.label + ' · ' + metric.periodLabel), element('dd', metric.text));
         const shared = [...instances.values()].filter(other => {
+          if (states.get(other.id)?.status === 'deleted') return false;
           const candidate = states.get(other.id)?.instance ?? other.summary;
           return boundResources(candidate).some(resource => resource.accountId === bound.accountId && resource.kind === bound.kind && resource.id === bound.id);
         }).length > 1;
@@ -238,7 +243,10 @@ function renderInstances() {
   }
   $('service-list').replaceChildren(...rows); $('service-list').scrollTop = scroll;
   $('service-empty').hidden = rows.length > 0;
-  if (active) document.querySelector(`[data-focus-key="${CSS.escape(active)}"]`)?.focus({ preventScroll: true });
+  if (active) {
+    const target = document.querySelector(`[data-focus-key="${CSS.escape(active)}"]`);
+    (target ?? (states.get(active.split('/')[0])?.status === 'deleted' ? $('service-add') : null))?.focus({ preventScroll: true });
+  }
 }
 async function loadUsage(instance, version) {
   if (!instance?.connections || !session) return;
@@ -254,6 +262,7 @@ async function loadUsage(instance, version) {
   }
 }
 function activeInstance(state) {
+  if (state?.status === 'deleted') return false;
   return state?.status === 'deleting' || ['dispatching','dispatched','running'].includes(state?.verification?.status) || ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state?.job?.status ?? state?.status);
 }
 async function refreshInstances(activeOnly = false) {
@@ -269,7 +278,8 @@ async function refreshInstances(activeOnly = false) {
     await pool([...instances.keys()].filter(id => !activeOnly || activeInstance(states.get(id))), async id => {
       try {
         const state = await request(api + 'service-state', { instanceId: id, reconcile: true });
-        if (!current(version)) return; states.set(id, state); renderInstances(); await loadUsage(state.instance, version);
+        if (!current(version)) return; states.set(id, state); renderInstances();
+        if (state.status !== 'deleted') await loadUsage(state.instance, version);
       } catch (error) { if (current(version)) { states.set(id, { ...(states.get(id) ?? {}), status: 'unavailable', canUpdate: false, canResume: false, canRestart: false, canRepair: false, canPreview: false, canDeletePreview: false, canDelete: false, canReconcileDeletion: false, testUrls: [] }); notice(error.message, 'error'); renderInstances(); } }
     });
   } catch (error) { if (current(version)) notice(error.message, 'error'); }

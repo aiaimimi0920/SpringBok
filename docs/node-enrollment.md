@@ -24,7 +24,7 @@
 
 `ownerId/nodeId` URL 只是寻址提示，不是可信认证上下文。NodeMailbox 检查 DO 名称、持久 owner/node、域绑定摘要、期限与原 enrollment。challenge 摘要域为 `['springbok-join/v2', ownerId, nodeId, enrollmentId, challenge]`。绑定成功后只能精确重放相同 requestId、executeDigest 和 observeDigest，不能换另一组秘密重新消费。
 
-所有加入功能需同时启用 `ENABLE_ADMIN/ENABLE_CATALOG/ENABLE_NODE_MAILBOX/ENABLE_NODE_ENROLLMENT` 并具备 `REGISTRY/NODES`。`cloud/wrangler.jsonc` 的新开关仍是 `no`。没有新增云 binding、DO class migration、依赖或实际线上配置。`enrollment.js` 和其他管理资产一样先过 Access；没有开放 probe、deploy 或任意命令通道。新角色摘要尚未成为任务鉴权凭据，接入由 N03/N01-S02 负责。
+所有加入功能需同时启用 `ENABLE_ADMIN/ENABLE_CATALOG/ENABLE_NODE_MAILBOX/ENABLE_NODE_ENROLLMENT` 并具备 `REGISTRY/NODES`。`cloud/wrangler.jsonc` 的相关开关默认是 `no`。`enrollment.js` 和其他管理资产一样先过 Access；后续角色鉴权和 probe 由[凭据](node-credentials.md)及[控制通道](node-channel.md)承载，不提供业务 deploy 或任意命令。
 
 ## 持久状态、幂等与跨 DO 恢复
 

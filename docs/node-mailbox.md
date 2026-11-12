@@ -5,17 +5,16 @@
 
 ## 1. 本切片的用途与安全边界
 
-本切片为后续加入/认证节点建立独立的持久任务核心，不开放生产节点通道。
+节点邮箱提供独立的持久任务核心；加入、角色身份、控制通道、心跳及指标已有独立 HTTP 入口，
+见 `cloud/worker.mjs`。相关开关默认关闭，代码实现不等于生产启用。
 `cloud/node-mailbox.mjs` 的 `NodeMailbox` 只提供可信服务端内部 RPC：
 `snapshot`、`submitProbe`、`pollProbe`、`reportProbe`。没有通用 `apply/dispatch`、shell 或部署适配器。
-`ENABLE_NODE_MAILBOX=no` 默认关闭；Worker 仅导出新类，不新增 HTTP 路由，也不把旧 token 转换为新身份。
+`ENABLE_NODE_MAILBOX=no` 默认关闭；不把旧 token 转换为新身份。
 
 内部调用方必须先得到可信的 `{ownerId,nodeId}` 上下文；验证字段格式不是验证节点身份。
-当前产品没有这样的公开调用方。测试驱动提供的上下文只是内部调用前提的夹具，
-不是加入流程、Access 登录或独立节点凭据的完成证据。
-以后 N02/N03 提供权威加入/凭据记录，再由 N01-S02 接入出站桥和公开通道，
-并将角色、epoch、active/revoked 校验与任务领取放到同一权威事务中。
-本次上下文格式不预先规定未来凭据编码，也不能代替其授权判断。
+公开入口经[加入](node-enrollment.md)、[角色凭据](node-credentials.md)及
+[控制通道](node-channel.md)建立身份并检查权限；测试注入上下文不是实际登录证据。
+尚未完成的凭据轮换/撤销不能由内部上下文格式代替，也不因公开 probe 通道而获得业务部署权限。
 
 ## 2. 寻址与存储
 

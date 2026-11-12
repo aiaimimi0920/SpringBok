@@ -1,6 +1,6 @@
 # N03：每节点独立角色凭据与身份核对
 
-本项接续 [一次性加入](node-enrollment.md)、[独立节点邮箱](node-mailbox.md) 和 [存储设计](storage-architecture.md)。它只实现已加入节点的独立 execute/observe 材料与 `identity:self` 核对，不开放任务领取、回报、部署、批准、指标或心跳。总进度见 [开发计划](development-plan.md)。
+本页负责已加入节点的独立 execute/observe 材料与 `identity:self` 核对，前置见[一次性加入](node-enrollment.md)与[节点邮箱](node-mailbox.md)。领取/回报、心跳和指标由各自通道承载；凭据本身不授权业务部署或人的批准。总进度见[开发计划](development-plan.md)。
 
 ## 能力和授权真相
 

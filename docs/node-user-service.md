@@ -1,8 +1,8 @@
 # N07-S02：非特权 systemd 用户服务与启动关联
 
-本项接续 [私有安装](node-installation.md) 与 [前台常驻](node-daemon.md)，总进度见 [开发计划](development-plan.md)。复用已安装的 v2 daemon；不改变包格式、节点协议、身份、ledger 或云端开关。服务只执行现有控制客户端，始终 `executionReady=false`，不是业务部署执行器或主机监控采集器。
+本页描述[已安装客户端](node-installation.md)的 systemd 装配，执行[daemon](node-daemon.md)，总进度见[开发计划](development-plan.md)。execute 与 observe 角色隔离；当前客户端支持角色心跳及 observe 指标。服务不是业务部署执行器，保留 `executionReady=false`，不改写身份、ledger 或云端开关。
 
-以上与本页验收数字保留 N07-S02 当时范围。N08 当前可信生成器读取 v3 完整安装，unit 结构不变；当前 22 文件包/独立角色心跳及迁移边界见 [心跳](node-heartbeat.md)。旧 v2 安装及服务保持不变，由旧可信 checkout 维护，不用新版生成器自动接管或覆盖。
+本页后续 v2/v3 包和验收数字属于对应历史切片，不能作为当前包清单；当前包来源为 `src/node-install/package.mjs`，指标与版本兼容见[指标协议](node-telemetry.md)。旧安装及服务由对应可信 checkout 维护，不用新版生成器自动接管或覆盖。
 
 ## 可信生成与显式操作
 
@@ -56,4 +56,4 @@ PR #41 首轮 CI 的契约 204/206、manager 入口失败，原因是 runner set
 
 head `789b6a4b31eb757bc8db328efbd5798e37306d46` 的 **6 workflow/14 check 全部成功**。真实 user-manager 专项 run `37324383078` 完整通过双角色/drain/401/unknown、启用后重建启动、禁用后重建不启动、SIGKILL 残留锁和显式重启拒绝。artifact `11351760680` 已下载并匹配 GitHub SHA-256，两个角色 journal、exitCode=0 和成功记录经内容核对，不含 Bearer 材料。环境隔离后实际重建通过；没有逐变量对照，不把具体继承 bus 地址自等待当唯一已确诊原因。最终文档 head/合并 main 的新鲜检查和固定版本包另记 PR 回执。
 
-未完成：用户主机安装/开机重启、完整执行依赖 N06-S02、真实 Cloudflare/Access/多服务器、心跳/指标、业务部署、凭据轮换/撤销与程序升级。不启用生产开关，不改云 schema、依赖/lockfile、历史 fixture 或既有固定包。
+未完成或需独立验收：用户主机安装/实际开机、完整执行依赖、真实 Cloudflare/Access/多服务器及指标端到端验收、业务部署、凭据轮换/撤销与安全升级。已有临时 user-manager 检查不代替用户主机验收。

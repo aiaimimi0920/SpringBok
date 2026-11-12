@@ -13,7 +13,11 @@
 ## 数据、权限和故障边界
 
 - `GET /api/admin/servers` 只读取当前 Access issuer/sub 派生 owner 的目录。返回 `mode='server-catalog-only'`、`executionReady=false`、revision 和服务器记录。
-- `POST /api/admin/servers` 严格使用 [ARC-02 第 3 节](storage-architecture.md#3-c04-的最小持久结构) 的 create/rename/archive 字段，复用真实 Access 验签、同源 JSON 和同会话 CSRF。
+- `POST /api/admin/servers` 复用 Access 验签、同源 JSON 和同会话 CSRF，严格限定字段：
+  create 为 `{id, revision, action:'create', name}`；rename 为
+  `{id, revision, action:'rename', serverId, name}`；archive 为
+  `{id, revision, action:'archive', serverId}`。`id` 是请求 UUID，不是服务器 ID。
+  名称 NFC 规范化并去首尾空白，1–64 个 Unicode 字符且最多 256 UTF-8 字节，拒绝控制/格式字符。
 - 目录、revision、规范化请求和原回执同事务提交。同 ID 同输入返回原回执，同 ID 不同输入拒绝；新请求必须匹配当前 revision。历史回执不是最新状态，页面成功后再次 GET 目录。
 - 每个 owner 最多 64 条服务器记录（归档也计数）、1024 条修改回执；超限拒绝新写入，允许读取和原请求重放，不自动清理历史。
 - 首次建表与 owner 绑定同事务完成。C04-S02 增加 v1→v2 的保留式服务表扩展，服务器接口和原回执格式不变；服务器归档在同事务拒绝关联的未归档服务。未知 schema、缺表、缺关键字段或缺 metadata 均拒绝，不补空表、重置 revision 或“修复”为全新目录。

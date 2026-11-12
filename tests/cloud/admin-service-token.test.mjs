@@ -261,3 +261,19 @@ test('forwarded cookies never replace or override the verified service assertion
   assert.equal((await f.call('/api/admin/sba/preview', { token, body, headers: { cookie, 'x-csrf-token': session.csrf } })).status, 200);
   assert.equal(x.state.dispatches, 0);
 });
+
+test('machine assertions retain their 24h cap when owner sessions allow 30 days', async () => {
+  const f = await adminFixture(bindings(approval()), { entryPoint: 'tests/cloud/access-session-fixture.mjs' });
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    assert.equal((await f.call('/api/admin/sba/session', { token: f.jwt(claims({ iat: now, exp: now + 86400 })) })).status, 200);
+    for (const extra of [
+      { iat: now, exp: now + 86401 },
+      { iat: now, exp: now + 30 * 86400 },
+      { iat: now - 86460, exp: now + 60 },
+      { iat: now + 60, exp: now + 3600 },
+      { iat: now - 3600, exp: now - 60 },
+      { email: 'owner@example.invalid', iat: now, exp: now + 3600 },
+    ]) assert.equal((await f.call('/api/admin/sba/session', { token: f.jwt(claims(extra)) })).status, 403, JSON.stringify(extra));
+  } finally { await f.close(); }
+});

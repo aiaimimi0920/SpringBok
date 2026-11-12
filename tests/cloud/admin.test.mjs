@@ -21,7 +21,7 @@ test('actual workerd protects all static assets and admin APIs with verified Acc
   try {
     for (const path of ['/', '/app.js', '/style.css', '/tokens.css', '/shell.js', '/resource-tree.js', '/resource-model.mjs', '/resource-tree.css', '/api/admin/state']) assert.equal((await f.call(path, { token: null, headers: { 'cf-access-authenticated-user-email': 'owner@example.invalid' } })).status, 403);
     const now = Math.floor(Date.now() / 1000);
-    for (const claims of [{ email: 'other@example.invalid' }, { email: undefined }, { sub: undefined }, { iss: 'https://attacker.invalid' }, { aud: ['3'.repeat(64)] }, { exp: now - 60 }, { nbf: now + 120 }, { iat: now + 120 }, { type: 'service' }, { exp: now + 90000 }]) assert.equal((await f.call('/api/admin/state', { token: f.jwt(claims) })).status, 403);
+    for (const claims of [{ email: 'other@example.invalid' }, { email: undefined }, { sub: undefined }, { iss: 'https://attacker.invalid' }, { aud: ['3'.repeat(64)] }, { exp: now - 60 }, { nbf: now + 120 }, { iat: now + 120 }, { type: 'service' }, { iat: now, exp: now + 30 * 86400 + 1 }]) assert.equal((await f.call('/api/admin/state', { token: f.jwt(claims) })).status, 403);
     for (const header of [{ alg: 'none' }, { alg: 'HS256' }, { kid: 'unknown' }]) assert.equal((await f.call('/api/admin/state', { token: f.jwt({}, header) })).status, 403);
     const jwt = f.jwt(); assert.equal((await f.call('/api/admin/state', { token: jwt.slice(0, -10) + 'tampered!!' })).status, 403);
     for (const path of ['/', '/app.js', '/style.css', '/tokens.css', '/shell.js', '/resource-tree.js', '/resource-model.mjs', '/resource-tree.css']) { const r = await f.call(path); assert.equal(r.status, 200); assert.equal(r.headers.get('cache-control'), 'no-store'); assert.ok(!r.text.includes(f.bindings.CONTROL_TOKEN) && !r.text.includes(f.bindings.NODE_TOKEN)); }
@@ -68,4 +68,32 @@ test('empty administrator configuration, untrusted issuer and key-fetch failure 
     const f = await adminFixture(overrides); try { assert.equal((await f.call('/')).status, 403); assert.equal(f.keyCalls, 0); } finally { await f.close(); }
   }
   const f = await adminFixture(); try { f.outage = true; assert.equal((await f.call('/')).status, 403); } finally { await f.close(); }
+});
+
+test('verified owner Access sessions allow at most 30 days without relaxing identity checks', async () => {
+  const f = await adminFixture({}, { entryPoint: 'tests/cloud/access-session-fixture.mjs' });
+  try {
+    const now = Math.floor(Date.now() / 1000), day = 86400;
+    for (const claims of [
+      { iat: now, exp: now + 30 * day },
+      { iat: now - 2 * day, exp: now + 28 * day },
+      { iat: now - 30 * day + 60, exp: now + 60 },
+    ]) assert.equal((await f.call('/api/admin/state', { token: f.jwt(claims) })).status, 200);
+    for (const claims of [
+      { iat: now, exp: now + 30 * day + 1 },
+      { iat: now - 30 * day - 60, exp: now + 60 },
+      { iat: now - 30 * day - 60, exp: now - 60 },
+      { iat: now + 60, exp: now + 30 * day },
+      { nbf: now + 60, iat: now, exp: now + 30 * day },
+      { iat: now, exp: now },
+      { iat: now - day, exp: now - 60 },
+      { email: 'other@example.invalid', exp: now + 30 * day },
+      { email: undefined, exp: now + 30 * day },
+      { sub: '', exp: now + 30 * day },
+      { iss: 'https://other.cloudflareaccess.com', exp: now + 30 * day },
+      { aud: ['3'.repeat(64)], exp: now + 30 * day },
+    ]) assert.equal((await f.call('/api/admin/state', { token: f.jwt(claims) })).status, 403, JSON.stringify(claims));
+    const token = f.jwt({ exp: now + 30 * day });
+    assert.equal((await f.call('/api/admin/state', { token: token.slice(0, -10) + 'tampered!!' })).status, 403);
+  } finally { await f.close(); }
 });

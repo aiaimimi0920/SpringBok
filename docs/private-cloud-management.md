@@ -19,7 +19,7 @@ HTTPS地址、ACCESS_AUD应用64hex audience、ADMIN_EMAILS仅一个已明确允
 Worker使用锁定jose6.2.12（MIT，官方npm包）验证RS256签名、固定issuer/audience、
 exp/iat/nbf与app类型；必须有可信签名的sub/email，邮箱符合服务端名单才授权。
 不信任自报email/actor、仅一个Access邮件头、URL携带身份或浏览器localStorage。
-服务token不会替代人的身份。Token最多8KiB、最长24小时；Access部署策略宜设短会话。
+服务 token 不会替代人的身份。Token 最多 8KiB；已验签且匹配管理员邮箱的人的 Access JWT 最长 30 天，机器 JWT 与显式机器委托仍分别最长 24 小时。此上限不会自动修改 Cloudflare Access 的会话策略，也不代表仅连接 WARP 即可免认证。较长会话会延长令牌泄露后的可用窗口。
 JWKS只从固定团队/cdn-cgi/access/certs获取，3秒/64KiB限制，不跟随重定向，
 不接收JWT提供的jku作为地址。公钥缓存最多5分钟，未知kid有30秒冷却；网络故障在
 无有效缓存时拒绝。有效Access会话/缓存的撤销不是瞬时发生，不能宣称即时全局登出。

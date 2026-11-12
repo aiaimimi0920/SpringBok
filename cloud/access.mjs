@@ -44,9 +44,13 @@ export async function accessSession(request, env) {
       },
     }));
   }
-  const { payload } = await jwtVerify(token, sets.get(issuer), { algorithms: ['RS256'], issuer, audience, requiredClaims: ['sub', 'iat', 'exp', 'iss', 'aud'], clockTolerance: 5, maxTokenAge: '24h' });
+  const { payload } = await jwtVerify(token, sets.get(issuer), { algorithms: ['RS256'], issuer, audience, requiredClaims: ['sub', 'iat', 'exp', 'iss', 'aud'], clockTolerance: 5, maxTokenAge: '30d' });
   const now = Math.floor(Date.now() / 1000);
-  if (payload.type !== 'app' || payload.iat > now + 5 || payload.exp <= payload.iat || payload.exp - payload.iat > 86400) throw new Error('admin not permitted');
+  // Only a verified human identity can use the longer Access session. Machine
+  // assertions and the separate explicit automation grant remain capped at 24h.
+  const maxLifetime = payload.sub === '' ? 86400 : 30 * 86400;
+  if (payload.type !== 'app' || payload.iat > now + 5 || payload.exp <= payload.iat ||
+    payload.exp - payload.iat > maxLifetime || now - payload.iat > maxLifetime + 5) throw new Error('admin not permitted');
   if (payload.sub === '') {
     // 这是明确限时的机器委托，不是邮箱登录，也不能降级为不验签的 API key。
     // Access 可转发冗余 Cookie；身份只取已验签的 assertion，Cookie 不参与认证。

@@ -12,11 +12,15 @@ SBA 是一个接入目录与运行时协议，不是单个扩展名为 `.sba` �
 | RequestPath 指向的 JSON | 由执行端生成 | 一次任务的公开输入，不能作为仓库里的真实凭据配置提交 |
 | ResultPath 指向的 JSON | 由应用生成 | 严格匹配任务的业务结果，不是 stdout 文本 |
 
-入口调用形式如下；路径由执行端提供，不能改成自己的硬编码路径。
+Windows runtime 的入口调用形式如下；路径由执行端提供，不能改成自己的硬编码路径。
 
 ```powershell
 powershell.exe -NoProfile -NonInteractive -File .sba/springbok.ps1 -RequestPath <absolute-request-path> -ResultPath <absolute-result-path>
 ```
+
+Linux runtime 由受信执行端选择校验过的固定版本 `pwsh`，不是运行上述 Windows 命令，
+也不从任意 PATH 选择解释器。两种 runtime 都使用 `.ps1` 入口和 `-RequestPath`、
+`-ResultPath` 参数；运行环境组合见 [manifest](manifest.md)。
 
 工作目录是应用 checkout 根。entrypoint 不支持绝对路径、目录跳转或命令串；执行端还检查实际路径和符号链接边界。不要依赖开发者本机上的未提交文件。
 

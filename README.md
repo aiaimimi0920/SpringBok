@@ -187,10 +187,11 @@ Komodo 测试资源。运行仅限明确授权的 GitHub 临时 Linux 机，已�
 准确测试状态见 [真实测试控制台](docs/real-test-console.md)。M3演示入口保持
 独立，不连接真实服务器。生产登录、配置所有权与用户服务器接入仍待决策。
 
-## 私有云管理页（待实际身份接入）
+## 私有云管理页（E06 历史切片）
 
 普通 Cloudflare Worker + Static Assets 复用持久任务与出站节点桥，服务端验证
-Cloudflare Access 身份后展示固定联调任务及回执。默认关闭、管理员名单为空；
-实际 Access 配置、Cloudflare 启用和 PC2 验收尚需完成。
+Cloudflare Access 身份后展示固定联调任务及回执。仓库通用配置仍默认关闭、管理员名单为空。
+这段记录的是固定联调入口，不代表当前完整管理功能；后续 Cloudflare/Access 接入与发布
+证据见[总计划](docs/development-plan.md)。实际身份接入不能代替 PC2 或多服务器验收。
 [身份边界与启用要求](docs/private-cloud-management.md) ·
 [固定节点执行器](docs/node-fixture-execution.md)

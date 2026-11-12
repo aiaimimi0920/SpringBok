@@ -170,7 +170,6 @@ node --test tests/*.test.mjs scripts/ci/security-baseline.test.mjs
 独立验证，不是 Komodo 或真实生产发布的端到端验证。
 
 [流程和安全边界](docs/deployment-contract.md) ·
-[Komodo 适配评估](docs/komodo-evaluation.md) ·
 [仓库安全检查](docs/security-quality-baseline.md) · [安全政策](SECURITY.md)
 
 ## M2：真实 Komodo 集成验证

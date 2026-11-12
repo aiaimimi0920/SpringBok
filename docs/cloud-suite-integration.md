@@ -40,10 +40,9 @@ SUITE-04 为首次表单增加标准 JSON 文件导入（已由 PR #117 合并�
 重建服务表单会使未完成读取失效，关闭还清空密码。复用原保险库接口、单次计划与
 部署确认；不提供秘密导出、明文读取或本地文件地址读取接口。
 
-精确 PR/main 七工作流通过后，正式控制面及 27 个静态资产已发布；正常 owner 页面
-已完成真实九项导入、原保险库保存、计划审阅与单次提交。此事实只验证导入和提交链路，
-不代替 EasyProxy 应用任务成功、独立验证、本地消费或旧资源退役；详细发布证据见
-[开发计划 SUITE-04](development-plan.md#suite-04业务秘密标准文件导入已合并并上线2026-10-26)。
+导入和提交链路的通过不代替应用任务成功、独立验证、本地消费或旧资源退役。
+历史交付通过 SUITE-04 提交与 [PR #117](https://github.com/aiaimimi0920/SpringBok/pull/117)
+追溯，当前接续边界见 [开发计划](development-plan.md)。
 
 EasyProxy 的 .sba 必须实现 deploy/update/verify/preview/destroy-preview；更新先保留
 加密备份，再做 expand-only 迁移并读回原数据；预升级使用数据副本和独立资源，默认禁用

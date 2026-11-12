@@ -2,6 +2,14 @@ import { ConnectionVault as Vault } from '../../cloud/connections-store.mjs';
 import { ConnectedDeployment as ConnectedStore } from '../../cloud/connected-store.mjs';
 export { default, TargetMailbox, OwnerCatalog, NodeMailbox, NodeTelemetry, SbaDeployment, DeploymentLocks } from '../../cloud/worker.mjs';
 export class ConnectedDeployment extends ConnectedStore {
+  expireResult() {
+    const sql=this.ctx.storage.sql,job=JSON.parse(sql.exec('SELECT state FROM sba_deployment WHERE id=1').one().state);
+    const shift=job.resultDeadline-Date.now()+1000;
+    for(const key of ['submittedAt','permitDeadline','permitAt','resultDeadline'])job[key]-=shift;
+    sql.exec('UPDATE sba_deployment SET state=? WHERE id=1',JSON.stringify(job));
+  }
+  rawJob() { return this.ctx.storage.sql.exec('SELECT state FROM sba_deployment WHERE id=1').one().state; }
+  corruptLateReceipt() { this.ctx.storage.sql.exec("UPDATE connected_late_receipt SET digest='corrupt'"); }
   seedOrphanSba() { this.ctx.storage.sql.exec('CREATE TABLE sba_orphan (id INTEGER PRIMARY KEY)'); }
   async raceInitialization(owner, taskId, plan, record) {
     const pending = this.initialize(owner, taskId, plan);

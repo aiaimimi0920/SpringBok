@@ -8,10 +8,50 @@ import { deploymentScope } from './deployment-suite.mjs';
 import { repairPreviewContext, repairPreviewBaseline } from '../src/sba/repair.mjs';
 import { repairCleanupContext, cleanupRepairable } from '../src/sba/cleanup-repair.mjs';
 import { partialCleanupRepairable, repairCleanupProgress } from '../src/sba/cleanup-progress.mjs';
+import { missingDeadlineReceipt, validateLateEnvelope, recoveredJob } from './late-receipt.mjs';
+import { sbaSummary } from './sba-control.mjs';
 export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));return value; };
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
 export const accountStub = (env,accountId) => {requireSba(deploymentScope(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
 export class ConnectedDeployment extends SbaDeployment {
+  async receiptObservation(actor, original) {
+    const {plan}=await this.bootstrap(actor),sql=this.ctx.storage.sql;
+    if(!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_late_receipt'").toArray().length)return null;
+    const rows=sql.exec('SELECT * FROM connected_late_receipt').toArray();
+    requireSba(rows.length===1&&rows[0].id===1);
+    const record=JSON.parse(rows[0].record);
+    requireSba(await sbaDigest(record)===rows[0].digest);
+    return {record,job:recoveredJob(original,plan.policy,record)};
+  }
+  async inspect(actor) {
+    const original=await super.inspect(actor),observation=await this.receiptObservation(actor,original);
+    return observation?.job??original;
+  }
+  async snapshot(actor) {
+    const original=await super.snapshot(actor),raw=await super.inspect(actor),observation=await this.receiptObservation(actor,raw);
+    return observation?{...original,...sbaSummary(observation.job),receiptRecovery:{original:sbaSummary(observation.record.original),observedAt:observation.record.observedAt}}:original;
+  }
+  async settle(actor,envelope) {
+    let raw=await super.inspect(actor);
+    if(raw?.status==='running') {
+      try{return await super.settle(actor,envelope);}
+      catch(error){raw=await super.inspect(actor);if(!missingDeadlineReceipt(raw))throw error;}
+    }
+    if(!missingDeadlineReceipt(raw))return super.settle(actor,envelope);
+    const {plan}=await this.bootstrap(actor);
+    validateLateEnvelope(raw,plan.policy,envelope);
+    const prior=await this.receiptObservation(actor,raw);
+    if(prior){requireSba(canonicalSba(prior.record.envelope)===canonicalSba(envelope));return this.snapshot(actor);}
+    const record={original:raw,envelope,observedAt:Date.now()},digest=await sbaDigest(record);
+    this.ctx.storage.transactionSync(()=>{
+      const sql=this.ctx.storage.sql;
+      sql.exec('CREATE TABLE IF NOT EXISTS connected_late_receipt (id INTEGER PRIMARY KEY CHECK(id=1),record TEXT NOT NULL,digest TEXT NOT NULL)');
+      const existing=sql.exec('SELECT record FROM connected_late_receipt WHERE id=1').toArray()[0];
+      if(existing)requireSba(canonicalSba(JSON.parse(existing.record).envelope)===canonicalSba(envelope));
+      else sql.exec('INSERT INTO connected_late_receipt VALUES(1,?,?)',JSON.stringify(record),digest);
+    });
+    return this.snapshot(actor);
+  }
   uninitialized() {
     return this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND (name IN ('connected_bootstrap','connected_cancellation') OR name LIKE 'sba_%')").toArray().length === 0;
   }

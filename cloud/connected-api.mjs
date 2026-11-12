@@ -10,6 +10,7 @@ import { deploymentTargets } from './deployment-contract.mjs';
 import { continuesInstance, createsResources } from './service-preview.mjs';
 import { deploymentIdentities } from './deployment-ownership.mjs';
 import { sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
+import { missingDeadlineReceipt } from './late-receipt.mjs';
 export const connectedEnabled=env=>env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!!env.CONNECTED_TASKS&&!!env.DEPLOYMENT_LOCKS;
 const vaultFor=(env,owner)=>env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const reply=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
@@ -67,7 +68,7 @@ export async function connectedState(env,owner,taskId,reconcile=false){
     return {taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null};
   }
   const policy=record.plan.policy;
-  if(reconcile){const job=await stub.inspect(owner);if(job?.status==='running'){
+  if(reconcile){const job=await stub.inspect(owner);if(job?.status==='running'||missingDeadlineReceipt(job)){
     const outcome=await recoverSbaReceipt(policy.github,job,{token:env.SBA_GITHUB_TOKEN});
     if(outcome.status==='verified-receipt')await stub.settle(owner,outcome.envelope);
     else if(outcome.status==='unknown')await stub.markUnknown(owner,taskId);

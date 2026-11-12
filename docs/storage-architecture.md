@@ -61,7 +61,7 @@ D1（C05）暂缓，未来需要跨节点历史搜索/分析时作为有水位�
 
 服务记录使用 `id, server_id, name, state, created_at, updated_at`，引用本 owner 目录里的有效服务器；真实产品/组件/制品绑定由 D06/D07 解析，不在目录里存可执行 shell 或伪造 ready。增加服务表后，归档服务器必须先检查仍有关联的有效服务/加入流程；不能级联删除。
 
-C04-S02 的源码实现见 [服务目录](service-catalog.md)：服务仍仅 `draft/archived`，服务器引用创建后不变；共用目录 revision/1024 条回执，最多 256 条服务（含归档）。v1 完整校验后事务扩展为 schema v2，保留旧行/原回执；旧实现遇到 v2 拒绝该功能，不降 schema 或清表。加入流程尚不存在，未来 N02 的中间态必须另经版本化迁移，当前严格 `draft` 检查不提前允许未知状态。
+C04-S02 的源码实现见 [服务目录](service-catalog.md)：服务仍仅 `draft/archived`，服务器引用创建后不变；共用目录 revision/1024 条回执，最多 256 条服务（含归档）。v1 完整校验后事务扩展为 schema v2，保留旧行/原回执；旧实现遇到 v2 拒绝该功能，不降 schema 或清表。C04-S02 当时尚无加入流程；后续 [N02 加入流程](node-enrollment.md) 已通过 schema v3 的独立 `server_enrollments` 表提供 `enrolling/active` 投影，服务器底表仍保留 `draft/archived`，不通过放宽底表状态检查实现加入。
 
 C04-S01 只实现服务器目录与 UI，C04-S02 再实现服务目录和引用约束。父任务 C04 在两者都通过前保持部分实现；N01 的服务器前置改为 C04-S01，不必等待尚不需要的服务字段。
 

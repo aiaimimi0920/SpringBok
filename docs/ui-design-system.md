@@ -40,14 +40,14 @@ Crow `collector-desktop/src/styles/{theme,controls,shell}.css`。两者的真实
 | --- | --- | --- |
 | 设计令牌 | `public/cloud-admin/tokens.css` | 精确主色、中性色、派生色；颜色唯一入口 |
 | 共享基础 | `public/cloud-admin/style.css` | 壳层、导航、排版、按钮、表单、状态、弹窗、响应式 |
-| 业务布局 | `public/cloud-admin/connections.css` | 连接行、资源列表、部署步骤及审阅区 |
+| 业务布局 | `public/cloud-admin/connections.css` | 连接行、资源登记弹窗及资源清单 |
 | 资源树 | `public/cloud-admin/resource-tree.css`、`resource-tree.js`、`resource-model.mjs` | 双视图投影、逐层分指标汇总、实例详情；复用同一主题 |
 | 服务实例 | `public/cloud-admin/services.css`、`services.js`、`service-model.mjs` | 服务行、版本弹窗、独立统计与实例操作历史；复用同一主题 |
 | 图标 | `public/cloud-admin/shell.js` | 本地 SVG 线条图标，无网络请求、存储、身份和部署行为 |
 | 本地工作台 | `public/local-neuro.css` | demo/config/test-console 复用 tokens，显式覆盖旧高优先级浅色和状态选择器 |
 | 文档站 | `pages/style.css` | 独立静态发布的同值语义令牌，不依赖 Access 保护路径 |
 | 页面 | `index.html`、`settings.html`、`resources.html`、`deploy.html` | 静态壳层及语义结构，保留既有控制器 ID |
-| 数据与交互 | `app.js`、`connections.js`、`resources.js`、`deploy.js` 等 | 真实服务状态、权限和动作，不用视觉逻辑推断业务成功 |
+| 数据与交互 | `app.js`、`connections.js`、`resources.js`、`services.js` 等 | 真实服务状态、权限和动作，不用视觉逻辑推断业务成功 |
 
 服务、资源、设置与隐藏历史页的静态壳层保持相同导航顺序；更新时一起修改，并运行四页浏览器检查。静态导航
 不依赖脚本注入，脚本只补图标，禁用 JS 时仍可阅读导航；业务本身依旧需要 JS。

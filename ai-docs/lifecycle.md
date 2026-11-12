@@ -33,6 +33,14 @@ succeeded 必须至少一项检查且全部为 true。退出码 0 并不能单�
 
 failed 用于能确定失败边界的情况；有写入且结果不确定应为 unknown。unknown 不自动重放，原回执保持不可变。
 
+连接部署若仅因 `SBA_TASK_DEADLINE` 被控制面标为 unknown，且已领取执行许可但尚无应用
+结果，核对时仍可读取原 run 的结果产物。必须通过原 run/attempt、固定 executor、任务与
+请求摘要、permit、artifact 摘要及应用结果合同的全部认证；运行中的任务或仅有 GitHub
+Success 均不足以恢复。平台追加持久 `receiptRecovery` 观察，保留原超时状态不改写，
+不重新派发或发放许可；当前服务按认证的原执行结果投影。只有成功结果才按普通完成流程
+释放原 lane 并开放后续升级，真实应用 unknown/failed 不会被覆盖。API 返回
+`receiptRecovery.original` 和 `observedAt` 供核对历史；这不是独立健康 verify 晋级 UNKNOWN。
+
 ## 动作责任
 
 平台准备阶段与应用执行结果不同。对于单账号 v2 首次部署，若持久阶段仍是 reserved、

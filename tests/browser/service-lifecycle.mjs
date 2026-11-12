@@ -6,6 +6,11 @@ import { updatedSha } from '../cloud/service-fixture.mjs';
 const suite = await serviceBrowser(), { page, f, input, resource, state, machine, receipt, errors, requests, auth } = suite;
 const directory = process.env.UI_EVIDENCE_DIR ?? 'test-results'; await mkdir(directory, { recursive: true });
 try {
+  for (const path of ['/deploy', '/deploy.html']) {
+    await ready(page, path);
+    assert.equal(await page.locator('h1').textContent(), '服务', 'deployment aliases retain the current service page');
+  }
+  assert.equal(await page.evaluate(async () => (await fetch('/deploy.js')).status), 404, 'retired controller is not served');
   await ready(page, '/'); assert.equal(await page.locator('h1').textContent(), '服务');
   assert.equal(await page.getByRole('link', { name: '历史部署', exact: true }).count(), 0);
   assert.equal(await page.locator('#deploy-sha, #deploy-load').count(), 0);

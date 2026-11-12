@@ -13,6 +13,9 @@
 
 验证命令：
 
+`tests/browser/service-polling.mjs` 已纳入 `.github/workflows/demo-browser.yml` 的默认
+浏览器回归；以下命令仍可用于本地聚焦验证。实际 CI 结果按对应提交核对，不继承历史通过数。
+
 ```powershell
 rtk proxy node tests/browser/service-polling.mjs
 rtk proxy node tests/browser/connected-execution.mjs

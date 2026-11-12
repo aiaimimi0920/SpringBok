@@ -72,6 +72,8 @@ jobs:
         run: node tests/browser/connected-execution.mjs
       - name: Check service discovery, independent statistics and same-instance version updates
         run: node tests/browser/service-lifecycle.mjs
+      - name: Check active-only service polling and hidden-page recovery without dispatch
+        run: node tests/browser/service-polling.mjs
       - name: Verify unstarted update recovery confirmation
         run: node tests/browser/unstarted-update-recovery.mjs
       - name: Verify independent service availability

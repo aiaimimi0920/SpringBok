@@ -83,8 +83,8 @@ try {
   assert.equal(state.dispatches, 4); assert.equal(state.request.action, 'destroy-preview');
   assert.equal(Object.hasOwn(state.request.context, 'source'), false);
   complete(await (await machine()).json()); await ready(page);
-  assert.match(await preview.textContent(), /已删除/); assert.equal(await preview.getByRole('link', { name: '测试地址', exact: true }).count(), 0);
-  assert.equal(await preview.getByRole('button', { name: '删除测试环境', exact: true }).isDisabled(), true);
+  await preview.waitFor({ state: 'detached' });
+  await ready(page); await preview.waitFor({ state: 'detached' });
   assert.match(await parent.textContent(), /v2\.0\.0/); assert.equal(state.created.length, 2);
   assert.deepEqual(errors, []);
   console.log('Upgrade preview, retained production update and scoped cleanup passed (synthetic providers, actual Chrome/workerd).');

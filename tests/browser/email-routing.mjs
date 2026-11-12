@@ -23,9 +23,10 @@ try {
   assert.equal(await remove.evaluate(el => el === document.activeElement), true);
   assert.equal(s.live.writes.filter(row => row.method === 'PUT').length, 0); assert.equal(live.deletes.length, 0);
   await remove.click(); await page.waitForFunction(() => !document.getElementById('service-delete-submit').disabled);
-  await page.locator('#service-delete-submit').click(); await page.getByText('已删除', { exact: true }).waitFor();
+  await page.locator('#service-delete-submit').click(); await page.locator('#service-empty').waitFor({ state: 'visible' });
   assert.equal(s.live.rule.enabled, false); assert.equal(s.live.writes.filter(row => row.method === 'PUT').length, 1); assert.equal(live.deletes.length, 3);
-  await ready(page); await page.getByText('已删除', { exact: true }).waitFor();
+  await ready(page); await page.locator('#service-empty').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#service-list > li').count(), 0);
   assert.equal(s.live.writes.filter(row => row.method === 'PUT').length, 1); assert.deepEqual(s.errors, []);
   console.log('Email Routing UI passed: exact root-domain/receiving Worker inventory, cancel/focus, three viewport widths and persisted single-attempt unbinding (synthetic providers).');
 } finally { await browser.close(); }

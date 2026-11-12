@@ -27,7 +27,7 @@ update、preview、repair 必须比 previous 版本更高且 SHA 不同。verify
 | status | succeeded / deployed-unverified / failed / unknown |
 | checks | 最多 30 个唯一 `{id, passed}`；id 为小写标识，passed 为布尔值 |
 | errorCode | 可选安全错误码，匹配 `[A-Z][A-Z0-9_]{1,79}`；不得添加原异常文本 |
-| lifecycle | 仅预升级动作、显式修复预升级副本或其写前失败清理可用，结构见下文 |
+| lifecycle | 仅预升级动作、显式修复预升级副本或其清理可用；清理恢复包括写前失败及满足下文 resumeCleanup 条件的部分清理，不是任意 UNKNOWN 重试 |
 
 succeeded 必须至少一项检查且全部为 true。退出码 0 并不能单独证明成功；非零、缺失、身份不符或格式错误均不能接受为成功。deployed-unverified 不等于业务验收通过，verify 和 repair 不允许该状态。
 

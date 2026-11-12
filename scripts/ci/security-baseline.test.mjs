@@ -95,7 +95,9 @@ test("browser test dependency audit covers the committed lock without executing 
 });
 
 test("contract lab makes no unsupported product stack or release claims", () => {
-  assert.match(read("README.md"), /pending evaluation/);
+  const readme = read("README.md");
+  assert.match(readme, /历史 Komodo 路线的生产接入与许可需独立评估/);
+  assert.match(readme, /本仓库不 fork 或捆绑 Komodo/);
   assert.match(read(".github/workflows/codeql.yml"), /language: \[actions, javascript-typescript, python\]/);
   assert.doesNotMatch(workflowNames.join(" "), /release|deploy/);
   for (const path of ["package.json", "package-lock.json", "Cargo.toml", "LICENSE"]) {

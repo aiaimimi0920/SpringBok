@@ -8,25 +8,25 @@
 
 当前接入文档面向 manifest v3 与 deployment v2；下方保留历史开发切片，不作为最新字段参考。
 
-> 当前优先方向（2026-10-07）：聚焦部署，建设用户自助的连接设置、已有资源登记与
-> 部署目标选择，见[分步开发计划](docs/deployment-connections-plan.md)。SpringBok 和
-> NAccount 已有真实 Cloudflare 部署及登录证据；历史监控和外部服务器路线保留，
-> 不再作为本轮全部前置。新连接功能的源码、线上启用及执行链接入分别验收。
+当前重点是 SBA 部署：连接 GitHub 与云账号，选择固定应用版本、配置目标和资源，
+审阅后由固定执行器运行应用 SBA，并收取可核对回执。连接与资源的演进记录见
+[分步开发计划](docs/deployment-connections-plan.md)；现行接入合同见上方开发者文档。
 
-SpringBok 是部署在 **Cloudflare Workers** 上的统一服务部署与服务器监控管理平台：
-通过简单交互把服务部署到外部服务器，并持续查看这些服务器及服务的运行状态。
-Cloudflare 承载控制面，外部服务器承载实际业务和受控执行端；D1、KV、R2 按需选择。
+SpringBok 的控制面运行在 **Cloudflare Workers**，Cloudflare 也是已接通的应用运行目标。
+应用负责构建、备份、迁移和业务验证；平台负责计划、确认、互斥、一次性许可与结果核对。
+外部服务器部署和集中监控路线保留，不是所有 SBA 部署的前置，也不代表任意服务器已支持。
 
 **开发入口：[产品开发计划与逐功能进度](docs/development-plan.md)**。其中记录当前源码基线、
 每个功能的独立子任务、验收条件、依赖和 AI 接续停点。每完成一个子任务，更新进度后立即
 提交并推送，不积攒到整个阶段完成；执行规则见 [AGENTS.md](AGENTS.md)。
 
-目前已具备固定场景的部署契约、配置审阅、执行恢复、Worker/SQLite Durable Object、
-节点出站桥和受保护管理页。Cloudflare/Access 与 NAccount 部署登录已有实际验收；
-多台真实服务器接入验收与持续资源监控仍未完成。下方 M1–M14 是历史切片记录，不是产品完成比例。
+当前代码包含声明驱动的部署、同实例更新、独立验证、隔离预升级、显式修复与受控清理，
+控制面持久任务使用 SQLite Durable Object。具体能力的源码实现、线上启用与业务验收
+分别记录在总计划，不能相互替代。下方节点工具及 M1–M14 是保留的独立能力和历史切片，
+不是当前完整架构、统一启动步骤或产品完成比例。
 
 [首批自有服务、交付目标与验收边界](docs/owned-service-deployment.md)：Gateway、Platform、AssetLibrary、Rauthy，以及可选的 Crow 只读查询。Hook/Loom 是桌面访问方。该清单是开发目标，不是可执行配置或已部署证明。
-Production integration, production execution and license selection remain pending evaluation. M3 provides a loopback-only demo UI, not a production control panel. This repository does not fork or bundle Komodo.
+M3 是仅回环访问的演示 UI，不是正式控制台；历史 Komodo 路线的生产接入与许可需独立评估。本仓库不 fork 或捆绑 Komodo，既有 SBA 发布也不代表该路线已完成生产验收。
 
 ## 控制客户端的本地安装
 

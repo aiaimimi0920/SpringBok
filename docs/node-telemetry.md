@@ -150,5 +150,7 @@ Docker namespace 的磁盘为 `no-supported-mounts`，不冒称宿主磁盘或�
 证据根：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-network-telemetry-20261005/`。
 真实 Chrome/workerd 既有三指标和新网络专项通过，覆盖零/非零 bytes、未知/partial/失败/超限、旧版/损坏、四指标独立、单 GET、
 共同过期/迟到 render/owner/visibility/pagehide/BFCache、390px/纯文本，无 browser storage/持久写入；受控数据/时钟不冒称线上故障。
-精确提交、Git 包、PR/main CI 与页面最终结果按第 7.21 节和交付回执记录，不预报未结束的检查。
-M04 只限定四指标链，真实 Cloudflare/Access/用户宿主、M07、历史/告警/业务部署及整体开发仍未完成。
+精确提交、Git 包、PR/main CI 与页面结果通过 M04-S02 提交和对应 PR 回执追溯；
+当前接续边界见 [开发计划](development-plan.md)，历史测试不证明当前线上状态。
+M04 只限定四指标链；该节点指标链的真实 Cloudflare/Access/用户宿主验收，以及 M07、
+历史/告警和外部业务部署仍需独立证据，不代表整个控制面尚未发布。

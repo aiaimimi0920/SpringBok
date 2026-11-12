@@ -1,7 +1,7 @@
 # SBA 受控执行端
 
 任务 `SBA-04-S01`；实现 `src/sba/runner.mjs`，测试 `tests/sba-runner.test.mjs`。
-复用 [SBA v2 契约](sba-contract.md)，只负责一次已授权入口的执行和结果校验，不解释
+复用 [SBA 请求与回执契约](../ai-docs/lifecycle.md)，只负责一次已授权入口的执行和结果校验，不解释
 应用的构建、迁移、发布顺序。它不是独立部署 CLI，也不是恶意应用沙箱。
 
 ## 调用与责任

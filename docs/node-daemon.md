@@ -1,6 +1,6 @@
 # N07-S01：控制客户端常驻循环与安全退出
 
-本项接续 [私有安装](node-installation.md) 与 [认证控制通道](node-channel.md)，总进度见 [开发计划](development-plan.md)。本项交付的是 Linux 非 root 的前台常驻进程，不是 systemd 服务、心跳采集器或业务 executor。N07-S02 的后续服务与验收见 [用户服务](node-user-service.md)；所有输出保留 `executionReady=false`。
+本页描述 Linux 非 root 的前台常驻进程，前置为[私有安装](node-installation.md)与[认证控制通道](node-channel.md)。当前 daemon 支持角色心跳，observe 角色支持指标上报；systemd 装配见[用户服务](node-user-service.md)。它不是业务 executor，保留 `executionReady=false`。总进度见[开发计划](development-plan.md)。
 
 ## 固定版本与运行入口
 
@@ -55,4 +55,4 @@ N06-S01 的历史 `springbok-control-node/v1` 包为 17 个源文件，原安装
 
 workerd 通过 test-only IPC 把安装后的实际子进程 fetch 转发到本地 Miniflare；是本地协议/持久化验收，不是公网 HTTPS/TLS、真实 Access 或多台服务器。单元构建夹具明确使用合成 revision；真正 Git HEAD 包在提交后另外构建并逐文件核对，最终 SHA/摘要在 PR 回执记录。
 
-主 AI 审阅实际源码与 diff；独立审查代理因上游 503 未形成结论，不计独立审查通过。未完成：N07-S02 开机启动、N06-S02 完整执行环境、真实 Cloudflare/Access/多机部署、心跳/指标、凭据轮换/撤销、安全升级和业务验收。没有修改生产开关、DO schema、运行依赖或历史 fixture 身份。
+当前仍需独立核实完整执行环境、用户主机实际开机与真实 Cloudflare/Access/多机部署；凭据轮换/撤销、安全升级和业务验收不是 daemon 成功的附带保证。历史检查数不作为当前验收，参见总计划。

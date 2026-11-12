@@ -1,16 +1,16 @@
-# SBA 云端首次部署控制链
+# SBA 控制链配置与兼容恢复
 
-任务：SBA-04-S02-B；负责人：主 AI；日期：2026-10-06。
+当前 connected 服务操作见[服务生命周期](service-lifecycle.md)；本页保留执行身份与旧固定 policy 的安全配置，不复制应用字段规范。
 
 ## 范围与安全前提
 
-本项只实现服务端批准的单个应用 SHA/环境首次 deploy。复用 SBA v2 契约和执行器；不实现 update、rollback、任意配置编辑，不改变历史 fixture 身份。管理员确认、SQLite DO 写前 claim、单次 dispatch、GitHub OIDC、一次许可、Windows 执行、可信制品回收组成整链。
+旧固定 policy 链限定服务端批准的单个应用 SHA/环境首次 deploy，不代表 connected 链没有更新和预升级能力。两条链都保留管理员确认、SQLite DO 写前 claim、单次 dispatch、GitHub OIDC、一次许可与可信制品回收，不改变历史 fixture 身份。
 
 固定 SHA 的应用代码必须预先审阅并可信。子进程环境过滤不是操作系统沙箱，不能用于安全执行恶意第三方代码。秘密不放 GitHub environment secrets，不进入 dispatch、DO、浏览器状态或应用原始日志；只有固定执行身份通过服务器核验并消费许可后才一次性返回。
 
-## 配置契约（本项不启用生产）
+## 固定 policy 配置契约
 
-`cloud/wrangler.jsonc` 和 `cloud/wrangler.launch.json` 默认 `ENABLE_SBA=no`，新增 `SBA_TASKS` / `SbaDeployment` SQLite Durable Object 与 additive `v5-sba-deployment` migration。旧 binding/migration 保留。
+`cloud/wrangler.jsonc` 和 `cloud/wrangler.launch.json` 默认 `ENABLE_SBA=no`，使用 `SBA_TASKS` / `SbaDeployment` SQLite Durable Object 与 additive `v5-sba-deployment` migration。旧 binding/migration 保留。
 
 启用需管理员另行核查以下条件，不能直接把示例占位符部署：
 
@@ -86,35 +86,9 @@ SBA 操作的精确路径，不能读取管理静态页面、fixture/catalog/nod
 JSON。可禁用/撤销边缘 token，或撤下委托配置及 proof secret；凭据过期不自动续期。
 机器访问不是人类邮箱登录，也不是 CI 例外、业务验收或 unknown 恢复的单独批准。
 
-#### SV-11：固定实例更新模式
+#### 固定实例机器更新
 
-显式批准可增加唯一可选字段 `deployment`，其中精确包含 `instanceId`、`previousTaskId`、
-`repository`、`sourceSha`。两项任务 ID 是完整 connected ID，SHA 是完整固定 commit；
-不能用浮动分支或通配符。完整 scope 加入 CSRF/confirmation 的签名上下文。
-旧四字段批准不获得新权限；新模式也不继承 legacy state/submit/recover/import 权限。
-
-另行批准的未接受任务取消可在 deployment 增加 `cancellation`，精确包含 `taskId` 与
-64hex `planDigest`。它是对原 server-issued plan 的单任务批准，不是客户端任选取消目标。
-完整 scope（包括 cancellation）绑定 proof，变更后旧 CSRF/confirmation 失效。
-只有该可选字段存在才开放 `cancel-unstarted`，旧批准及普通管理员路径不获得该操作。
-vault 必须在 reservation 同一同步事务内证明该 task 未保留、原实例 head 未变化并持久封闭
-迟到 reserve；Connected DO 必须在写入墓碑的同步事务内证明无 bootstrap/任意 SBA 表。
-initialize 在其持久事务内检查墓碑；bootstrap/begin 也拒绝取消槽。两份不可变记录一致后
-才可重新预览，取消返回丢失可以幂等核对，不会执行部署。已有 reservation、初始化或不一致
-一律失败关闭，不删除、解锁、转移或重放。共享 AI/Pages 入口见 integration 的取消小节。
-
-新模式仅允许 GET `/api/admin/sba/session`，以及 POST `/api/admin/deployments/` 下的
-`plan`、`submit`、`state`、`reconcile`、`verify`。session 从原 connected parent 核验 owner、
-实例和仓库，不拿 legacy owner 代替。机器 plan 输入只有 `instanceId`、`previousTaskId`；
-服务端从可信原任务复用 configuration/resources/connections，固定批准源码，构造 update。
-返回普通短时确认计划，submit 继续使用原一次性派发、许可及真实回执检查。
-
-state/reconcile 只能查询本次 update 及 parent 持久引用的独立 verification child，不能读取
-其他实例或历史任务。verify 只能验证该 update，不能重放、恢复或改写原结果。原 parent
-成为非 latest 后不能再派生竞争更新；重复 submit/verify 不重复派发。没有 catalogue、
-全量服务索引、连接/资源管理、首次部署、预升级、删除、repair/restart/resume/import 权限。
-期限、Access 验签、原邮箱策略、Origin、撤销与秘密保管规则完全保留。共享操作边界见
-`ai-docs/integration.md`，Pages 使用同一参考源；线上启用和实际业务验收必须另外记录。
+`SBA_AUTOMATION_ACCESS` 可显式增加 `deployment` scope；具体字段、可访问路由及可选取消批准只在[共享接入参考](../ai-docs/integration.md)维护。旧四字段批准不继承新权限，机器 scope 不开放全局管理或任意恢复。
 
 制品回收先核验 run/artifact 关联，下载跳转只接受受限 Azure Blob HTTPS 主机，绝不转发 GitHub bearer。ZIP 限 64 KiB、解压限 32 KiB，只接收一个 receipt.json，并验证 SHA-256、CRC、envelope 和应用结果。应用报告成功不等于用户业务验收。
 
@@ -132,8 +106,7 @@ Worker 复用既有任务与 GitHub run 核验，只向 policy 批准的应用�
 边界检查。只有全部通过后才申请一次部署许可；读取、framing 或 Git 对象失败均不能
 进入应用执行。Git 命令沿用 120 秒超时；网络限额不是解压后源码大小的硬上限。
 
-本项只交付源码读取实现与无凭据回归，不修改 SQLite schema、旧任务、policy、executor tag
-或已部署 Worker，不触发真实 Actions 或 NAccount 发布。旧任务恢复必须另行证明许可未消费，
+源码读取不修改旧任务、policy 或 executor tag。旧任务恢复必须另行证明许可未消费，
 保留原记录后受控处理；不能通过重新运行 workflow、清空 DO 或替换任务逃避未知语义。
 
 ## 验收与仍开放的边界
@@ -175,12 +148,15 @@ runner 仅在失败时输出 `SBA_SOURCE_DIAGNOSTIC` 的固定枚举/数字投�
 header 值，不读出正文、JWT、claims、cookie、密钥或源码。原 15 秒/8 MiB/单次 POST、
 无 redirect、精确 Git/OIDC/run/task、先消费许可等保护不变；诊断不是新执行或重试权限。
 
-证据目录：`C:/Users/Public/nas_home/AI/GameEditor/linshi/springbok-sba-04-s02-b-20261006/`。
 
-- Linux 非 root 根测试：324 通过、3 跳过、0 失败；cloud suite：93/93。
-- Windows 聚焦：56 通过、1 跳过、0 失败；不宣称 Windows 全平台 suite 通过。
-- `node tests/browser/sba.mjs`：真实 Chrome/workerd，synthetic GitHub/OIDC/ZIP 的预览取消、单提交、刷新、许可与回执整链通过；截图有产物，未人工视觉审图。
-- pinned upload-artifact 所用 archiver 7.0.1 的本地同版 producer ZIP 已被 parser 接受；不是实际 Actions artifact 验收。
-- actionlint 本地通过；精确提交 Gitleaks 和 PR/main CI 需见交付回执，目录扫描的历史公开 Access audience 命中不能冒充新增秘密或忽略扫描失败。
+## Connected 执行器版本
 
-下一步先交付精确 PR/main，再独立开展真实 Cloudflare/GitHub 配置和端到端部署验收。不得重复 dispatch 猜测结果，不把本地模拟、源码合并、真实部署与业务验收混为一谈。
+`SBA_CONNECTED_EXECUTOR_SHA` 将新 connected 部署草稿固定到已验证的执行器 SHA，
+对应 `sba-executor-<SHA>` 必须先建立不可更新／删除的标签保护。配置变化使旧草稿摘要失效，
+已提交任务仍使用自己持久保存的策略与 OIDC 绑定。旧 `SBA_POLICY` 不改写，避免发布新
+执行器改变历史任务身份或回执。此配置只选择代码版本，不授予执行许可，不触发应用部署。
+
+Linux 新草稿独立使用 `SBA_CONNECTED_LINUX_EXECUTOR` 的真实 workflowId / executorSha，
+固定 Linux workflow，完整 runtime 见共享 manifest 参考。destroy-preview / preparation
+recovery 按原计划 runtime 校验当前受信 pin，repair 也保持原 runtime；普通 update/rehearse
+不承担跨 runtime 迁移。两组 pin 的变更不改写已接受任务，也不会触发应用部署。

@@ -6,12 +6,14 @@
 
 ## 当前任务
 
-**CLEANUP-06：历史分支与过期文档清理；负责人：主 AI。**
-用户已同意删除核实已合并、无活跃用途的本地/远端分支，以及已被替代的调研、阶段计划
-和过程记录。分支删除前保存名称/SHA，核对远端 tip、打开 PR、保护规则与 worktree；
-不改写 Git 历史、不删 tag、不处理未确认分支或生产数据。文档删除同步修正链接和入口。
-既有 Access 工作树改动不纳入本任务。完成文档、安全合同、示例和构建检查后 scoped
-提交、推送、精确 PR 审阅及 main 核验；最终结果记于本任务 PR，不循环追加自身 SHA。
+**CLEANUP-07：退役架构文档删除与现行专题合并；负责人：主 AI。**
+用户已同意删除为旧架构服务的文档，合并重复说明；不以存在旧源码/fixture 为理由继续
+保留旧架构教程，也不新建归档副本。保留现行接口、安全边界和必要兼容说明，修正所有
+入口与引用。不改运行代码、业务测试语义、生产状态或既有 Access 工作树修改。
+本轮已删除 24 篇退役/重复文档，合并服务操作，重写架构入口，并纠正节点阶段陈述。
+文档与安全合同 19 项、示例和站点构建已通过；链接、锚点和编码已核对。下一步按精确
+head 完成 PR 审阅与 CI、合并后核验 main，最终回执记于 PR，不循环追加自身 SHA。
+上一轮清理已由 PR #153 完成交付；本轮不将文档清理记作新增功能或生产验收。
 
 ## 1. 产品范围
 
@@ -67,8 +69,7 @@ KV 不作为互斥与批准消费的权威来源，指标 latest 不是无限历
 | 连接运行、秘密与回退边界 | [连接与资源](deployment-connections-plan.md) |
 | 管理鉴权与启用 | [私有管理](private-cloud-management.md) |
 | 执行器与可信传输 | [执行器](sba-runner.md)、[GitHub 传输](sba-github.md)、[固定任务控制](sba-cloud-control.md) |
-| 服务发现、配置与更新 | [生命周期](service-lifecycle.md)、[导入](service-import.md)、[自动部署](automatic-deployment.md)、[升级预览](upgrade-preview.md) |
-| 修复、删除和身份初始化 | [修复](service-repair.md)、[删除](service-deletion.md)、[管理员初始化](admin-bootstrap.md) |
+| 服务发现、准备、导入、更新、修复与删除 | [服务生命周期](service-lifecycle.md)；字段与应用动作见共享参考 |
 | 界面与请求预算 | [Neuro 规范](ui-design-system.md)、[请求效率](ui-request-efficiency.md)、[用量视图](resource-usage-views.md) |
 | 节点路线 | [加入](node-enrollment.md)、[凭据](node-credentials.md)、[通道](node-channel.md)、[安装](node-installation.md)、[用户服务](node-user-service.md)、[指标](node-telemetry.md) |
 | 安全与发布检查 | [安全质量基线](security-quality-baseline.md)、[报告规则](../.github/DEVELOPMENT_SECURITY.md) |

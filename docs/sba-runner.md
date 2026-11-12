@@ -1,6 +1,6 @@
 # SBA 受控执行端
 
-任务 `SBA-04-S01`；实现 `src/sba/runner.mjs`，测试 `tests/sba-runner.test.mjs`。
+实现 `src/sba/runner.mjs`，测试 `tests/sba-runner.test.mjs`。
 复用 [SBA 请求与回执契约](../ai-docs/lifecycle.md)，只负责一次已授权入口的执行和结果校验，不解释
 应用的构建、迁移、发布顺序。它不是独立部署 CLI，也不是恶意应用沙箱。
 
@@ -66,7 +66,7 @@ Windows 超时尝试 taskkill 终止本次进程树，终止调用有 15 秒上�
 进程或云端操作已经停止，不能据此自动重试发布。目录与回执
 生命周期由上层管理，本模块不清理其他任务目录或撤销外部副作用。
 
-## SUITE-03 固定 Linux 路径（2026-10-26）
+## 固定 Linux 路径
 
 完整 tuple 及固定 workflow 由 `src/sba/runtime.mjs` 定义，不接受用户 shell/路径。
 原生执行前检查 host、Ubuntu 24.04/x64 和固定工具目录实际版本；受信 workflow 先下载
@@ -75,27 +75,7 @@ Windows 超时尝试 taskkill 终止本次进程树，终止调用有 15 秒上�
 入口通过绝对路径运行，不从应用 PATH 选择 pwsh。版本探针不是整个目录的逐文件完整性
 证明，可信字节根来自相同作业的 checksum installer；仍不将应用执行器称为恶意代码沙箱。
 
-官方下载版本、资产摘要及实际安装已经联网核实；Ubuntu 24.04 容器、Node 22.23.3 实际
-原生验证覆盖 deploy/verify/update、数据保持、空格/中文路径及普通后代组超时。该证据不是
-GitHub hosted job、真实 Docker 消费审计或任何云应用上线。专用无凭据 CI 使用同一安装器
-和 `SBA_NATIVE_LINUX_TEST=yes`，不能以其他平台的 skip 代替 Linux 通过。
+## 验证入口
 
-## 已测与未测
-
-聚焦入口：
-
-```text
-node --test tests/sba-contract.test.mjs tests/sba-runner.test.mjs tests/cloud-admin-boundary.test.mjs scripts/ci/security-baseline.test.mjs
-```
-
-2026-10-06 修复复验：Windows Node.js 22.22.2 为 25 通过/1 平台跳过；Linux Node.js
-24.18.1 为 23 通过/3 平台跳过。包括原生 PowerShell 带空格参数、实际超时、已提交 synthetic
-checkout 到绑定回执的完整调用，以及 SHA/目录链接/硬链接/ignored/索引/环境/结果边界。
-PR #55 首轮 Windows CI 暴露超时后清理 checkout 的 `EBUSY`；新增可重复的退出时序
-回归先在旧实现失败，修复后验证等待 close、终止错误不提前返回和缺失 close 的有界回退。
-聚焦复验使用与工作树逐文件匹配的 Git LF 快照；原工作树 CRLF 导致的既有安全正则
-失败保留为 Q01，不在本项放宽断言或修改其他工作流。
-既有 contract workflow 新增无部署凭据的 Windows job；CI 最终结果按精确 SHA 回执。
-
-尚未接入部署 workflow、云端持久任务/API/UI、可信下载或 NAccount 实际发布；未独立
-测试复杂后代进程全部终止。不以本地调用、应用自报检查或 Git origin 冒充这些证据。
+`node --test tests/sba-runner.test.mjs`；平台原生测试须在对应运行环境验证。
+云端身份、源码获取与回执回收见[控制链](sba-cloud-control.md)。超时不证明复杂后代或远端副作用全部停止。

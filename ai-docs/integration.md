@@ -45,6 +45,15 @@ GitHub 连接与仓库锁定为原实例，不能用它切换服务或仓库。�
 新 commit SHA；不接受浮动引用。机器 plan 仅提交实例与原 parent，平台从原任务复用
 配置、资源和连接，再按正常确认、一次性派发/许可、业务回执执行 update。
 
+委托配置 `SBA_AUTOMATION_ACCESS` 的 `deployment` 基础字段精确为
+`{ instanceId, previousTaskId, repository, sourceSha }`；两个 task/instance ID 为完整
+connected ID，`sourceSha` 为完整 40 位提交 SHA。可选取消批准见下节，不接受通配范围。
+基础 scope 仅开放 `GET /api/admin/sba/session` 及
+`POST /api/admin/deployments/` 下的 `plan`、`submit`、`state`、`reconcile`、`verify`。
+session 从原 connected parent 核验 owner、实例和仓库；机器 plan 输入只有
+`instanceId`、`previousTaskId`。state/reconcile 只读取本次 update 及其持久引用的独立
+verification child，verify 只能验证该 update；原 parent 不再是 latest 后不能派生竞争更新。
+
 该模式只包含 session、本次更新计划/提交/结果查询及独立 verify；不包含全量索引、
 源码目录、连接/资源管理、新部署、预升级、删除、repair、导入或 unknown 恢复。
 同一实例的其他历史任务也不在查询权限内。旧版 SBA 委托不会自动获得这些新权限。

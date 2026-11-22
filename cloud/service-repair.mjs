@@ -7,6 +7,7 @@ import { configureApplicationSecrets } from './application-secrets.mjs';
 import { repairActions, repairPreviewContext, repairPreviewBaseline } from '../src/sba/repair.mjs';
 import { repairCleanupContext, cleanupRepairable } from '../src/sba/cleanup-repair.mjs';
 import { partialCleanupRepairable, repairCleanupProgress } from '../src/sba/cleanup-progress.mjs';
+import { resolveInstanceConnections } from './service-preview.mjs';
 
 export const repairEnabled = env => env.ENABLE_SERVICE_REPAIR === 'yes';
 export const repairableJob = (plan, job) => !plan.verificationOf &&
@@ -24,8 +25,8 @@ export async function serviceRepairDraft(vault, owner, input) {
   // 重新读取已完成的执行及固定 artifact；超时标记本身不能授权修复。
   const proof = await recoverSbaReceipt(old.policy.github, job, { token: vault.env.SBA_GITHUB_TOKEN });
   requireSba(proof.status === 'verified-receipt' && canonicalSba(proof.envelope.result) === canonicalSba(job.result));
-  for (const reference of Object.values(old.connections)) vault.activeConnection(reference.id, reference.revision);
-  const application = await vault.deploymentDraft(owner, { action: 'application', github: old.connections.github,
+  const connections = resolveInstanceConnections(vault, old);
+  const application = await vault.deploymentDraft(owner, { action: 'application', github: connections.github,
     repository: old.application.repository, sourceSha: input.sourceSha });
   requireSba(application.manifest.schemaVersion === 3 && application.manifest.id === old.application.manifest.id &&
     application.repository === old.application.repository && compareVersions(application.manifest.version, job.request.applicationVersion) > 0 &&
@@ -54,13 +55,14 @@ export async function serviceRepairDraft(vault, owner, input) {
     if (!repair.secretNames.includes(name)) credentials[name] = 'repair-disabled';
     else {
       requireSba(typeof mapping === 'string' && !mapping.startsWith('bootstrap'));
-      requireSba(mapping.startsWith('application:') ? applicationCredentials[name] === mapping : !!old.connections[mapping]);
+      requireSba(mapping.startsWith('application:') ? applicationCredentials[name] === mapping : !!connections[mapping]);
       credentials[name] = mapping;
     }
   }
+  for (const reference of Object.values(connections)) vault.activeConnection(reference.id, reference.revision);
   const policy = { ...old.policy, sourceSha: input.sourceSha, secretNames: application.manifest.secrets,
     github: { ...base.github, applicationRepository: old.application.repository } };
-  const plan = { ...old, application, policy, operation, credentials };
+  const plan = { ...old, connections, application, policy, operation, credentials };
   sbaRequest(policy, 'dc-' + '0'.repeat(32), application.manifest, operation);
   return { ...plan, digest: await sbaDigest({ ...plan, digest: null }) };
 }

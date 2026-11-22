@@ -137,3 +137,16 @@ test('missing Pages binding type is an explicit signed risk, never silently empt
     assert.equal((await s.service('delete-submit', { ...review, acceptUnverifiedReferences: true })).json().status, 'deleted');
   } finally { await s.f.close(); }
 });
+test('connection re-verification or token rotation after deploy allows deletion while mid-preview rotation invalidates stale delete plan', async () => {
+  const s = await deployed();
+  try {
+    const connId = s.input.cloudflare.id;
+    assert.equal((await s.f.call('/api/admin/connections', { ...s.session, body: { action: 'verify', id: connId, revision: 1 } })).status, 200);
+    const staleReview = (await s.service('delete-plan', s.body)).json();
+    assert.equal((await s.f.call('/api/admin/connections', { ...s.session, body: { action: 'rotate', id: connId, revision: 2, token: 'rotated-cloudflare-token-9876543210' } })).status, 200);
+    assert.equal((await s.service('delete-submit', staleReview)).status, 409, 'plan signed before connection rotation must fail closed');
+    assert.deepEqual(s.live.deletes, []);
+    const freshReview = (await s.service('delete-plan', s.body)).json();
+    assert.equal((await s.service('delete-submit', freshReview)).json().status, 'deleted');
+  } finally { await s.f.close(); }
+});

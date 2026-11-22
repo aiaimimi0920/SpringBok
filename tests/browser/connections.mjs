@@ -31,13 +31,30 @@ try {
   await page.locator('#connection-name').fill('应用仓库'); await page.locator('#connection-target').fill('owner/repo'); await page.locator('#connection-token').fill(fakeToken);
   await page.locator('#connection-save').click(); await page.getByText('连接已保存，只读验证通过', { exact: true }).waitFor();
   assert.equal(posts, 2); assert.equal(await page.locator('#connections-list li').count(), 2);
+  state.reject = true;
+  await page.locator('#connection-provider').selectOption('github');
+  await page.locator('#connection-name').fill('无效凭据测试'); await page.locator('#connection-target').fill('owner/repo'); await page.locator('#connection-token').fill(fakeToken);
+  await page.locator('#connection-save').click();
+  await page.getByText('只读验证未通过，未保存凭据。请检查 Token、目标、权限或稍后再试', { exact: true }).waitFor();
+  assert.equal(posts, 3); assert.equal(await page.locator('#connections-list li').count(), 2, '422 validation failure must preserve session and existing connections');
+  assert.equal(await page.locator('#connection-save').isDisabled(), false);
+  state.reject = false; await page.locator('#connection-clear').click();
+  const rotateBtn = page.locator('#connections-list li').first().getByRole('button', { name: '更新凭据', exact: true });
+  await rotateBtn.click(); await page.keyboard.press('Escape');
+  assert.equal(await rotateBtn.evaluate(el => el === document.activeElement), true);
+  await rotateBtn.click(); await page.locator('#connection-rotate-token').fill('rotated-browser-token-1234567890');
+  await page.locator('#connection-rotate-confirm').click();
+  await page.getByText('凭据已更新，只读验证通过', { exact: true }).waitFor();
+  assert.equal(posts, 4); assert.equal(await page.locator('#connection-rotate-token').inputValue(), '');
+  // Move rotated first item back into place by reloading so original order check matches.
+  await page.reload(); await page.getByText('连接已刷新', { exact: true }).waitFor();
   const directory = process.env.CONNECTIONS_EVIDENCE_DIR ?? 'test-results'; await mkdir(directory, { recursive: true });
   await page.screenshot({ path: join(directory, 'connections-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   const first = page.locator('#connections-list li').first(); await first.getByRole('button', { name: '停用', exact: true }).click();
-  await page.keyboard.press('Escape'); assert.equal(posts, 2);
+  await page.keyboard.press('Escape'); assert.equal(posts, 4);
   await first.getByRole('button', { name: '停用', exact: true }).click(); await page.locator('#connection-disable-confirm').click();
-  await page.getByText('连接已停用', { exact: true }).waitFor(); assert.equal(posts, 3);
+  await page.getByText('连接已停用', { exact: true }).waitFor(); assert.equal(posts, 5);
   assert.equal(await page.locator('#connections-list li').first().getByRole('button', { name: '重新验证' }).isDisabled(), false); // Replaced row is appended.
   state.reject = true; await page.locator('#connections-list li').first().getByRole('button', { name: '重新验证' }).click();
   await page.getByText('验证失败，已标记为不可用；请检查权限或平台状态', { exact: true }).waitFor();

@@ -95,3 +95,20 @@ test('partial cleanup and uncertain preview receipts remain visible and cannot b
     } finally { await f.f.close(); }
   }
 });
+test('connection re-verification and rotation after deploy do not block rehearse or destroy-preview', async () => {
+  const f = await previewFixture();
+  try {
+    const first = await deployed(f);
+    assert.equal((await f.f.call('/api/admin/connections', { ...f.session, body: { action: 'verify', id: f.input.cloudflare.id, revision: 1 } })).status, 200);
+    assert.equal((await f.f.call('/api/admin/connections', { ...f.session, body: { action: 'verify', id: f.input.github.id, revision: 1 } })).status, 200);
+    const planResp = await f.service('plan', draft(first));
+    assert.equal(planResp.status, 200, planResp.text); const plan = planResp.json();
+    assert.equal((await f.submit(plan)).status, 200);
+    f.complete(await (await f.machine()).json(), 'succeeded');
+    await f.service('service-state', stateBody(plan.taskId));
+    assert.equal((await f.f.call('/api/admin/connections', { ...f.session, body: { action: 'rotate', id: f.input.cloudflare.id, revision: 2, token: 'rotated-preview-cf-token-1234567890' } })).status, 200);
+    const removeResp = await f.service('plan', { action: 'destroy-preview', instanceId: plan.taskId, previousTaskId: plan.taskId });
+    assert.equal(removeResp.status, 200, removeResp.text);
+    assert.equal((await f.submit(removeResp.json())).status, 200);
+  } finally { await f.f.close(); }
+});

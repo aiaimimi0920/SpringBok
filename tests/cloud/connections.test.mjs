@@ -123,3 +123,28 @@ test('concurrent creates commit one connection and changed encryption key fails 
     assert.equal(failed.connection.state, 'failed');
   } finally { await f.close(); }
 });
+
+test('in-place token rotation preserves working credential on 422, rotates atomically and supports v2 vault keyrings', async () => {
+  const { f, state } = await connectionsFixture();
+  try {
+    const session = await auth(f), request = input(), originalKey = f.bindings.CONNECTIONS_ENCRYPTION_KEY;
+    const created = await post(f, session, request);
+    state.reject = true;
+    await post(f, session, { action: 'rotate', id: request.id, revision: 1, token: 'rejected-token-value-123456' }, 422);
+    state.reject = false;
+    const unchanged = (await f.call(path, session)).json().connections[0];
+    assert.equal(unchanged.revision, 1); assert.equal(unchanged.state, 'verified');
+    f.bindings.CONNECTIONS_ENCRYPTION_KEY = JSON.stringify({ active: 'next-key', keys: { legacy: originalKey, 'next-key': '9'.repeat(64) } });
+    await f.restart();
+    const verified = await post(f, session, { action: 'verify', id: request.id, revision: 1 });
+    assert.equal(verified.connection.state, 'verified'); assert.equal(verified.connection.revision, 2);
+    const nextToken = 'rotated-synthetic-token-abcdef123456';
+    const rotated = await post(f, session, { action: 'rotate', id: request.id, revision: 2, token: nextToken });
+    assert.equal(rotated.connection.state, 'verified'); assert.equal(rotated.connection.revision, 3);
+    assert.ok(!JSON.stringify(rotated).includes(nextToken));
+    f.bindings.CONNECTIONS_ENCRYPTION_KEY = JSON.stringify({ active: 'next-key', keys: { 'next-key': '9'.repeat(64) } });
+    await f.restart();
+    const rechecked = await post(f, session, { action: 'verify', id: request.id, revision: 3 });
+    assert.equal(rechecked.connection.state, 'verified'); assert.equal(rechecked.connection.revision, 4);
+  } finally { await f.close(); }
+});

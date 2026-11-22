@@ -183,3 +183,16 @@ test('lost verification dispatch after repair keeps the reservation across resta
     assert.equal(restored.canUpdate,false);assert.equal(restored.canDelete,false);
   }finally{await f.close();}
 });
+
+test('connection re-verification after failure still permits service repair while mid-preview rotation invalidates stale repair plan',async()=>{
+  const {f,service,submit,session,github,input,body}=await setup();
+  try{
+    assert.equal((await f.call('/api/admin/connections',{...session,body:{action:'verify',id:github.id,revision:1}})).status,200);
+    assert.equal((await f.call('/api/admin/connections',{...session,body:{action:'verify',id:input.cloudflare.id,revision:1}})).status,200);
+    const stale=(await service('plan',body));assert.equal(stale.status,200,stale.text);
+    assert.equal((await f.call('/api/admin/connections',{...session,body:{action:'verify',id:input.cloudflare.id,revision:2}})).status,200);
+    assert.equal((await submit(stale.json())).status,409);
+    const fresh=await service('plan',body);assert.equal(fresh.status,200,fresh.text);
+    assert.equal((await submit(fresh.json())).status,200);
+  }finally{await f.close();}
+});

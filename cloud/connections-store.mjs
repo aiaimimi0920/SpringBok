@@ -281,17 +281,60 @@ export class ConnectionVault extends DurableObject {
     const stored = this.row(input.id); if (!stored) throw new Error('missing connection');
     const metadata = JSON.parse(stored.metadata);
     if (metadata.revision !== input.revision || metadata.state === 'disabled') throw new Error('stale connection');
-    let check;
+    const children = () => metadata.provider === 'github' && metadata.target.startsWith('@') ?
+      this.ctx.storage.sql.exec('SELECT id,metadata FROM connections WHERE id!=?', input.id).toArray()
+        .map(r => ({ id: r.id, metadata: JSON.parse(r.metadata) }))
+        .filter(r => r.metadata.parentId === input.id && r.metadata.state !== 'disabled') : [];
+    if (input.action === 'rotate') {
+      if (metadata.parentId) throw new Error('derived connection rotates via parent');
+      const check = await verifyConnection(metadata, input.token);
+      if (!check.ok) return { error: 'verification-failed' };
+      const time = Date.now(), nextRevision = metadata.revision + 1;
+      const next = { ...metadata, revision: nextRevision, state: 'verified', check: check.code, checkedAt: time, updatedAt: time };
+      const resealed = await sealToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, next, input.token);
+      const derived = await Promise.all(children().map(async child => {
+        const childCheck = await verifyConnection(child.metadata, input.token);
+        const childNext = { ...child.metadata, parentRevision: nextRevision, revision: child.metadata.revision + 1,
+          state: childCheck.ok ? 'verified' : 'failed', check: childCheck.code, checkedAt: time, updatedAt: time };
+        const childSealed = childCheck.ok ? await sealToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, childNext, input.token) : null;
+        return { id: child.id, expectedRevision: child.metadata.revision, next: childNext, sealed: childSealed };
+      }));
+      return this.ctx.storage.transactionSync(() => {
+        this.guard(owner); const current = JSON.parse(this.row(input.id).metadata);
+        if (current.revision !== input.revision || current.state === 'disabled') throw new Error('stale connection');
+        this.ctx.storage.sql.exec('UPDATE connections SET metadata=?,sealed=? WHERE id=?', JSON.stringify(next), resealed, input.id);
+        for (const item of derived) {
+          const live = this.row(item.id); if (!live) continue;
+          const liveMeta = JSON.parse(live.metadata);
+          if (liveMeta.state === 'disabled' || liveMeta.revision !== item.expectedRevision) continue;
+          if (item.sealed) this.ctx.storage.sql.exec('UPDATE connections SET metadata=?,sealed=? WHERE id=?', JSON.stringify(item.next), item.sealed, item.id);
+          else this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify(item.next), item.id);
+        }
+        return { connection: connectionMetadata(next) };
+      });
+    }
+    let check, resealed = null;
     if (input.action === 'verify') {
-      try { check = await verifyConnection(metadata, await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, stored.sealed)); }
-      catch { check = { ok: false, code: 'credential-unavailable' }; }
+      try {
+        const plain = await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, stored.sealed);
+        check = await verifyConnection(metadata, plain);
+        if (check.ok) resealed = await sealToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, plain);
+      } catch { check = { ok: false, code: 'credential-unavailable' }; }
     }
     return this.ctx.storage.transactionSync(() => {
       this.guard(owner); const current = JSON.parse(this.row(input.id).metadata);
       if (current.revision !== input.revision || current.state === 'disabled') throw new Error('stale connection');
-      const next = { ...current, revision: current.revision + 1, updatedAt: Date.now(),
-        ...(check ? { state: check.ok ? 'verified' : 'failed', check: check.code, checkedAt: Date.now() } : { state: 'disabled' }) };
-      this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify(next), input.id);
+      const now = Date.now(), nextRevision = current.revision + 1;
+      const next = { ...current, revision: nextRevision, updatedAt: now,
+        ...(check ? { state: check.ok ? 'verified' : 'failed', check: check.code, checkedAt: now } : { state: 'disabled' }) };
+      if (resealed) this.ctx.storage.sql.exec('UPDATE connections SET metadata=?,sealed=? WHERE id=?', JSON.stringify(next), resealed, input.id);
+      else this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify(next), input.id);
+      if (check?.ok) for (const child of children()) {
+        const live = this.row(child.id); if (!live) continue;
+        const liveMeta = JSON.parse(live.metadata);
+        if (liveMeta.state === 'disabled' || liveMeta.parentRevision !== current.revision) continue;
+        this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify({ ...liveMeta, parentRevision: nextRevision, updatedAt: now }), child.id);
+      }
       return { connection: connectionMetadata(next) };
     });
   }

@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { beginPreparationRecovery } from './preparation-recovery.mjs';
+import { beginPreparationRecovery, inspectPreparationRecovery } from './preparation-recovery.mjs';
 import { connectionInput, connectionMetadata, ownerId, validVaultKey } from './connections-contract.mjs';
 import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs';
 import { verifyConnection } from './connections-provider.mjs';
@@ -212,6 +212,7 @@ export class ConnectionVault extends DurableObject {
       if(plan.accounts)record.accountIds=[...new Set([...Object.values(plan.accounts).map(a=>a.accountId),...deploymentTargets(plan.application.declaration,plan.configuration).map(t=>t.accountId)])].sort();
       reserveBootstrap(this,owner,taskId,plan);
       reserveApplicationSecrets(this,owner,taskId,plan);
+      if(plan.applicationSecrets)record.applicationSecrets=plan.applicationSecrets;
       if(createsResources(plan)){requirePlan(this.resourceCapacity()+Object.keys(plan.resources).length<=128,'capacity-limit-reached');record.preparation={phase:'reserved',intent:plan,resources:{}};}
       requirePlan(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<4096,'capacity-limit-reached');sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
     });
@@ -276,6 +277,7 @@ export class ConnectionVault extends DurableObject {
       sql.exec('INSERT INTO connection_cancelled_deployments VALUES(?,?)',identity.taskId,JSON.stringify(record));return record;
     });
   }
+  inspectPreparationRecovery(owner,taskId){return inspectPreparationRecovery(this,owner,taskId);}
   beginPreparationRecovery(owner,taskId,digest,recoveryId){return beginPreparationRecovery(this,owner,taskId,digest,recoveryId);}
   provisionDeployment(owner,taskId,plan,recoveryId=null){return provisionDeployment(this,owner,taskId,plan,recoveryId);}
   async deploymentCredential(owner,taskId,provider){

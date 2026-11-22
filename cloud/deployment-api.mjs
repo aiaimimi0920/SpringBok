@@ -50,7 +50,7 @@ export async function adminDeploymentRequest(request,env,session,readBody){
     const expiresAt=Date.now()+120000,taskId='dc-'+crypto.randomUUID().replaceAll('-','');
     return reply({taskId,draft:input,plan:result,expiresAt,confirmation:await signSession(session,'deployment-confirm',[taskId,input,result.digest,expiresAt]),executionEnabled:connectedEnabled(env)});
   }catch(error){
-    const raw=error?.message,isPlanOrSubmit=['/plan','/submit'].some(s=>url.pathname.endsWith(s));
+    const raw=error?.message,isPlanOrSubmit=['/plan','/submit','/resume-plan','/resume-submit'].some(s=>url.pathname.endsWith(s));
     const mapped=isPlanOrSubmit&&['missing connection','connection unavailable'].includes(raw)?'connection-unavailable':raw;
     const allowed=[...domainPlanErrors,...emailPlanErrors,...(isPlanOrSubmit?deploymentPlanErrors:[])];
     return reply({error:allowed.includes(mapped)?mapped:'deployment-plan-rejected-check-source-resources-and-public-configuration'},409);

@@ -6,6 +6,9 @@
 
 ## 当前任务
 
+**OPT-09：单账号同实例未初始化更新任务的受控恢复（`account-lane-busy` 恢复闭环）；负责人：主 AI。**
+当同一云账号存在在途任务占用 `deployment_lane` 时，同实例 `update` 在 `vault.reserveDeployment` 后因 `account-lane-busy` 拒绝认领锁而停留在 `preparation-unconfirmed`（`ConnectedDeployment` 未初始化、零云写入、零工作流派发）。扩展 `preparation-recovery.mjs` 支持单账号未初始化 `update` 的一次性受控恢复：在 `resume-plan` 前置校验账号执行通道已空闲且原任务未占锁，避免通道仍忙时误消耗一次性恢复栅栏；从可信父任务与固定提交重建更新计划并强制核对原 `record.digest`（SHA-256），原子记录 `recovery` 防止二次恢复；同步更新共享生命周期参考与确认提示文案。
+
 **OPT-AUDIT-01：复核 OPT-01～OPT-08；负责人：本轮 Codex。** 以 `de3d6ba..d8c2b6d` 为审计范围。
 已修复迟到回执、归档 run 隔离、修复制品判定、派生凭据与秘密大小边界、预升级清理收尾、
 版本切换与文档渲染；未改没有确认回归的节点采集与账本设计。WSL Node 22 Worker 协议套件、

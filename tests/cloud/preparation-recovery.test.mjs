@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { connectedFixture } from './connected-fixture.mjs';
 import { declaration } from './deployment-fixture.mjs';
+import { previewFixture } from './preview-fixture.mjs';
+import { updatedSha } from './service-fixture.mjs';
 
 const account = 'a'.repeat(32), task = () => 'dc-' + randomUUID().replaceAll('-', '');
 async function fixture() {
@@ -129,4 +131,61 @@ test('stale connection and retained account lane reject recovery before resource
     assert.equal((await y.api('resume-submit', body)).status, 409); assert.equal(y.state.creates, 0);
     assert.equal((await y.api('resume-plan', { taskId: plan.taskId })).status, 409);
   } finally { await y.f.close(); }
+});
+
+test('uninitialized single-account service update blocked by account-lane-busy waits for lane release and resumes once', async () => {
+  const f = await previewFixture();
+  try {
+    const first = (await f.service('plan', f.input)).json();
+    assert.equal((await f.submit(first)).status, 200);
+    f.complete(await (await f.machine()).json());
+    assert.equal((await f.service('service-state', { instanceId: first.taskId, reconcile: true })).json().canUpdate, true);
+    assert.equal(f.state.created.length, 1);
+
+    const ns = await f.f.mf.getDurableObjectNamespace('DEPLOYMENT_LOCKS');
+    const locks = ns.get(ns.idFromName('deployment-account/v1/' + account));
+    const blocker = task();
+    await locks.claim(f.auth.ownerId, blocker, account, 'other/repo/concurrent', [], 'd'.repeat(64));
+
+    const update = (await f.service('plan', { ...f.input, sourceSha: updatedSha, instance: { id: first.taskId, previousTaskId: first.taskId } })).json();
+    const blocked = await f.submit(update);
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.json().error, 'account-lane-busy');
+    assert.equal(f.state.dispatches, 1);
+
+    const unconfirmed = (await f.service('service-state', { instanceId: first.taskId, reconcile: true })).json();
+    assert.equal(unconfirmed.status, 'preparation-unconfirmed');
+    assert.equal(unconfirmed.canUpdate, false);
+    assert.equal(unconfirmed.canResume, true);
+
+    // While the concurrent service still holds the account lane, resume-plan rejects with account-lane-busy without consuming recovery.
+    const busyPlan = await f.service('resume-plan', { taskId: update.taskId });
+    assert.equal(busyPlan.status, 409);
+    assert.equal(busyPlan.json().error, 'account-lane-busy');
+    assert.equal((await f.service('service-state', { instanceId: first.taskId, reconcile: true })).json().canResume, true);
+
+    await locks.release(blocker);
+    await f.f.restart();
+    const confirmation = await f.service('resume-plan', { taskId: update.taskId });
+    assert.equal(confirmation.status, 200, confirmation.text);
+    const { instance, ...body } = confirmation.json();
+    assert.equal(instance.id, first.taskId);
+    assert.equal(instance.action, 'update');
+    assert.equal(instance.application.sourceSha, updatedSha);
+
+    const outcomes = await Promise.all([f.service('resume-submit', body), f.service('resume-submit', body)]);
+    assert.deepEqual(outcomes.map(r => r.status).sort(), [200, 409]);
+    assert.equal(f.state.created.length, 1);
+    assert.equal(f.state.dispatches, 2);
+    assert.equal(f.state.request.taskId, update.taskId);
+    assert.equal(f.state.request.action, 'update');
+    assert.equal(f.state.request.sourceSha, updatedSha);
+    assert.equal((await f.service('resume-plan', { taskId: update.taskId })).status, 409);
+
+    f.complete(await (await f.machine()).json());
+    const finalState = (await f.service('service-state', { instanceId: first.taskId, reconcile: true })).json();
+    assert.equal(finalState.job.status, 'succeeded');
+    assert.equal(finalState.instance.application.version, '2.0.0');
+    assert.equal(finalState.canUpdate, true);
+  } finally { await f.f.close(); }
 });

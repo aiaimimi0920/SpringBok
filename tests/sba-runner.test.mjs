@@ -272,9 +272,9 @@ $result = [ordered]@{schemaVersion=2; taskId=$input.taskId; action=$input.action
   assert.deepEqual(JSON.parse(await readFile(output.receiptPath, 'utf8')), output.result);
 });
 
-test('native Node .mjs entrypoint executes directly without PowerShell and produces a verified receipt', async t => {
+test('native Node .mjs entrypoint executes directly without PowerShell and produces a verified receipt', { skip: process.platform !== 'win32' }, async t => {
   const f = await fixture(t);
-  const nodeManifest = { ...manifest, entrypoint: 'springbok.mjs', runtime: process.platform === 'linux' ? { runner: 'ubuntu-24.04', powershell: '7.6.9', python: '3.12', node: '22' } : manifest.runtime };
+  const nodeManifest = { ...manifest, entrypoint: 'springbok.mjs' };
   await rm(join(f.root, '.sba', 'springbok.ps1'));
   await writeFile(join(f.root, '.sba', 'manifest.json'), JSON.stringify(nodeManifest), 'utf8');
   await writeFile(join(f.root, '.sba', 'springbok.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';

@@ -34,7 +34,8 @@ export class ConnectedDeployment extends SbaDeployment {
     return observation?{...original,...sbaSummary(observation.job),receiptRecovery:{original:sbaSummary(observation.record.original),observedAt:observation.record.observedAt}}:original;
   }
   async fullState(actor) {
-    const record=await this.bootstrap(actor);
+    let record;
+    try { record=await this.bootstrap(actor); } catch { return {uninitialized:true}; }
     const {job:raw,snapshot:base,attempts}=await this.inspectBundle(actor);
     const observation=await this.receiptObservation(actor,raw,record.plan);
     const job=observation?.job??raw;
@@ -42,7 +43,7 @@ export class ConnectedDeployment extends SbaDeployment {
     const sql=this.ctx.storage.sql;
     const verification=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_verification'").toArray().length?JSON.parse(sql.exec('SELECT record FROM connected_verification WHERE id=1').one().record):null;
     const laneReleased=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_lane_release'").toArray().length>0;
-    return {record,job,snapshot,attempts,verification,laneReleased};
+    return {uninitialized:false,record,job,snapshot,attempts,verification,laneReleased};
   }
   markLaneReleased(actor) {
     ownerId(actor);

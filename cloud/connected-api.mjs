@@ -62,8 +62,9 @@ export async function executeReserved(env,owner,taskId,plan,reservation,recovery
   return {...await stub.attachRun(owner,taskId,outcome),taskId};
 }
 export async function connectedStateBundle(env,owner,taskId,reconcile=false,fallbackEntry=undefined){
-  connectedTaskId(taskId);const stub=connectedStub(env,taskId);let bundle;
-  try{bundle=await stub.fullState(owner);}catch{
+  connectedTaskId(taskId);const stub=connectedStub(env,taskId);
+  let bundle=await stub.fullState(owner);
+  if(bundle.uninitialized){
     const entry=fallbackEntry!==undefined?fallbackEntry:(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(entry);
     return {bundle:null,publicState:{taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null}};
   }

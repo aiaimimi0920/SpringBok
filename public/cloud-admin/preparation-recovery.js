@@ -23,7 +23,7 @@ export async function resumePreparation(state, trigger, { request, refresh, noti
     for (const [label, value] of [['任务', plan.taskId], ['版本', plan.instance.application.version + ' · ' + plan.instance.application.sourceSha], ['环境', plan.instance.environment], ['资源', Object.values(plan.instance.resources).map(row => row.kind + ' · ' + row.name).join('、')]]) {
       const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = label; dd.textContent = value; details.append(dt, dd);
     }
-    message.textContent = restart ? '将为未领取执行许可的原任务发起一次新执行，版本与配置保持不变。' : '将继续原任务，创建所列服务资源并执行固定版本。';
+    message.textContent = restart ? '将为未领取执行许可的原任务发起一次新执行，版本与配置保持不变。' : state.instance?.action === 'update' ? '将继续未启动的原升级任务，版本、资源与配置保持不变。' : '将继续原任务，创建所列服务资源并执行固定版本。';
     submit.disabled = false;
   } catch (error) { message.textContent = error.message; }
   submit.addEventListener('click', async () => {

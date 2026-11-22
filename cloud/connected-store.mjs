@@ -316,5 +316,14 @@ export class DeploymentLocks extends DurableObject {
       return {bound:true};
     });
   }
+  assertUnclaimedAndLaneFree(taskId){
+    connectedTaskId(taskId);
+    const sql=this.ctx.storage.sql;
+    if(!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('deployment_claims','deployment_lane')").toArray().length)return {available:true};
+    requireSba(!sql.exec('SELECT 1 FROM deployment_claims WHERE task=?',taskId).toArray().length);
+    const lane=sql.exec('SELECT * FROM deployment_lane').toArray();requireSba(lane.length===1&&lane[0].id===1);
+    requirePlan(lane[0].task===null,'account-lane-busy');
+    return {available:true};
+  }
   release(taskId){connectedTaskId(taskId);this.ctx.storage.sql.exec('UPDATE deployment_lane SET task=NULL WHERE id=1 AND task=?',taskId);}
 }

@@ -72,7 +72,7 @@ export async function servicePreviewDraft(vault, owner, input) {
   requirePlan(input.sourceSha !== job.request.sourceSha && compareVersions(candidate.manifest.version, job.request.applicationVersion) > 0, 'version-not-newer');
   // 每个可写目标必须从新实例名派生，不能默默继承线上 Worker/域名。
   requireSba(d.targets.every(target => target.kind === 'email-routing' || d.fields.find(field => canonicalSba(field.path) === canonicalSba(target.path))?.template?.includes('{instance}')));
-  requireSba(d.targets.some(target => target.kind === 'domain'));
+  requireSba(d.targets.some(target => ['domain', 'worker', 'pages'].includes(target.kind)));
   requireSba(old.application.declaration.resources.every(resource => d.resources.some(row => row.key === resource.key && row.kind === resource.kind)));
   const values = Object.fromEntries(d.fields.filter(field => field.template === null).map(field => [field.path.join('.'), deploymentValue(old.configuration, field.path)]));
   for (const target of d.targets.filter(row => row.kind === 'email-routing')) values[target.path.join('.')] = null;

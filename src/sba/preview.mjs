@@ -34,7 +34,9 @@ export function validatePreviewContext(request) {
     validatePreviewInventory(source.resources, { source: true }); validatePreviewInventory(context.resources);
     const originals = new Set(source.resources.map(resourceIdentity));
     requireValue(context.resources.every(row => !originals.has(resourceIdentity(row))));
-    requireValue(Array.isArray(context.urls) && context.urls.length > 0 && context.urls.length <= 8 && new Set(context.urls).size === context.urls.length && context.urls.every(url => previewUrl(url) && context.resources.some(row => row.kind === 'domain' && row.remoteId === url)));
+    const domainUrls = context.resources.filter(row => row.kind === 'domain').map(row => row.remoteId);
+    requireValue(Array.isArray(context.urls) && context.urls.length <= 8 && new Set(context.urls).size === context.urls.length &&
+      (domainUrls.length > 0 ? context.urls.length > 0 && context.urls.every(url => previewUrl(url) && domainUrls.includes(url)) : context.urls.length === 0));
   } else {
     exact(context, ['instanceId', 'previewTaskId', 'resultDigest', 'resources']);
     requireValue(task(context.instanceId) && task(context.previewTaskId) && digest(context.resultDigest));

@@ -535,7 +535,7 @@ function buildFields(data) {
       addField($('service-resources'), 'service-resource-' + field.key, field.label + ' · ' + resourceLabels[field.kind], output);
     }
     domainFields(data);
-    if(!updateTarget&&!rehearsing)prepareApplicationSecrets=applicationSecretFields(data,applicationSecretProfiles,$('service-inputs'),addField,request,clearPreview);
+    if(!rehearsing)prepareApplicationSecrets=applicationSecretFields(data,applicationSecretProfiles,$('service-inputs'),addField,request,clearPreview,!!updateTarget);
     if(data.declaration.administrator&&!updateTarget&&!rehearsing){
       const select=element('select'),password=element('input'),mode=element('select');
       fillOptions(select,adminProfiles.map(row=>[row.id,row.email]),'不初始化管理员');
@@ -726,7 +726,7 @@ async function prepare(event) {
       const result = await request(api + 'plan', { action: 'rehearse', instanceId: updateTarget.instance.id, previousTaskId: updateTarget.taskId, sourceSha: data.sourceSha, environment: testEnvironment });
       if (!currentDialog(version, pageVersion)) return;
       preview = result; const details = element('dl');
-      for (const [label, value] of [['源环境', updateTarget.instance.environment], ['当前版本', 'v' + updateTarget.instance.application.version], ['目标版本', `v${data.manifest.version} · ${data.sourceSha}`], ['测试环境', result.plan.policy.environment], ['测试地址', result.plan.operation.context.urls.join('、')], ['独立资源', Object.values(result.plan.resources).map(row => row.name).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
+      for (const [label, value] of [['源环境', updateTarget.instance.environment], ['当前版本', 'v' + updateTarget.instance.application.version], ['目标版本', `v${data.manifest.version} · ${data.sourceSha}`], ['测试环境', result.plan.policy.environment], ['测试地址', result.plan.operation.context.urls.join('、') || '—'], ['独立资源', Object.values(result.plan.resources).map(row => row.name).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
       const risk = element('p', '将复制当前数据到独立测试资源并执行迁移，可能产生云资源费用。线上服务不切换。'); risk.dataset.tone = 'warning';
       $('service-review').replaceChildren(details, risk); dialogNotice(''); return;
     }
@@ -789,7 +789,7 @@ async function prepare(event) {
       ...(accounts ? { accounts } : {}),
       ...(Object.keys(domains).length ? { domains } : {}),
       ...(administrator ? { administrator } : {}),
-      ...(applicationSecrets ? { applicationSecrets } : {}),
+      ...(applicationSecrets ? { applicationSecrets, ...(updateTarget ? { rotateApplicationSecrets: true } : {}) } : {}),
       ...(updateTarget ? { instance: { id: updateTarget.instance.id, previousTaskId: updateTarget.taskId } } : {}) };
     const result = await request(api + 'plan', body); if (!currentDialog(version, pageVersion)) return; preview = result;
     const details = element('dl');

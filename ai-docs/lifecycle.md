@@ -67,7 +67,7 @@ unknown，不允许再次恢复或新建任务绕过。已有 bootstrap、creati
 
 preview context 恰好包含 source、resources、urls。source 包含 instanceId、taskId、sourceSha、applicationVersion、environment、configuration、resources、resultDigest。源 environment 必须不同；新资源不能与源资源身份重叠。
 
-destroy-preview context 恰好包含 instanceId、previewTaskId、resultDigest、resources。资源清单 1–20 项，每项包含 key、kind、accountId、remoteId、name；kind 可为 d1、kv、worker、r2、domain、pages、github-actions。urls 是 1–8 个唯一 HTTPS origin，须匹配域名资源。完整预升级请求编码不超过 48 KiB。
+destroy-preview context 恰好包含 instanceId、previewTaskId、resultDigest、resources。资源清单 1–20 项，每项包含 key、kind、accountId、remoteId、name；kind 可为 d1、kv、worker、r2、domain、pages、github-actions。含 domain 资源时 urls 为 1–8 个唯一 HTTPS origin 且须匹配域名资源；仅含 worker/pages 目标而未声明 domain 时 urls 为空数组。完整预升级请求编码不超过 48 KiB。
 
 仅 preview 的 source.resources 还可包含只读 email-routing 身份，其 remoteId 为
 `email-routing:<32位zoneId>`、accountId 为 Cloudflare 账号。可写 context.resources 和

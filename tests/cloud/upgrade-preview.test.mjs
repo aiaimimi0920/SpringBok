@@ -113,3 +113,19 @@ test('connection re-verification and rotation after deploy do not block rehearse
     assert.equal((await f.submit(removeResp.json())).status, 200);
   } finally { await f.f.close(); }
 });
+test('worker-only service without custom domain target supports isolated rehearse and cleanup', async () => {
+  const f = await previewFixture();
+  try {
+    f.state.declaration.targets = f.state.declaration.targets.filter(t => t.kind !== 'domain');
+    f.state.declaration.fields = f.state.declaration.fields.filter(field => field.path[0] !== 'url');
+    delete f.state.declaration.defaults.url;
+    const first = await deployed(f);
+    const planResp = await f.service('plan', draft(first));
+    assert.equal(planResp.status, 200, planResp.text); const plan = planResp.json();
+    assert.deepEqual(plan.plan.operation.context.urls, []);
+    assert.equal((await f.submit(plan)).status, 200);
+    f.complete(await (await f.machine()).json(), 'succeeded', { lifecycle: { resources: f.state.request.context.resources.map(r => ({ key: r.key, status: 'created' })), urls: [], snapshot: { id: 'f'.repeat(64), createdAt: 1791459200000 } } });
+    const previewState = (await f.service('service-state', stateBody(plan.taskId))).json();
+    assert.equal(previewState.canDeletePreview, true); assert.deepEqual(previewState.testUrls, []);
+  } finally { await f.f.close(); }
+});

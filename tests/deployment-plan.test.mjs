@@ -15,5 +15,7 @@ test('configuration injects observed account and resources; rejects forged or ex
     assert.throws(()=>deploymentDeclaration({...declaration,defaults:{vars:{[key]:'synthetic-sensitive'}}}));
     assert.throws(()=>deploymentConfiguration(declaration,{...values,vars:{nested:[{[key]:'synthetic-sensitive'}]}},resources,account));
   }
+  const benign={tokenEndpoint:'https://id.example.invalid/oauth/token',authorizationEndpoint:'https://id.example.invalid/oauth/authorize',tokenTtl:3600,passwordPolicy:'strict',signingAlgorithm:'RS256'};
+  assert.deepEqual(deploymentConfiguration(declaration,{...values,vars:benign},resources,account).vars,benign);
   assert.throws(()=>deploymentConfiguration(declaration,values,{database:{...resources.database,accountId:'b'.repeat(32)}},account));
 });

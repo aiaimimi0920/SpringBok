@@ -32,7 +32,7 @@ export function validateManifest(value) {
   if (!identifier(value.id) || typeof value.name !== 'string' || !value.name.trim() || value.name.length > 100 || /[\x00-\x1f]/.test(value.name)) fail('invalid application identity');
   versionParts(value.version);
   // 入口相对 .sba；文件存在、符号链接和解析后边界由执行端另行检查。
-  if (typeof value.entrypoint !== 'string' || !/^[a-zA-Z0-9_-]+\.ps1$/.test(value.entrypoint)) fail('entrypoint must be a .sba PowerShell file');
+  if (typeof value.entrypoint !== 'string' || !/^[a-zA-Z0-9_-]+\.(?:ps1|mjs)$/.test(value.entrypoint)) fail('entrypoint must be a .sba PowerShell or ES module file');
   exact(value.runtime, ['runner', 'powershell', 'python', 'node']);
   try { runtimeProfile(value.runtime); } catch { fail('unsupported SBA runtime'); }
   const actions = value.schemaVersion === 3 ? [...SBA_ACTIONS, ...PREVIEW_ACTIONS, ...(object(value.actions) && Object.hasOwn(value.actions, 'repair') ? ['repair'] : [])] : SBA_ACTIONS;

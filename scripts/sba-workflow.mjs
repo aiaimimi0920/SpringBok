@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { devNull } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { inspectCheckout, executeCheckout, nativePowerShell } from '../src/sba/runner.mjs';
+import { inspectCheckout, executeCheckout, nativeEntrypointInterpreter } from '../src/sba/runner.mjs';
 import { runtimeProfile, workflowProfile } from '../src/sba/runtime.mjs';
 import { canonicalSba, sbaDigest } from '../cloud/sba-control.mjs';
 import { requestSource, decodeSourceResponse } from '../src/sba/source.mjs';
@@ -91,7 +91,7 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
   if (canonicalSba(checked.input) !== canonicalSba(input.request)) reject();
   if (runtimeProfile(checked.manifest.runtime).workflowPath !== input.workflowPath) reject();
   // 取得不可重放的部署秘密之前，先确认声明 runtime 与本机及固定工具匹配。
-  if (execute === executeCheckout) nativePowerShell(checked.manifest.runtime);
+  if (execute === executeCheckout) nativeEntrypointInterpreter(checked.manifest);
   const token = await getIdentity();
   onStage('permit');
   // 不重试：POST 的任何丢响应都可能已经消费许可。

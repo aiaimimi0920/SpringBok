@@ -95,10 +95,27 @@ test('updates inherit the original secret reference, previews bind it separately
   }finally{await f.f.close();}
 });
 
-test('secret values are bounded UTF-8 single-line strings and public declarations reject aliases',async()=>{
+test('explicit rotateApplicationSecrets on update rotates secrets to a new profile with multi-line PEM and label',async()=>{
   const f=await fixture();
   try{
-    for(const value of ['',null,'x'.repeat(513),'中'.repeat(171),'line\nvalue'])assert.equal((await f.create({values:{APP_COOKIE_SECRET:value}})).status,409);
+    const first=await f.preview();await f.submit(first);f.complete(await(await f.machine()).json());
+    await f.service('service-state',{instanceId:first.taskId,reconcile:true});
+    const multiline='synthetic-key-header\nsynthetic-key-payload-line-2\nsynthetic-key-footer\n';
+    const created=(await f.create({label:'2026-Q4 轮换',values:{APP_COOKIE_SECRET:multiline,APP_STORAGE_KEY:'rotated-storage-key'}})).json().profile;
+    assert.equal(created.label,'2026-Q4 轮换');
+    const rotatedInput={...f.input,sourceSha:updatedSha,applicationSecrets:{id:created.id,revision:1},rotateApplicationSecrets:true,instance:{id:first.taskId,previousTaskId:first.taskId}};
+    const planRes=await f.api('plan',rotatedInput);assert.equal(planRes.status,200,planRes.text);
+    const rotated=planRes.json();assert.deepEqual(rotated.plan.applicationSecrets,{id:created.id,revision:1});
+    assert.equal((await f.submit(rotated)).status,200);
+    const permit=await(await f.machine()).json();assert.equal(permit.secrets.APP_COOKIE_SECRET,multiline);
+  }finally{await f.f.close();}
+});
+
+test('secret values are bounded 16 KiB UTF-8 strings (allowing PEM newlines, rejecting control bytes) and public declarations reject aliases',async()=>{
+  const f=await fixture();
+  try{
+    for(const value of ['',null,'x'.repeat(16385),'中'.repeat(5462),'bad\x00value','bad\x1fvalue'])assert.equal((await f.create({values:{APP_COOKIE_SECRET:value}})).status,409);
+    assert.equal((await f.create({values:{APP_COOKIE_SECRET:'line1\nline2\r\nline3\tend'}})).status,200);
     for(const applicationSecrets of [['CLOUDFLARE_API_TOKEN'],['APP_COOKIE_SECRET','APP_COOKIE_SECRET'],[]]){
       f.state.declaration.applicationSecrets=applicationSecrets;
       assert.equal((await f.api('plan',f.input)).status,409);

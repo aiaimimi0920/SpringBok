@@ -8,7 +8,7 @@
 | id | 稳定应用标识，匹配 `[a-z][a-z0-9-]{1,62}` |
 | name | 非空显示名，最多 100 字符，不含控制字符 |
 | version | 无 v 前缀、无预发布后缀的稳定 x.y.z；每段最多 9 位且无多余前导零 |
-| entrypoint | `.sba` 内简单文件名，匹配 `[a-zA-Z0-9_-]+\.ps1` |
+| entrypoint | `.sba` 内简单文件名，`[a-zA-Z0-9_-]+` 后缀 `.ps1` 或 `.mjs` |
 | runtime | 恰好包含 runner、powershell、python、node，值见下表 |
 | actions | v3 必须含 deploy、update、verify、preview、destroy-preview；可选 repair |
 | actions.*.timeoutSeconds | 每个动作仅此字段，整数 1–3600 秒 |
@@ -23,9 +23,10 @@
 | node | 22 | 22 |
 
 必须选择一整列，不能混用字段或填写 ubuntu-latest、7.x、任意命令或 workflow。入口在
-两种 runtime 中都为 PowerShell `.ps1`，参数合同不变。Linux 使用固定官方发行版与摘要
-校验的 PowerShell，不依赖 runner 预装的浮动 pwsh；运行于 Ubuntu 24.04 x64，应用内部
-可以继续调用 Python、Node、Docker 等既有工具。完整业务工具链、镜像与依赖锁仍归应用。
+两种 runtime 中可为 PowerShell `.ps1` 或原生 Node 22 ES Module `.mjs`，均接收相同的
+`-RequestPath` 与 `-ResultPath` 参数合同。Linux 使用固定官方发行版与摘要校验的
+PowerShell（`.mjs` 入口直接使用固定 Node 22），不依赖 runner 预装的浮动 pwsh；运行于
+Ubuntu 24.04 x64，应用内部可以继续调用 Python、Node、Docker 等既有工具。完整业务工具链、镜像与依赖锁仍归应用。
 
 Linux 支持须先发布兼容控制面、固定 Linux executor workflow 和受保护 SHA；未配置时
 失败关闭，不降级到 Windows。现有实例的 update/preview/repair 不允许改变 runtime；

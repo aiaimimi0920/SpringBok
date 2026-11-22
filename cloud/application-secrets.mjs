@@ -34,7 +34,7 @@ export function applicationSecretProfiles(vault, owner) {
 }
 export async function saveApplicationSecrets(vault, owner, input) {
   const disable = input.action === 'disable-application-secrets';
-  exactSba(input, disable ? ['action','id','revision'] : ['action','id','repository','applicationId','values']);
+  exactSba(input, disable ? ['action','id','revision'] : ['action','id','repository','applicationId','values',...(Object.hasOwn(input,'label')?['label']:[])]);
   connectionId(input.id); guard(vault, owner);
   if (disable) return vault.ctx.storage.transactionSync(() => {
     const { metadata } = active(vault, { id: input.id, revision: input.revision }), next = { ...metadata, active: false, revision: metadata.revision + 1 };
@@ -42,13 +42,14 @@ export async function saveApplicationSecrets(vault, owner, input) {
     return { profile: next };
   });
   requireSba(input.action === 'application-secrets' && suiteRepository(input.repository) && identifier(input.applicationId));
+  if (Object.hasOwn(input, 'label')) requireSba(typeof input.label === 'string' && input.label.trim().length > 0 && input.label.length <= 64 && !/[\x00-\x1f\x7f]/.test(input.label));
   requireSba(input.values && typeof input.values === 'object' && !Array.isArray(input.values));
   const names = Object.keys(input.values).sort();
   requireSba(names.length > 0 && names.length <= 20 && names.every(name => /^[A-Z][A-Z0-9_]{1,63}$/.test(name)));
-  const profile = { id: input.id, revision: 1, repository: input.repository.toLowerCase(), applicationId: input.applicationId, names, active: true, createdAt: Date.now() }, sealed = {};
+  const profile = { id: input.id, revision: 1, repository: input.repository.toLowerCase(), applicationId: input.applicationId, names, active: true, createdAt: Date.now(), ...(Object.hasOwn(input, 'label') ? { label: input.label.trim() } : {}) }, sealed = {};
   for (const name of names) {
     const value = input.values[name], bytes = typeof value === 'string' ? new TextEncoder().encode(value).length : 0;
-    requireSba(bytes > 0 && bytes <= 512 && !/[\x00-\x1f\x7f]/.test(value));
+    requireSba(bytes > 0 && bytes <= 16384 && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value));
     sealed[name] = await sealToken(vault.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadataFor(profile,name), value);
   }
   return vault.ctx.storage.transactionSync(() => {
@@ -59,10 +60,12 @@ export async function saveApplicationSecrets(vault, owner, input) {
 }
 export function configureApplicationSecrets(vault, owner, input, application, credentials, previous = null) {
   const names = application.declaration.applicationSecrets ?? [];
-  if (!names.length) { requireSba(!input.applicationSecrets); return null; }
+  if (!names.length) { requireSba(!input.applicationSecrets && !input.rotateApplicationSecrets); return null; }
   guard(vault, owner);
-  if (input.instance) requireSba(!input.applicationSecrets);
-  const reference = input.instance ? previous?.applicationSecrets : input.applicationSecrets;
+  const rotate = input.rotateApplicationSecrets === true;
+  if (input.instance) requireSba(rotate ? !!input.applicationSecrets : !input.applicationSecrets);
+  else requireSba(!rotate);
+  const reference = input.instance && !rotate ? previous?.applicationSecrets : input.applicationSecrets;
   const { metadata } = active(vault, reference);
   requireSba(metadata.repository === application.repository.toLowerCase() && metadata.applicationId === application.manifest.id && canonicalSba(metadata.names) === canonicalSba([...names].sort()));
   for (const name of names) credentials[name] = 'application:' + name;

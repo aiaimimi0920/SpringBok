@@ -11,6 +11,7 @@ export class ConnectedDeployment extends ConnectedStore {
   rawJob() { return this.ctx.storage.sql.exec('SELECT state FROM sba_deployment WHERE id=1').one().state; }
   corruptLateReceipt() { this.ctx.storage.sql.exec("UPDATE connected_late_receipt SET digest='corrupt'"); }
   seedOrphanSba() { this.ctx.storage.sql.exec('CREATE TABLE sba_orphan (id INTEGER PRIMARY KEY)'); }
+  async runScheduledAlarm() { const scheduled = await this.ctx.storage.getAlarm(); await this.alarm(); return scheduled; }
   async raceInitialization(owner, taskId, plan, record) {
     const pending = this.initialize(owner, taskId, plan);
     this.cancelUninitialized(owner, record);

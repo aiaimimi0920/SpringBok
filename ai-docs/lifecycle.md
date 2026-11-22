@@ -79,7 +79,7 @@ preview 成功要求所有资源 created、所有批准 urls、非空 snapshot�
 
 ## 修复 context
 
-repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。
+repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。执行器写完本地回执后通过新鲜 OIDC 令牌向 `/sba/v2/receipt` 发起最佳努力主动上报，并由控制面 DO 定时 `alarm` 后台自动收尾（GitHub Artifact 保留 30 天作兜底）；若父任务回执早已在控制面验签持久化但后续 GitHub Artifact 超期清理，平台在核验原 GitHub Run 身份与已完成状态后仍允许基于持久父回执发起修复。
 
 修复 preview 或其失败 repair 时，context 额外且必须包含 `preview`，其值为平台从已验证父回执及原计划
 继承的完整 preview context（source、resources、urls）；客户端不能提供或替换。所选修复模板

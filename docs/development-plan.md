@@ -6,8 +6,8 @@
 
 ## 当前任务
 
-**OPT-02：未启动任务通用恢复、丢失派发 Run 反查与派发期核对；负责人：主 AI。**
-对 `dispatch-unknown` 任务支持按唯一 `display_title` 在固定执行器工作流列表反查 `runId`；在 `reconcile` 中及时核对未领取许可即终止的派发运行；将精确 `permitId === null` 且第 1 次执行终态失败的受控重启恢复从单一 `update` 扩展至 `deploy`、`preview`、`destroy-preview` 与 `repair`，保留最多 3 次尝试上限与原账户 lane 锁定不变。OPT-01 已推送分支待创建 PR / 待合并。
+**OPT-03：Runner 主动回执回调、DO 定时自动收尾与修复脱离 7 天产物过期限制；负责人：主 AI。**
+为执行工作流增加 OIDC 令牌过期前刷签与末尾最佳努力 `POST /sba/v2/receipt` 主动回执回调（保留 GitHub Artifact 兜底）；在 `ConnectedDeployment` 注册指数退避 `alarm()` 实现无人值守后台核对收尾与成功放锁；使 `service-repair` 在 GitHub Artifact 过期后仍可基于已验签持久化的 DO 结果与 GitHub Run 元数据发起受控修复，并将执行器产物保留期上调至 30 天。OPT-01、OPT-02 已推送分支待创建 PR / 待合并。
 
 ## 1. 产品范围
 

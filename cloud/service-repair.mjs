@@ -2,7 +2,8 @@ import { connectedStub, connectedTaskId } from './connected-store.mjs';
 import { serviceEntries } from './service-instance.mjs';
 import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSbaPolicy } from './sba-control.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
-import { compareVersions } from '../src/sba/contract.mjs';
+import { createGithubExecutor } from '../src/sba/github.mjs';
+import { compareVersions, validateResult } from '../src/sba/contract.mjs';
 import { configureApplicationSecrets } from './application-secrets.mjs';
 import { repairActions, repairPreviewContext, repairPreviewBaseline } from '../src/sba/repair.mjs';
 import { repairCleanupContext, cleanupRepairable } from '../src/sba/cleanup-repair.mjs';
@@ -22,9 +23,16 @@ export async function serviceRepairDraft(vault, owner, input) {
   requireSba(entries.length && entries[0].taskId === input.previousTaskId);
   const parent = connectedStub(vault.env, input.previousTaskId), { plan: old } = await parent.bootstrap(owner), job = await parent.inspect(owner);
   requireSba((old.operation?.instanceId ?? input.previousTaskId) === input.instanceId && repairableJob(old, job));
-  // 重新读取已完成的执行及固定 artifact；超时标记本身不能授权修复。
-  const proof = await recoverSbaReceipt(old.policy.github, job, { token: vault.env.SBA_GITHUB_TOKEN });
-  requireSba(proof.status === 'verified-receipt' && canonicalSba(proof.envelope.result) === canonicalSba(job.result));
+  // 优先重新读取固定 artifact；若任务早已在 DO 验签落库而 GitHub 产物已超保留期过期，
+  // 仍须向 GitHub 核对精确首轮 run 身份与已完成状态，绝不接受未完成或篡改记录。
+  validateResult(job.result, job.request);
+  try {
+    const proof = await recoverSbaReceipt(old.policy.github, job, { token: vault.env.SBA_GITHUB_TOKEN });
+    requireSba(proof.status === 'verified-receipt' && canonicalSba(proof.envelope.result) === canonicalSba(job.result));
+  } catch (error) {
+    if (error?.message !== 'SBA_GITHUB_ARTIFACT_INVALID') throw error;
+    await createGithubExecutor(old.policy.github, { token: vault.env.SBA_GITHUB_TOKEN }).verifyCompletedRun(job.runId, job.request, job.manifest);
+  }
   const connections = resolveInstanceConnections(vault, old);
   const application = await vault.deploymentDraft(owner, { action: 'application', github: connections.github,
     repository: old.application.repository, sourceSha: input.sourceSha });

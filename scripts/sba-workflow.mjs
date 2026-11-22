@@ -66,9 +66,9 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
   const input = await workflowInput(environment);
   onStage('workspace');
   const temporary = await realpath(tempRoot), directory = await mkdtemp(join(temporary, 'sba-workflow-'));
-  let identity;
-  const getIdentity = async () => {
-    if (identity) return identity;
+  let identity, identityAt = 0;
+  const getIdentity = async (force = false) => {
+    if (identity && !force && Date.now() - identityAt < 180000) return identity;
     onStage('oidc');
     const oidcUrl = new URL(environment.ACTIONS_ID_TOKEN_REQUEST_URL);
     if (oidcUrl.protocol !== 'https:' || oidcUrl.username || oidcUrl.password || oidcUrl.port ||
@@ -76,7 +76,7 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
     oidcUrl.searchParams.set('audience', input.endpoint);
     const response = await readJson(oidcUrl.href, { headers: { authorization: `Bearer ${environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } }, fetchImpl);
     if (typeof response.value !== 'string' || !response.value || response.value.length > 16384) reject();
-    identity = response.value; return identity;
+    identity = response.value; identityAt = Date.now(); return identity;
   };
   const authorizeSource = async () => {
     const token = await getIdentity(); onStage('source');
@@ -111,6 +111,14 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
   // 只上传确定的回执，不上传 checkout、输入、环境或应用原始日志。
   const output = join(temporary, 'sba-receipt'); await mkdir(output);
   await writeFile(join(output, 'receipt.json'), JSON.stringify(envelope), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+  const expectedCallback = new URL('/sba/v2/receipt', input.endpoint).href;
+  if (permit.receiptEndpoint === expectedCallback) {
+    try {
+      const freshToken = await getIdentity(true);
+      await readJson(expectedCallback, { method: 'POST', headers: { authorization: `Bearer ${freshToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ taskId: input.request.taskId, envelope }) }, fetchImpl);
+    } catch { /* 回调失败不覆盖本地认证回执；仍由上传的 artifact 与控制面核对兜底。 */ }
+  }
   return envelope;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

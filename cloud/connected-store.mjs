@@ -10,6 +10,8 @@ import { repairCleanupContext, cleanupRepairable } from '../src/sba/cleanup-repa
 import { partialCleanupRepairable, repairCleanupProgress } from '../src/sba/cleanup-progress.mjs';
 import { missingDeadlineReceipt, validateLateEnvelope, recoveredJob } from './late-receipt.mjs';
 import { sbaSummary } from './sba-control.mjs';
+import { createGithubExecutor } from '../src/sba/github.mjs';
+import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));return value; };
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
 export const accountStub = (env,accountId) => {requireSba(deploymentScope(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
@@ -98,6 +100,47 @@ export class ConnectedDeployment extends SbaDeployment {
   async policyFor(actor){const record=await this.bootstrap(actor);return sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(record.plan.policy)});}
   async requestFor(policy,taskId,manifest){const record=await this.bootstrap();requireSba(record.taskId===taskId);return sbaRequest(policy,taskId,manifest,record.plan.operation??null);}
   async begin(actor,input){const record=await this.bootstrap(actor);requireSba(input.request.taskId===record.taskId);return super.begin(actor,input);}
+  async attachRun(actor,taskId,outcome){
+    const summary=await super.attachRun(actor,taskId,outcome);
+    if(['dispatched','dispatch-unknown'].includes(summary.job?.status))await this.ctx.storage.setAlarm(Date.now()+30000);
+    return summary;
+  }
+  async permit(taskId,requestDigest,runId){
+    const result=await super.permit(taskId,requestDigest,runId);
+    await this.ctx.storage.setAlarm(Date.now()+30000);
+    return result;
+  }
+  async alarm(){
+    if(this.env.ENABLE_CONNECTED_DEPLOYMENTS!=='yes'||!this.env.SBA_GITHUB_TOKEN)return;
+    try{
+      const record=await this.bootstrap(),policy=record.plan.policy;
+      let job=await this.inspect(record.owner);
+      if(!job||!['dispatching','dispatched','dispatch-unknown','running'].includes(job.status))return;
+      const executor=createGithubExecutor(policy.github,{token:this.env.SBA_GITHUB_TOKEN});
+      if(job.status==='dispatch-unknown'&&job.runId===null&&job.permitId===null){
+        const found=await executor.findDispatchedRun(job.request,job.manifest);
+        if(found){await super.attachRun(record.owner,record.taskId,found);job=await this.inspect(record.owner);}
+      }
+      if(job.status==='dispatched'&&job.permitId===null&&job.runId!==null){
+        try{await executor.inspectUnstartedRun(job.runId,job.request,job.manifest);await this.markUnknown(record.owner,record.taskId);}catch{}
+      }else if(job.status==='running'||missingDeadlineReceipt(job)){
+        try{
+          const outcome=await recoverSbaReceipt(policy.github,job,{token:this.env.SBA_GITHUB_TOKEN});
+          if(outcome.status==='verified-receipt')await this.settle(record.owner,outcome.envelope);
+          else if(outcome.status==='unknown')await this.markUnknown(record.owner,record.taskId);
+        }catch{}
+      }
+      const after=await this.inspect(record.owner);
+      if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(after?.status)){
+        const vault=this.env.CONNECTIONS.get(this.env.CONNECTIONS.idFromName(`connections/v1/${record.owner}`));
+        const index=(await vault.deploymentIndex(record.owner)).find(r=>r.taskId===record.taskId);
+        if(index)for(const id of index.accountIds??[index.accountId])await accountStub(this.env,id).release(record.taskId);
+      }else if(['dispatching','dispatched','dispatch-unknown','running'].includes(after?.status)){
+        const deadline=after.resultDeadline??after.permitDeadline;
+        await this.ctx.storage.setAlarm(Math.min(Date.now()+120000,Math.max(Date.now()+5000,deadline+1000)));
+      }
+    }catch{/* Keep fail-closed durable state; alarm never overwrites uncertain outcomes. */}
+  }
   async verification(actor) {
     await this.bootstrap(actor);
     const sql=this.ctx.storage.sql;

@@ -213,3 +213,31 @@ test('workflow passes only safe source diagnosis and never proceeds to permit af
   assert.equal(diagnostics.length, 1); assert.equal(diagnostics[0].remoteReason, 'context');
   assert.doesNotMatch(JSON.stringify(diagnostics), /synthetic|cookie/);
 });
+
+test('permit receiptEndpoint triggers fresh OIDC callback and tolerates callback transport failure without losing receipt file', async t => {
+  for (const failCallback of [false, true]) {
+    const root = await mkdtemp(join(tmpdir(), 'springbok-workflow-cb-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const calls = [], oidcTokens = ['oidc-initial', 'oidc-fresh'];
+    const result = { schemaVersion: 2, taskId: request.taskId, action: 'deploy', sourceSha: request.sourceSha, applicationVersion: '1.0.0',
+      status: 'succeeded', checks: [{ id: 'health-check', passed: true }] };
+    const out = await runSbaWorkflow({ environment: base, tempRoot: root,
+      checkout: async () => ({ root: join(root, 'application'), input: request, manifest }),
+      execute: async () => ({ result }),
+      fetchImpl: async (url, options) => {
+        const path = new URL(url).pathname; calls.push({ path, auth: options.headers?.authorization ?? null });
+        if (path === '/oidc') return Response.json({ value: oidcTokens.shift() });
+        if (path === '/sba/v2/permit') return Response.json({ ...permit, receiptEndpoint: `${base.SBA_RUNNER_ORIGIN}/sba/v2/receipt` });
+        if (path === '/sba/v2/receipt') {
+          assert.equal(options.headers.authorization, 'Bearer oidc-fresh');
+          assert.equal(JSON.parse(options.body).envelope.permitId, permit.permitId);
+          if (failCallback) throw new Error('network-drop');
+          return Response.json({ settled: true });
+        }
+        throw new Error('unexpected path ' + path);
+      } });
+    assert.equal(out.result.status, 'succeeded');
+    assert.deepEqual(calls.map(c => c.path), ['/oidc', '/sba/v2/permit', '/oidc', '/sba/v2/receipt']);
+    assert.equal(JSON.parse(await readFile(join(root, 'sba-receipt/receipt.json'), 'utf8')).permitId, permit.permitId);
+  }
+});

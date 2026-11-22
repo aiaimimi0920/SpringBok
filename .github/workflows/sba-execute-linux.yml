@@ -49,4 +49,4 @@ jobs:
           name: sba-result-${{ fromJSON(inputs.request_json).taskId }}-${{ inputs.request_sha256 }}
           path: ${{ runner.temp }}/sba-receipt/receipt.json
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30

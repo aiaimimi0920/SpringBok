@@ -91,11 +91,30 @@ export async function connectedState(env,owner,taskId,reconcile=false){
 export async function connectedMachineRouter(request,env,readBody){
   let input,bodyError;
   let phase='body',reason='rejected',sourceFailure={};
-  const url=new URL(request.url);
-  if(request.method==='POST'&&['/sba/v2/permit','/sba/v2/source'].includes(url.pathname))try{input=await readBody(request);}catch(error){bodyError=error;}
+  const url=new URL(request.url),isReceipt=url.pathname==='/sba/v2/receipt';
+  if(request.method==='POST'&&['/sba/v2/permit','/sba/v2/source','/sba/v2/receipt'].includes(url.pathname))try{input=await readBody(request,isReceipt?65536:2048);}catch(error){bodyError=error;}
   if(typeof input?.taskId!=='string'||!input.taskId.startsWith('dc-'))return sbaMachineRequest(request,env,async()=>{if(bodyError)throw bodyError;return input;});
   try{
-    requireSba(connectedEnabled(env));exactSba(input,['taskId','requestDigest']);connectedTaskId(input.taskId);requireSba(typeof input.requestDigest==='string'&&/^[a-f0-9]{64}$/.test(input.requestDigest));
+    requireSba(connectedEnabled(env));
+    if(isReceipt){
+      exactSba(input,['taskId','envelope']);connectedTaskId(input.taskId);
+      phase='pending';
+      const stub=connectedStub(env,input.taskId),record=await stub.bootstrap(),policy=record.plan.policy;
+      phase='request';
+      requireSba(url.origin===policy.runnerOrigin&&!url.search&&!request.headers.has('cookie')&&!request.headers.has('origin'));
+      const auth=request.headers.get('authorization');requireSba(typeof auth==='string'&&auth.startsWith('Bearer '));
+      phase='oidc';
+      const identity=await verifyOidc(auth.slice(7),policy,{onReject:value=>{reason=value;}});
+      phase='receipt';
+      requireSba(input.envelope?.runId===identity.runId);
+      const summary=await stub.settle(record.owner,input.envelope);
+      if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(summary.job?.status)){
+        const index=(await vaultFor(env,record.owner).deploymentIndex(record.owner)).find(r=>r.taskId===input.taskId);
+        if(index)for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(input.taskId);
+      }
+      return reply({settled:true});
+    }
+    exactSba(input,['taskId','requestDigest']);connectedTaskId(input.taskId);requireSba(typeof input.requestDigest==='string'&&/^[a-f0-9]{64}$/.test(input.requestDigest));
     phase='pending';
     const stub=connectedStub(env,input.taskId),record=await stub.bootstrap(),policy=record.plan.policy;
     phase='request';
@@ -122,7 +141,7 @@ export async function connectedMachineRouter(request,env,readBody){
     const secrets={};for(const name of policy.secretNames)secrets[name]=record.plan.verificationOf?'verification-not-applicable':await vault.deploymentCredential(record.owner,input.taskId,mapping[name]);
     phase='permit';
     const permit=await stub.permit(input.taskId,input.requestDigest,identity.runId);
-    return reply({...permit,secrets});
+    return reply({...permit,secrets,receiptEndpoint:`${policy.runnerOrigin}/sba/v2/receipt`});
   }catch{
     const response=reply({error:'SBA_PERMIT_DENIED'},403);
     for(const [key,value] of Object.entries(sbaDiagnosticHeaders({phase,reason,...sourceFailure})))response.headers.set(key,value);

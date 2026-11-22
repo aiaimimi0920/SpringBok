@@ -176,5 +176,10 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
       return { status: 'dispatched', runId: matches[0].id, requestDigest: binding.requestDigest };
     } catch { return null; }
   }
-  return Object.freeze({ prepare, readManifest, readDeclaration, readApplication, hasApplication, dispatch, findDispatchedRun, inspectRun, inspectUnstartedRun });
+  async function verifyCompletedRun(runId, request, manifest) {
+    const { run, binding } = await readRun(runId, request, manifest);
+    if (run.status !== 'completed' || run.conclusion !== 'success') fail('SBA_GITHUB_RUN_NOT_SUCCESSFUL');
+    return { runId, requestDigest: binding.requestDigest, executorSha: c.executorSha };
+  }
+  return Object.freeze({ prepare, readManifest, readDeclaration, readApplication, hasApplication, dispatch, findDispatchedRun, inspectRun, inspectUnstartedRun, verifyCompletedRun });
 }

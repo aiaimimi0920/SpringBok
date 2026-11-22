@@ -5,11 +5,15 @@ import { validateEmailTarget, emailTarget } from './deployment-email-targets.mjs
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const key = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value) && !['__proto__','prototype','constructor'].includes(value);
 const path = value => requireValue(Array.isArray(value) && value.length > 0 && value.length <= 6 && value.every(key));
+const safeMetadataSuffix = keyName => {
+  const words = keyName.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase().split('_').filter(Boolean);
+  return words.length >= 2 && ['endpoint', 'ttl', 'lifetime', 'policy', 'algorithm', 'alg'].includes(words.at(-1));
+};
 function publicValue(value, depth=0) {
   requireValue(depth <= 8);
   if (Array.isArray(value)) { requireValue(value.length <= 100); value.forEach(v=>publicValue(v,depth+1)); }
   else if (object(value)) for(const [k,v] of Object.entries(value)) {
-    requireValue(key(k) && (!/token|password|secret|credential|privatekey|apikey|accesskey|authorization|connectionstring/i.test(k.replaceAll('_','')) || (k === 'secretNames' && Array.isArray(v) && v.every(x=>typeof x==='string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(x)))));
+    requireValue(key(k) && (!/token|password|secret|credential|privatekey|apikey|accesskey|authorization|connectionstring/i.test(k.replaceAll('_','')) || safeMetadataSuffix(k) || (k === 'secretNames' && Array.isArray(v) && v.every(x=>typeof x==='string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(x)))));
     publicValue(v,depth+1);
   }
   else requireValue(value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.length <= 8192 && !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)));
@@ -59,6 +63,7 @@ export function deploymentInput(input) {
   if(Object.hasOwn(input,'repository'))keys.push('repository');
   if(input.action==='preview'&&Object.hasOwn(input,'accounts'))keys.push('accounts');
   if(input.action==='preview'&&Object.hasOwn(input,'applicationSecrets')){keys.push('applicationSecrets');connectionReference(input.applicationSecrets);}
+  if(input.action==='preview'&&Object.hasOwn(input,'rotateApplicationSecrets')){requireValue(Object.hasOwn(input,'instance')&&Object.hasOwn(input,'applicationSecrets')&&input.rotateApplicationSecrets===true);keys.push('rotateApplicationSecrets');}
   if(input.action==='preview'&&Object.hasOwn(input,'administrator')){keys.push('administrator');exact(input.administrator,['profile',...(Object.hasOwn(input.administrator,'override')?['override']:[])]);connectionReference(input.administrator.profile);if(input.administrator.override)connectionReference(input.administrator.override);}
   if(input.action==='preview'&&Object.hasOwn(input,'domains')){keys.push('domains');requireValue(object(input.domains)&&Object.keys(input.domains).length<=8);for(const row of Object.values(input.domains)){exact(row,['resource','subdomain']);connectionReference(row.resource);requireValue(typeof row.subdomain==='string'&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(row.subdomain));}}
   if(input.action==='preview'&&Object.hasOwn(input,'instance')){keys.push('instance');exact(input.instance,['id','previousTaskId']);for(const value of Object.values(input.instance))requireValue(typeof value==='string'&&/^dc-[a-f0-9]{32}$/.test(value));}

@@ -3,7 +3,7 @@ import { openToken } from './connections-crypto.mjs';
 import { accountGithub } from './brand-resources.mjs';
 import { connectionReference, deploymentDeclaration, deploymentSecrets } from './deployment-contract.mjs';
 import { sbaPolicy, requireSba, exactSba } from './sba-control.mjs';
-import { createGithubExecutor } from '../src/sba/github.mjs';
+import { createGithubExecutor, SbaGithubError } from '../src/sba/github.mjs';
 
 export const serviceRepository = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
@@ -18,7 +18,9 @@ export function applicationRepository(row, requested) {
 export async function readApplication(env, repository, sourceSha, token, optional = false) {
   requireSba(serviceRepository(repository) && sha(sourceSha));
   const base = sbaPolicy(env);
-  const value = await createGithubExecutor({ ...base.github, applicationRepository: repository }, { token }).readApplication(sourceSha, optional);
+  let value;
+  try { value = await createGithubExecutor({ ...base.github, applicationRepository: repository }, { token }).readApplication(sourceSha, optional); }
+  catch (error) { if (error instanceof SbaGithubError && error.message === 'SBA_GITHUB_RESPONSE_INVALID') throw new Error('github-upstream-unavailable'); throw error; }
   if (value === null) return null;
   const declaration = deploymentDeclaration(value.declaration), { manifest } = value;
   const expected=deploymentSecrets(declaration);

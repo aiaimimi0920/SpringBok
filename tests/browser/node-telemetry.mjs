@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { adminFixture, origin } from '../cloud/admin-fixture.mjs';
 import { heartbeatSample } from '../cloud/heartbeat-fixture.mjs';
 import { telemetryFlags, telemetryOptions, telemetryNode, telemetrySample, telemetryRpc, cpu, memory, disk } from '../cloud/telemetry-helper.mjs';
@@ -46,9 +47,10 @@ try {
   assert.equal((await panel(a).textContent()).includes('磁盘未确认'), false);
   for (const n of [...nodes, pending]) assert.equal(requests.filter(r => r.path === n.path).length, 1, 'one telemetry GET per initial node render');
   assert.match(await panel(a).textContent(), /采样时间 1970.*云端接收时间/); assert.match(await panel(a).textContent(), /范围 linux-proc-stat/);
-  mkdirSync('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/node-telemetry-synthetic-desktop.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'test-results/node-telemetry-synthetic-mobile.png', fullPage: true });
-  mutate = v => { v.sample.memory = memory(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER); }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/内存：100.00%.*9007199254740991 bytes/).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'test-results/node-telemetry-synthetic-mobile-extreme.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true }); await page.screenshot({ path: join(evidenceDir, 'node-telemetry-synthetic-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: join(evidenceDir, 'node-telemetry-synthetic-mobile.png'), fullPage: true });
+  mutate = v => { v.sample.memory = memory(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER); }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/内存：100.00%.*9007199254740991 bytes/).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: join(evidenceDir, 'node-telemetry-synthetic-mobile-extreme.png'), fullPage: true });
   for (const change of [v => { v.sample.memory.usedBytes = 1; }, v => { delete v.sample.memory; }, v => { v.sample.sampleVersion = 99; }, v => { delete v.sample.sampleVersion; }]) {
     mutate = change; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/内存未确认/).waitFor(); await panel(a).getByText(/CPU：0.00%/).waitFor(); assert.equal((await panel(a).textContent()).includes('内存未上报'), false);
   }
@@ -59,7 +61,7 @@ try {
   mutate = v => { v.sample.disk = disk(); v.sample.disk.status = 'partial'; v.sample.disk.reason = 'mount-unavailable'; v.sample.disk.mounts.push({ ...disk().mounts[0], mountId: 2, mountPoint: '/<img src=x onerror=alert(1)>', status: 'unavailable', reason: 'statfs-failed', totalBytes: null, freeBytes: null, availableBytes: null, usedBytes: null, reservedBytes: null, usagePercent: null }); };
   await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/磁盘：部分采集不可用/).waitFor(); await panel(a).getByText(/挂载点 \/<img.*statfs-failed.*数值未知/).waitFor(); assert.equal(await panel(a).locator('img').count(), 0); await panel(a).getByText(/挂载点 \/；.*0.00%/).waitFor();
   mutate = v => { v.sample.disk.mounts[0].mountPoint = '/' + '长路径'.repeat(300); Object.assign(v.sample.disk.mounts[0], { totalBytes: Number.MAX_SAFE_INTEGER, freeBytes: 0, availableBytes: 0, usedBytes: Number.MAX_SAFE_INTEGER, reservedBytes: 0, usagePercent: 100 }); };
-  await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/挂载点 \/长路径.*100.00%.*9007199254740991 bytes/).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'test-results/node-disk-synthetic-mobile-extreme.png', fullPage: true });
+  await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/挂载点 \/长路径.*100.00%.*9007199254740991 bytes/).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: join(evidenceDir, 'node-disk-synthetic-mobile-extreme.png'), fullPage: true });
   mutate = v => { v.sample.memory.usedBytes = 1; }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/内存未确认/).waitFor(); await panel(a).getByText(/挂载点 \/；.*0.00%/).waitFor();
   mutate = v => { v.sample.cpu.usagePercent = null; }; await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU 未确认/).waitFor(); await panel(a).getByText(/内存：0.00%/).waitFor(); await panel(a).getByText(/挂载点 \/；.*0.00%/).waitFor(); mutate = null;
   await page.locator('#catalog-refresh').click(); await ready(); await panel(a).getByText(/CPU：0.00%/).waitFor();

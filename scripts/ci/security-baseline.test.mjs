@@ -161,3 +161,10 @@ test('Linux executor uses a complete trusted runtime and the same verified inter
   assert.match(read('.github/workflows/contract-tests.yml'), /sba-linux:\s+runs-on: ubuntu-24\.04/);
   assert.match(read('.github/workflows/contract-tests.yml'), /SBA_NATIVE_LINUX_TEST: 'yes'/);
 });
+
+test('every cloud workerd test file is registered in tests/cloud/package.json', () => {
+  const pkg = JSON.parse(read('tests/cloud/package.json'));
+  const listed = new Set(pkg.scripts.test.split(/\s+/).filter(token => token.endsWith('.test.mjs')));
+  const actual = readdirSync(resolve(root, 'tests/cloud')).filter(name => name.endsWith('.test.mjs')).sort();
+  assert.deepEqual([...listed].sort(), actual);
+});

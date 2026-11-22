@@ -7,7 +7,7 @@ export function applicationSourceFields(container, load) {
   const fields = document.createElement('fieldset');
   const github = document.createElement('select'), repository = document.createElement('input'), sourceSha = document.createElement('input');
   repository.pattern = '[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}';
-  repository.maxLength = 201; sourceSha.pattern = '[a-f0-9]{40}'; sourceSha.maxLength = 40;
+  repository.maxLength = 201; sourceSha.pattern = '[a-f0-9]{40}'; sourceSha.maxLength = 64;
   repository.autocomplete = 'off'; sourceSha.autocomplete = 'off';
   for (const [id, text, control] of [['service-source-github', 'GitHub 连接', github],
     ['service-source-repository', '仓库', repository], ['service-source-sha', '提交 SHA', sourceSha]]) {
@@ -25,6 +25,8 @@ export function applicationSourceFields(container, load) {
     const target = github.selectedOptions[0]?.dataset.target;
     if (target && !target.startsWith('@')) repository.value = target;
   });
+  repository.addEventListener('input', () => { const next = repository.value.trim(); if (repository.value !== next) repository.value = next; });
+  sourceSha.addEventListener('input', () => { const next = sourceSha.value.trim().toLowerCase(); if (sourceSha.value !== next) sourceSha.value = next; });
   form.addEventListener('submit', event => {
     event.preventDefault();
     if (!fields.disabled && form.reportValidity()) void load({ connectionId: github.value, repository: repository.value, sourceSha: sourceSha.value });

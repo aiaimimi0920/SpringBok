@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { adminFixture, origin } from '../cloud/admin-fixture.mjs';
 import { heartbeatFlags, heartbeatOptions, heartbeatNode, heartbeatSample, heartbeatRpc } from '../cloud/heartbeat-fixture.mjs';
 
@@ -36,10 +37,11 @@ try {
   await row(b).locator('[data-heartbeat-role="observe"]').getByText(/采集角色：离线/).waitFor();
   await row(pending).locator('[data-heartbeat-role="execute"]').getByText(/未知\/尚无心跳/).waitFor();
   assert.match(await row(a).textContent(), /\+275760/); assert.match(await row(a).textContent(), /云端接收时间/);
-  mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/node-heartbeat-synthetic-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: join(evidenceDir, 'node-heartbeat-synthetic-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/node-heartbeat-synthetic-mobile.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'node-heartbeat-synthetic-mobile.png'), fullPage: true });
   await page.clock.fastForward(30001); await row(a).getByText(/心跳快照已过期/).waitFor();
   // 独立心跳读失败不清目录，不成为“已确认离线”，也不发送任何写请求。
   failHeartbeat = true; await page.locator('#catalog-refresh').click(); await ready();

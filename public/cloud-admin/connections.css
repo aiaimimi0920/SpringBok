@@ -1,6 +1,6 @@
 /* Product compositions; shared controls and colors are defined by style/tokens. */
 #connection-form { max-width: 820px; }
-#connection-token, #connection-target { font-family: ui-monospace, Consolas, monospace; }
+#connection-token, #connection-rotate-token, #connection-target { font-family: ui-monospace, Consolas, monospace; }
 #connections-list { list-style: none; padding: 0; margin: 0; max-height: 560px; overflow: auto; scrollbar-gutter: stable; }
 #connections-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 22px; }
 #connections-list h3, #connections-list p { grid-column: 1; margin: 3px 0; }
@@ -11,7 +11,7 @@
 #connections-list [data-state=failed] .connection-state { color: var(--neuro-danger-text); }
 #connections-list [data-state=disabled] .connection-state { color: var(--neuro-text-muted); }
 .empty-state { padding: 28px 0; color: var(--neuro-text-muted); font-size: 13px; }
-#connection-disable-target { color: var(--neuro-text); font-weight: 700; overflow-wrap: anywhere; }
+#connection-disable-target, #connection-rotate-target { color: var(--neuro-text); font-weight: 700; overflow-wrap: anywhere; }
 #resource-form { max-width: 820px; }
 .resource-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
 .resource-types label { position: relative; margin: 0; cursor: pointer; }
@@ -39,7 +39,6 @@
 #resource-dialog-notice[data-tone=error] { color: var(--neuro-danger-text); }
 #resource-save { flex-shrink: 0; margin-left: auto; }
 @media (max-width: 400px) { #resource-dialog { padding: 16px; } #resource-dialog .field { grid-template-columns: 80px minmax(0, 1fr); gap: 8px; } }
-.brand-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 #resource-save:disabled { color: var(--neuro-text-muted); background: var(--neuro-surface); border-color: var(--neuro-line); }
 .account-target { color: var(--neuro-text-muted); font: 12px ui-monospace, Consolas, monospace; }
 #resource-accounts .section-heading { flex-wrap: wrap; }

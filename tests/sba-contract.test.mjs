@@ -70,3 +70,28 @@ test('results reject replay across tasks, false success, arbitrary output and un
     assert.equal(validateResult({...result(), status, checks: []}, request()).status, status);
   }
 });
+
+test('structured secret-free diagnostics and check durations validate strictly and reject free-form text', () => {
+  const valid = {
+    ...result(),
+    status: 'failed',
+    errorCode: 'CLOUDFLARE_D1_MIGRATION_FAILED',
+    checks: [{ id: 'schema-applied', passed: false, durationMs: 420 }],
+    diagnostics: { failedStep: 'd1-migrate', providerStatus: 429, providerCode: 10000, durationMs: 1250 },
+  };
+  assert.deepEqual(validateResult(valid, request()), valid);
+  assert.equal(validateResult({ ...valid, diagnostics: { providerCode: 'RATE_LIMITED' } }, request()).diagnostics.providerCode, 'RATE_LIMITED');
+  for (const bad of [
+    { ...valid, checks: [{ id: 'schema-applied', passed: false, durationMs: -1 }] },
+    { ...valid, checks: [{ id: 'schema-applied', passed: false, durationMs: 3600001 }] },
+    { ...valid, checks: [{ id: 'schema-applied', passed: false, message: 'raw error' }] },
+    { ...valid, diagnostics: {} },
+    { ...valid, diagnostics: { failedStep: 'Bearer secret-token' } },
+    { ...valid, diagnostics: { providerStatus: 200, extra: 'leak' } },
+    { ...valid, diagnostics: { providerStatus: 99 } },
+    { ...valid, diagnostics: { providerCode: 'raw upstream message' } },
+    { ...valid, diagnostics: { durationMs: -5 } },
+  ]) {
+    assert.throws(() => validateResult(bad, request()));
+  }
+});

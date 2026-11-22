@@ -32,24 +32,28 @@ async function source(vault, owner, input) {
   return { instance: serviceSummary(input.previousTaskId, plan), revision: await sbaDigest(job.result) };
 }
 async function credentials(vault, owner, instance, rows) {
-  const tokens = {};
+  const tokens = {}, connections = {};
   for (const account of new Set(rows.map(r => r.accountId))) {
-    const references = Object.entries(instance.connections).filter(([key]) => key === 'cloudflare' || key.startsWith('cloudflare_'));
-    for (const [, ref] of references) {
-      const { row, sealed } = vault.activeConnection(ref.id, ref.revision);
-      if (row.provider === 'cloudflare' && row.target === account) tokens[account] = await openToken(vault.env.CONNECTIONS_ENCRYPTION_KEY, owner, row, sealed);
+    const references = Object.entries(instance.connections ?? {}).filter(([key]) => key === 'cloudflare' || key.startsWith('cloudflare_'));
+    for (const [key, ref] of references) {
+      const { row, sealed } = vault.activeConnection(ref.id);
+      if (row.provider === 'cloudflare' && row.target === account) {
+        tokens[account] = await openToken(vault.env.CONNECTIONS_ENCRYPTION_KEY, owner, row, sealed);
+        connections[key] = { id: row.id, revision: row.revision };
+      }
     }
     requireSba(tokens[account]);
   }
-  return tokens;
+  return { tokens, connections };
 }
 export async function deletionPlan(vault, owner, input) {
   assertNotDeleting(vault, owner, input.instanceId);
   const current = await source(vault, owner, input), rows = deletionInventory(current.instance);
-  const tokens = await credentials(vault, owner, current.instance, rows);
+  const { tokens, connections } = await credentials(vault, owner, current.instance, rows);
   const { resources, unverifiedReferences } = await inspectDeletion(rows, tokens);
   assertNotDeleting(vault, owner, input.instanceId);
-  const plan = { ...input, revision: current.revision, instance: current.instance, resources, unverifiedReferences };
+  for (const ref of Object.values(connections)) vault.activeConnection(ref.id, ref.revision);
+  const plan = { ...input, revision: current.revision, instance: current.instance, connections, resources, unverifiedReferences };
   return { ...plan, digest: await sbaDigest(plan) };
 }
 export async function deleteService(vault, owner, input) {
@@ -59,13 +63,14 @@ export async function deleteService(vault, owner, input) {
   if (existing) { requireSba(existing.operationId === input.operationId && existing.digest === input.plan.digest); return existing; }
   const { instanceId, previousTaskId } = input.plan;
   const fresh = await deletionPlan(vault, owner, { instanceId, previousTaskId }); requireSba(sameDeletion(fresh, input.plan));
-  const tokens = await credentials(vault, owner, fresh.instance, fresh.resources);
+  const { tokens } = await credentials(vault, owner, fresh.instance, fresh.resources);
   requireSba(input.expiresAt > Date.now());
   const record = { instanceId, previousTaskId, operationId: input.operationId, digest: fresh.digest, status: 'deleting', createdAt: Date.now(), updatedAt: Date.now(),
     resources: fresh.resources.map(r => ({ ...r, status: r.present ? 'pending' : 'absent' })), errorCode: null };
   // Await 之后再次锁定最新索引；确认与并发升级不能各自认为持有同一实例。
   vault.ctx.storage.transactionSync(() => {
     const concurrent = deletionRecord(vault, owner, instanceId); requireSba(!concurrent);
+    for (const ref of Object.values(fresh.connections)) vault.activeConnection(ref.id, ref.revision);
     if (!importedId(instanceId)) requireSba(serviceEntries(vault.deploymentIndex(owner), instanceId)[0]?.taskId === previousTaskId);
     save(vault, record);
   });
@@ -100,7 +105,7 @@ export async function reconcileDeletion(vault, owner, input) {
   requireSba(record && record.operationId === input.operationId && ['delete-unknown', 'deleted'].includes(record.status));
   if (record.status === 'deleted') return record;
   const { instance } = await source(vault, owner, { instanceId: record.instanceId, previousTaskId: record.previousTaskId });
-  const tokens = await credentials(vault, owner, instance, record.resources);
+  const { tokens } = await credentials(vault, owner, instance, record.resources);
   const reconciliation = { checkedAt: Date.now(), previousStatus: record.status, status: 'unconfirmed', observations: [] };
   try {
     // Only observe the original persisted inventory. Never retry any provider DELETE.

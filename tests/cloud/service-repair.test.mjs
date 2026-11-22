@@ -183,3 +183,41 @@ test('lost verification dispatch after repair keeps the reservation across resta
     assert.equal(restored.canUpdate,false);assert.equal(restored.canDelete,false);
   }finally{await f.close();}
 });
+
+test('connection re-verification after failure still permits service repair while mid-preview rotation invalidates stale repair plan',async()=>{
+  const {f,service,submit,session,github,input,body}=await setup();
+  try{
+    assert.equal((await f.call('/api/admin/connections',{...session,body:{action:'verify',id:github.id,revision:1}})).status,200);
+    assert.equal((await f.call('/api/admin/connections',{...session,body:{action:'verify',id:input.cloudflare.id,revision:1}})).status,200);
+    const stale=(await service('plan',body));assert.equal(stale.status,200,stale.text);
+    assert.equal((await f.call('/api/admin/connections',{...session,body:{action:'verify',id:input.cloudflare.id,revision:2}})).status,200);
+    assert.equal((await submit(stale.json())).status,409);
+    const fresh=await service('plan',body);assert.equal(fresh.status,200,fresh.text);
+    assert.equal((await submit(fresh.json())).status,200);
+  }finally{await f.close();}
+});
+
+test('expired GitHub artifact after authoritative DO settlement still allows verified repair while tampered live artifact rejects',async()=>{
+  const {f,state,service,submit,body}=await setup();
+  try{
+    const prior=state.provider;
+    let mode='expired';
+    state.provider=async(request,context)=>{
+      if(request.url.endsWith('/actions/runs/456/artifacts?per_page=100')){
+        if(mode==='expired')return Response.json({total_count:0,artifacts:[]});
+      }
+      if(mode==='tampered'&&request.url==='https://synthetic.blob.core.windows.net/receipt?sig=test'){
+        return new Response('corrupted-zip-bytes');
+      }
+      return prior(request,context);
+    };
+    mode='tampered';
+    assert.equal((await service('plan',body)).status,409,'tampered live artifact must still fail closed');
+    mode='expired';
+    state.runStatus='in_progress';
+    assert.equal((await service('plan',body)).status,409,'in-progress run cannot bypass via expired artifact path');
+    state.runStatus='completed';
+    const plan=await service('plan',body);assert.equal(plan.status,200,plan.text);
+    assert.equal((await submit(plan.json())).status,200);
+  }finally{await f.close();}
+});

@@ -98,11 +98,12 @@ try {
   await evidencePanel.getByRole('heading', { name: '健康检查未通过', exact: true }).waitFor();
   assert.deepEqual(controller.snapshot(), beforeInspection); assert.deepEqual(writes(), writesBefore);
   await page.evaluate(() => { document.querySelector('.badge').textContent = '浏览器回归 · 假后端 · 未执行容器'; });
-  mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/execution-diagnostics-mock-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: join(evidenceDir, 'execution-diagnostics-mock-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/execution-diagnostics-mock-mobile.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'execution-diagnostics-mock-mobile.png'), fullPage: true });
   await page.setViewportSize({ width: 1280, height: 1000 });
   inspectionMode = null; await inspectButton.click();
   await evidencePanel.getByRole('heading', { name: '当前观测满足成功核对条件', exact: true }).waitFor();
@@ -117,11 +118,11 @@ try {
   await dialog.getByText('临时生产角色（非真实生产）', { exact: true }).waitFor();
   // Explicit watermark prevents a fake-backend screenshot being called a deployment.
   await page.evaluate(() => { document.querySelector('.badge').textContent = '浏览器回归 · 假后端 · 未执行容器'; document.querySelector('.review-boundary').textContent = '截图为假后端浏览器回归。未执行真实容器，不是生产授权。'; });
-  mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/execution-review-mock-desktop.png', fullPage: true });
+  mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: join(evidenceDir, 'execution-review-mock-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector('dialog').scrollWidth <= document.querySelector('dialog').clientWidth), true);
-  await page.screenshot({ path: 'test-results/execution-review-mock-mobile.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'execution-review-mock-mobile.png'), fullPage: true });
   // Restart invalidates the old HTTP token and unused acceptance, no extra Deploy.
   const port = Number(new URL(app.origin).port); await closeBrowserServer(app); controller.close();
   controller = openTestController(options); app = await startTestConsole({ controller, port });
@@ -157,10 +158,10 @@ try {
   await checkResources.click(); await readiness.getByText('配置或服务器映射未知', { exact: true }).waitFor();
   assert.ok(!(await readiness.textContent()).includes('PRIVATE'));
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await page.screenshot({ path: 'test-results/resource-readiness-mock-desktop.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'resource-readiness-mock-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/resource-readiness-mock-mobile.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'resource-readiness-mock-mobile.png'), fullPage: true });
   backend.resources.get(gameTarget).config = originalConfig;
   await readiness.getByRole('button', { name: '关闭检查结果', exact: true }).click();
   assert.equal(await readiness.locator('li').count(), 0);
@@ -212,10 +213,10 @@ try {
   await filter.selectOption('all'); await page.locator('#history>li summary').first().click();
   await history.evaluate(section => { const p = document.createElement('p'); p.textContent = '浏览器回归 · 假后端 · 未执行容器'; section.prepend(p); });
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await history.screenshot({ path: 'test-results/release-history-mock-desktop.png' });
+  await history.screenshot({ path: join(evidenceDir, 'release-history-mock-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await history.screenshot({ path: 'test-results/release-history-mock-mobile.png' });
+  await history.screenshot({ path: join(evidenceDir, 'release-history-mock-mobile.png') });
   assert.deepEqual(controller.snapshot(), beforeHistory); assert.deepEqual(backend.calls, historyCalls);
   assert.deepEqual(errors, []);
   console.log('PASS M7/M8/M9 real Chrome with fake backend: cancel/close/Escape/late response/Back/Forward/reopen/stale tab/double confirm/restart/mobile; queued/unhealthy/ready/configuration-unknown inspections never write or unblock; fixed resource checks repeat/cancel/reopen without writes, unknown config and cached status; no Docker or credentials');

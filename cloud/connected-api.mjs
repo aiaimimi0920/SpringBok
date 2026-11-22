@@ -1,5 +1,5 @@
 import { connectedStub, connectedTaskId, accountStub } from './connected-store.mjs';
-import { sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba, sbaPolicy } from './sba-control.mjs';
+import { sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba, requirePlan, sbaPolicy } from './sba-control.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 import { githubSourcePack, SOURCE_CONTENT_TYPE } from '../src/sba/source.mjs';
@@ -11,6 +11,7 @@ import { continuesInstance, createsResources } from './service-preview.mjs';
 import { deploymentIdentities, legacyIdentities } from './deployment-ownership.mjs';
 import { sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
 import { missingDeadlineReceipt } from './late-receipt.mjs';
+import { repairedCleanup } from '../src/sba/cleanup-repair.mjs';
 export const connectedEnabled=env=>env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!!env.CONNECTED_TASKS&&!!env.DEPLOYMENT_LOCKS;
 const vaultFor=(env,owner)=>env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const reply=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
@@ -33,7 +34,7 @@ export async function submitConnected(env,session,input){
   requireSba(/^[a-f0-9]{32}$/.test(accountId));
   // 检查最终公开配置，而非只查资源声明；这是配置冲突保护，不是对应用代码的沙箱。
   const legacy=legacyIdentities(sbaPolicy(env).configuration),observed=deploymentIdentities(plan);
-  requireSba(observed.length<=256&&observed.every(value=>!legacy.includes(value)));
+  requireSba(observed.length<=256);requirePlan(observed.every(value=>!legacy.includes(value)),'resource-identity-conflict');
   const reservation=await vault.reserveDeployment(session.actor,input.taskId,plan);
   if(reservation.alreadyReserved)return connectedState(env,session.actor,input.taskId);
   return executeReserved(env,session.actor,input.taskId,plan,reservation);
@@ -60,32 +61,77 @@ export async function executeReserved(env,owner,taskId,plan,reservation,recovery
   const outcome=await executor.dispatch(request,plan.application.manifest);
   return {...await stub.attachRun(owner,taskId,outcome),taskId};
 }
+export async function connectedStateBundle(env,owner,taskId,reconcile=false,fallbackEntry=undefined){
+  connectedTaskId(taskId);const stub=connectedStub(env,taskId);
+  let bundle=await stub.fullState(owner);
+  if(bundle.uninitialized){
+    const entry=fallbackEntry!==undefined?fallbackEntry:(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(entry);
+    return {bundle:null,publicState:{taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null}};
+  }
+  const policy=bundle.record.plan.policy;
+  if(reconcile){
+    let job=bundle.job,mutated=false;
+    if(job?.status==='dispatch-unknown'&&job.runId===null&&job.permitId===null){
+      const found=await createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN}).findDispatchedRun(job.request,job.manifest);
+      if(found){await stub.attachRun(owner,taskId,found);bundle=await stub.fullState(owner);job=bundle.job;}
+    }
+    if(job?.status==='dispatched'&&job.permitId===null&&job.runId!==null){
+      try{await createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN}).inspectUnstartedRun(job.runId,job.request,job.manifest);await stub.markUnknown(owner,taskId);mutated=true;}
+      catch{/* Still queued/running or transient read failure; wait for permit or deadline. */}
+    }else if(job?.status==='running'||missingDeadlineReceipt(job)){
+      const outcome=await recoverSbaReceipt(policy.github,job,{token:env.SBA_GITHUB_TOKEN});
+      if(outcome.status==='verified-receipt'){await stub.settle(owner,outcome.envelope);mutated=true;}
+      else if(outcome.status==='unknown'){await stub.markUnknown(owner,taskId);mutated=true;}
+    }
+    if(mutated)bundle=await stub.fullState(owner);
+  }
+  const {record,job,snapshot,attempts,laneReleased}=bundle;
+  if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(snapshot.job?.status)&&!laneReleased){
+    const vault=vaultFor(env,owner),index=fallbackEntry!==undefined?fallbackEntry:(await vault.deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);
+    for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);
+    await stub.markLaneReleased(owner);
+    if((record.plan.operation?.action==='destroy-preview'||repairedCleanup(job?.request??{}))&&job?.status==='succeeded'&&record.plan.operation?.instanceId){
+      await vault.markPreviewDeleted(owner,record.plan.operation.instanceId);
+    }
+  }
+  return {bundle,publicState:{...snapshot,attempts,taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null}};
+}
 export async function connectedState(env,owner,taskId,reconcile=false){
-  connectedTaskId(taskId);const stub=connectedStub(env,taskId);let record;
-  try{record=await stub.bootstrap(owner);}catch{
-    const entry=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(entry);
-    return {taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null};
-  }
-  const policy=record.plan.policy;
-  if(reconcile){const job=await stub.inspect(owner);if(job?.status==='running'||missingDeadlineReceipt(job)){
-    const outcome=await recoverSbaReceipt(policy.github,job,{token:env.SBA_GITHUB_TOKEN});
-    if(outcome.status==='verified-receipt')await stub.settle(owner,outcome.envelope);
-    else if(outcome.status==='unknown')await stub.markUnknown(owner,taskId);
-  }}
-  const snapshot=await stub.snapshot(owner);
-  if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(snapshot.job?.status)){
-    const index=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);
-  }
-  return {...snapshot,attempts:await stub.unstartedAttempts(owner),taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null};
+  return (await connectedStateBundle(env,owner,taskId,reconcile)).publicState;
 }
 export async function connectedMachineRouter(request,env,readBody){
   let input,bodyError;
   let phase='body',reason='rejected',sourceFailure={};
-  const url=new URL(request.url);
-  if(request.method==='POST'&&['/sba/v2/permit','/sba/v2/source'].includes(url.pathname))try{input=await readBody(request);}catch(error){bodyError=error;}
+  const url=new URL(request.url),isReceipt=url.pathname==='/sba/v2/receipt';
+  if(request.method==='POST'&&['/sba/v2/permit','/sba/v2/source','/sba/v2/receipt'].includes(url.pathname))try{input=await readBody(request,isReceipt?65536:2048);}catch(error){bodyError=error;}
   if(typeof input?.taskId!=='string'||!input.taskId.startsWith('dc-'))return sbaMachineRequest(request,env,async()=>{if(bodyError)throw bodyError;return input;});
   try{
-    requireSba(connectedEnabled(env));exactSba(input,['taskId','requestDigest']);connectedTaskId(input.taskId);requireSba(typeof input.requestDigest==='string'&&/^[a-f0-9]{64}$/.test(input.requestDigest));
+    requireSba(connectedEnabled(env));
+    if(isReceipt){
+      exactSba(input,['taskId','envelope']);connectedTaskId(input.taskId);
+      phase='pending';
+      const stub=connectedStub(env,input.taskId),record=await stub.bootstrap(),policy=record.plan.policy;
+      phase='request';
+      requireSba(url.origin===policy.runnerOrigin&&!url.search&&!request.headers.has('cookie')&&!request.headers.has('origin'));
+      const auth=request.headers.get('authorization');requireSba(typeof auth==='string'&&auth.startsWith('Bearer '));
+      phase='oidc';
+      const identity=await verifyOidc(auth.slice(7),policy,{onReject:value=>{reason=value;}});
+      phase='receipt';
+      requireSba(input.envelope?.runId===identity.runId);
+      const summary=await stub.settle(record.owner,input.envelope);
+      if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(summary.job?.status)){
+        const vault=vaultFor(env,record.owner),index=(await vault.deploymentIndex(record.owner)).find(r=>r.taskId===input.taskId);
+        if(index){
+          for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(input.taskId);
+          await stub.markLaneReleased(record.owner);
+        }
+        if((record.plan.operation?.action==='destroy-preview'||repairedCleanup(summary.job?.request??{}))&&summary.job?.status==='succeeded'&&record.plan.operation?.instanceId){
+          await vault.markPreviewDeleted(record.owner,record.plan.operation.instanceId);
+        }
+      }
+      return reply({settled:true});
+    }
+    exactSba(input,['taskId','requestDigest']);connectedTaskId(input.taskId);requireSba(typeof input.requestDigest==='string'&&/^[a-f0-9]{64}$/.test(input.requestDigest));
     phase='pending';
     const stub=connectedStub(env,input.taskId),record=await stub.bootstrap(),policy=record.plan.policy;
     phase='request';
@@ -112,7 +158,7 @@ export async function connectedMachineRouter(request,env,readBody){
     const secrets={};for(const name of policy.secretNames)secrets[name]=record.plan.verificationOf?'verification-not-applicable':await vault.deploymentCredential(record.owner,input.taskId,mapping[name]);
     phase='permit';
     const permit=await stub.permit(input.taskId,input.requestDigest,identity.runId);
-    return reply({...permit,secrets});
+    return reply({...permit,secrets,receiptEndpoint:`${policy.runnerOrigin}/sba/v2/receipt`});
   }catch{
     const response=reply({error:'SBA_PERMIT_DENIED'},403);
     for(const [key,value] of Object.entries(sbaDiagnosticHeaders({phase,reason,...sourceFailure})))response.headers.set(key,value);

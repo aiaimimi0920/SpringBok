@@ -119,7 +119,7 @@ export function createResourceTree(host, handlers) {
       const focusNode = host.contains(focused) ? focused.closest('details[data-node-key]') : null;
       const focusKey = focusNode?.dataset.nodeKey, focusItem = focused?.closest('li')?.dataset.id;
       const focusRole = focused?.tagName === 'SUMMARY' ? 'summary' : focused?.hasAttribute('data-stats') ? 'stats' : focused?.hasAttribute('data-detail') ? 'detail' :
-        focused?.hasAttribute('data-use') ? 'use' : focused?.hasAttribute('data-budget') ? 'budget' : null;
+        focused?.hasAttribute('data-use') ? 'use' : focused?.hasAttribute('data-budget') ? 'budget' : focused?.hasAttribute('data-more') ? 'more' : null;
       view = currentView;
       // Capture native open state before replacing nodes; queued toggle events are not authoritative.
       for (const node of host.querySelectorAll('details[data-node-key]')) {
@@ -158,7 +158,7 @@ export function createResourceTree(host, handlers) {
       if (focusKey && focusRole) {
         const node = host.querySelector(`[data-node-key="${CSS.escape(focusKey)}"]`);
         const target = focusRole === 'summary' ? node?.querySelector(':scope > summary') : focusRole === 'stats' ? node?.querySelector(':scope > summary [data-stats]') : focusItem ?
-          node?.querySelector(`li[data-id="${CSS.escape(focusItem)}"] [data-${focusRole}]`) : node?.querySelector('[data-budget]');
+          node?.querySelector(`li[data-id="${CSS.escape(focusItem)}"] [data-${focusRole}]`) : node?.querySelector(`[data-${focusRole}]`);
         target?.focus({ preventScroll: true });
       }
     },

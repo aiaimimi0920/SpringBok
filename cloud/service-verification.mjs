@@ -8,8 +8,8 @@ export const canVerifyService = (plan, job) => !plan.verificationOf && !plan.pre
   ['deploy', 'update', 'repair'].includes(job?.request.action) && !!job.result &&
   ['unknown', 'failed', 'succeeded', 'deployed-unverified'].includes(job.status);
 
-export async function verificationState(env, owner, parent, reconcile) {
-  const reference = await connectedStub(env, parent).verification(owner);
+export async function verificationState(env, owner, parent, reconcile, preloadedReference = undefined) {
+  const reference = preloadedReference !== undefined ? preloadedReference : await connectedStub(env, parent).verification(owner);
   if (!reference) return null;
   try {
     const state = await connectedState(env, owner, reference.taskId, reconcile);

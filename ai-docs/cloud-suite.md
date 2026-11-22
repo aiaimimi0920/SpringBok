@@ -34,7 +34,9 @@ destroy-preview 只清理回执列出的该测试环境，不能删除共享工�
 业务密码与 R2 S3 凭据不是公开 configuration，也不是云账号令牌。使用部署声明的
 applicationSecrets 名称数组，首次在部署表单保存或选择绑定当前仓库/应用的秘密集合。
 明文只发给 owner 的加密保险库；公开计划只带引用，接受任务时复制不可变加密快照。
-更新与预升级继承引用，不重新输入或默默轮换；verify 继续不取得部署写凭据。
+更新与预升级默认继承原引用，拒绝未显式声明的秘密替换；升级时若需轮换凭据或接入新版本新增的
+`applicationSecrets`，可显式携带 `rotateApplicationSecrets: true` 与新的活动 profile 引用；
+verify 继续不取得部署写凭据。
 
 受限 repair 可在 manifest.repairs[].secretNames 显式包含相应名称时继承原实例的业务
 秘密引用；仅允许原 owner/仓库/应用及精确修订的活动 profile，不接受新的 profile 输入
@@ -45,20 +47,20 @@ artifact、相同资源声明/runtime、更高版本和共享锁域仍须成立�
 SUITE-06 同时补充终态 repair 的独立无写凭据 verify，仍绑定当前实例 head；详见
 [生命周期](lifecycle.md)。验证不改写历史或解开 UNKNOWN 锁，不以修复权限代替验收。
 
-首次表单的“导入 JSON”通过标准文件选择器读取一个 UTF-8 JSON 对象，属性必须恰好为
-当前声明的全部 applicationSecrets；每个值为 1–512 UTF-8 字节且不含控制字符，文件
-上限 32 KiB。页面内验证全部通过后原子填写密码框，不修剪值、不读取其他本地文件，
-不使用浏览器持久存储或自动发起保存/部署。错误不包含文件内容或解析器原文；切换
-秘密配置或关闭弹窗会清理输入并使未完成导入失效。保存仍走原 owner/CSRF 保险库接口。
-此导入入口已由 PR #117 合并，并于 2026-10-26 发布到项目正式控制面；自建环境仍须
-独立核对所部署版本。导入成功不等于保险库保存、任务提交或应用部署成功，后续步骤
-保持原有显式确认与独立回执边界。
+首次或升级表单的“导入 JSON”通过标准文件选择器读取一个 UTF-8 JSON 对象，属性必须恰好为
+当前声明的全部 applicationSecrets；每个值为 1–16384 UTF-8 字节（允许 `\r`、`\n`、`\t` 以支持
+PEM 证书/私钥与多行 JWK，禁止 NUL 与其余控制字符），文件上限 256 KiB。页面内验证全部
+通过后原子载入，不修剪值、不读取其他本地文件，不使用浏览器持久存储或自动发起保存/部署。
+错误不包含文件内容或解析器原文；切换秘密配置或关闭弹窗会清理输入并使未完成导入失效。
+保存仍走原 owner/CSRF 保险库接口。此导入入口已由 PR #117 合并，并于 2026-10-26 发布到
+项目正式控制面；自建环境仍须独立核对所部署版本。导入成功不等于保险库保存、任务提交或
+应用部署成功，后续步骤保持原有显式确认与独立回执边界。
 
 应用 API 可向受保护的 `/api/admin/resources` 提交 action 为 application-secrets，字段为
-id（新 UUID）、repository、applicationId、values（名称到单行值的对象）。GET 只返回
-applicationSecretProfiles 的名称与归属元数据，不提供明文读取。禁用动作
-disable-application-secrets 仅接收 id/revision，阻止新任务使用，不破坏已批准任务快照。
-这些请求仍须 owner/同源/CSRF；不能放进 Actions 的公开 inputs 或日志。
+id（新 UUID）、repository、applicationId、values（名称到 1–16384 UTF-8 字节秘密值的对象）及
+可选 label（1–64 字符备注名）。GET 只返回 applicationSecretProfiles 的名称、备注与归属元数据，
+不提供明文读取。禁用动作 disable-application-secrets 仅接收 id/revision，阻止新任务使用，
+不破坏已批准任务快照。这些请求仍须 owner/同源/CSRF；不能放进 Actions 的公开 inputs 或日志。
 
 ## 检查与上线
 

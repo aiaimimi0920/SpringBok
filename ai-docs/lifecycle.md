@@ -25,8 +25,9 @@ update、preview、repair 必须比 previous 版本更高且 SHA 不同。verify
 | --- | --- |
 | schemaVersion、taskId、action、sourceSha、applicationVersion | 原样匹配请求身份 |
 | status | succeeded / deployed-unverified / failed / unknown |
-| checks | 最多 30 个唯一 `{id, passed}`；id 为小写标识，passed 为布尔值 |
+| checks | 最多 30 个唯一 `{id, passed, durationMs?}`；id 为小写标识，passed 为布尔值，可选 `durationMs` 为 `0..3600000` 毫秒整数 |
 | errorCode | 可选安全错误码，匹配 `[A-Z][A-Z0-9_]{1,79}`；不得添加原异常文本 |
+| diagnostics | 可选无秘密结构化诊断对象，仅允许 `failedStep`（小写标识）、`providerStatus`（`100..599` HTTP 状态码）、`providerCode`（`0..999999999` 整数或 `[A-Z][A-Z0-9_]{1,63}` 符号码）与 `durationMs`（`0..3600000`）中的至少一项；严禁写入自由文本、堆栈或凭据 |
 | lifecycle | 仅预升级动作、显式修复预升级副本或其清理可用；清理恢复包括写前失败及满足下文 resumeCleanup 条件的部分清理，不是任意 UNKNOWN 重试 |
 
 succeeded 必须至少一项检查且全部为 true。退出码 0 并不能单独证明成功；非零、缺失、身份不符或格式错误均不能接受为成功。deployed-unverified 不等于业务验收通过，verify 和 repair 不允许该状态。
@@ -51,6 +52,8 @@ unknown，不允许再次恢复或新建任务绕过。已有 bootstrap、creati
 多账号、预升级、更新及需要管理员秘密的准备任务不在此恢复范围内。
 这不是新的 SBA action，不重放已经执行的应用，不删除原记录或解锁其他任务。
 
+对于 connected 的 `deploy`、`update`、`preview`、`destroy-preview` 或 `repair` 任务：若派发响应丢失进入 `dispatch-unknown`，`reconcile` 可在固定执行器工作流列表中按唯一 `sba:<taskId>:<requestDigest>` 标题、executor SHA 与 `run_attempt=1` 反查并绑定 `runId`。若任务始终未消费一次性执行许可（`permitId === null` 且零秘密交付），且 GitHub 第 1 次运行已进入终态失败（`failure` / `cancelled` / `timed_out`），原 owner 经两分钟签名确认后可为同一不可变任务重新派发（最多 3 次尝试，保留每次未执行证明与原账户执行 lane，旧 `runId` 永久隔离，已领取许可或已产出结果的任务永不进入此通道）。
+
 | 动作 | 应用必须承担的行为 |
 | --- | --- |
 | deploy | 使用确认的配置与资源进行首次部署，验证真实可用性 |
@@ -64,7 +67,7 @@ unknown，不允许再次恢复或新建任务绕过。已有 bootstrap、creati
 
 preview context 恰好包含 source、resources、urls。source 包含 instanceId、taskId、sourceSha、applicationVersion、environment、configuration、resources、resultDigest。源 environment 必须不同；新资源不能与源资源身份重叠。
 
-destroy-preview context 恰好包含 instanceId、previewTaskId、resultDigest、resources。资源清单 1–20 项，每项包含 key、kind、accountId、remoteId、name；kind 可为 d1、kv、worker、r2、domain、pages、github-actions。urls 是 1–8 个唯一 HTTPS origin，须匹配域名资源。完整预升级请求编码不超过 48 KiB。
+destroy-preview context 恰好包含 instanceId、previewTaskId、resultDigest、resources。资源清单 1–20 项，每项包含 key、kind、accountId、remoteId、name；kind 可为 d1、kv、worker、r2、domain、pages、github-actions。含 domain 资源时 urls 为 1–8 个唯一 HTTPS origin 且须匹配域名资源；仅含 worker/pages 目标而未声明 domain 时 urls 为空数组。完整预升级请求编码不超过 48 KiB。
 
 仅 preview 的 source.resources 还可包含只读 email-routing 身份，其 remoteId 为
 `email-routing:<32位zoneId>`、accountId 为 Cloudflare 账号。可写 context.resources 和
@@ -77,7 +80,7 @@ preview 成功要求所有资源 created、所有批准 urls、非空 snapshot�
 
 ## 修复 context
 
-repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。
+repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。执行器写完本地回执后通过新鲜 OIDC 令牌向 `/sba/v2/receipt` 发起最佳努力主动上报，并由控制面 DO 定时 `alarm` 后台自动收尾（GitHub Artifact 保留 30 天作兜底）；若父任务回执早已在控制面验签持久化但后续 GitHub Artifact 超期清理，平台在核验原 GitHub Run 身份与已完成状态后仍允许基于持久父回执发起修复。
 
 修复 preview 或其失败 repair 时，context 额外且必须包含 `preview`，其值为平台从已验证父回执及原计划
 继承的完整 preview context（source、resources、urls）；客户端不能提供或替换。所选修复模板

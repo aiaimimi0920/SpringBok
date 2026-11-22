@@ -2,6 +2,11 @@ import { validateManifest, validateRequest } from '../src/sba/contract.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { WINDOWS_RUNTIME, runtimeProfile, workflowProfile } from '../src/sba/runtime.mjs';
 export const requireSba = value => { if (!value) throw new Error('SBA_REJECTED'); };
+export const deploymentPlanErrors = Object.freeze([
+  'connection-unavailable', 'resource-listing-expired', 'account-lane-busy', 'resource-identity-conflict',
+  'version-not-newer', 'declaration-incompatible', 'capacity-limit-reached', 'github-upstream-unavailable',
+]);
+export const requirePlan = (value, code) => { if (!value) throw new Error(code); };
 export const exactSba = (value, keys) => requireSba(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every(k => Object.hasOwn(value, k)));
 const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(k => [k, ordered(value[k])])) : value;
 export const canonicalSba = value => JSON.stringify(ordered(value));

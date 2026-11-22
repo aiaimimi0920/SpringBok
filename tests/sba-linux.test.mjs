@@ -88,3 +88,27 @@ $r=[IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
     assert.equal(state, 'Z', 'a live descendant must not survive group termination');
   }
 });
+
+test('native Linux Node .mjs entrypoint executes directly on ubuntu-24.04 with bound receipt', { skip: !native }, async t => {
+  const f = await fixture(t);
+  await rm(join(f.root, '.sba/entry.ps1'));
+  await writeFile(join(f.root, '.sba/manifest.json'), JSON.stringify({ ...manifest, entrypoint: 'entry.mjs' }));
+  await writeFile(join(f.root, '.sba/entry.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+const req = JSON.parse(readFileSync(args[args.indexOf('-RequestPath') + 1], 'utf8'));
+if (process.env.DEPLOY_TOKEN !== 'synthetic-only' || process.env.GITHUB_TOKEN) process.exit(9);
+writeFileSync(args[args.indexOf('-ResultPath') + 1], JSON.stringify({
+  schemaVersion: 3, taskId: req.taskId, action: req.action, sourceSha: req.sourceSha,
+  applicationVersion: req.applicationVersion, status: 'succeeded',
+  checks: [{ id: 'linux-mjs-ready', passed: true, durationMs: 8 }]
+}), 'utf8');
+`);
+  const git = args => execFileSync('git', ['-C', f.root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  git(['add', '-A', '.sba']);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'Synthetic Linux mjs']);
+  const request = { ...f.request, sourceSha: git(['rev-parse', 'HEAD']) };
+  const output = await executeCheckout({ checkout: f.root, request, tempRoot: f.base,
+    environment: { ...process.env, DEPLOY_TOKEN: 'synthetic-only', GITHUB_TOKEN: 'never-pass' } });
+  assert.equal(output.result.status, 'succeeded');
+  assert.deepEqual(output.result.checks, [{ id: 'linux-mjs-ready', passed: true, durationMs: 8 }]);
+});

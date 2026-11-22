@@ -5,7 +5,7 @@ import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs
 import { verifyConnection } from './connections-provider.mjs';
 import { resourceInput, discoverResources } from './resources.mjs';
 import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connectionReference, deploymentTargets } from './deployment-contract.mjs';
-import { sbaPolicy, connectedSbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
+import { sbaPolicy, connectedSbaPolicy, sbaDigest, requireSba, requirePlan } from './sba-control.mjs';
 import { applicationRepository, readApplication, serviceCatalog } from './service-catalog.mjs';
 import { serviceSummary, serviceEntries, updateOperation } from './service-instance.mjs';
 import { connectedTaskId } from './connected-store.mjs';
@@ -147,12 +147,12 @@ export class ConnectionVault extends DurableObject {
       this.importGuard(owner); const sql = this.ctx.storage.sql, saved = sql.exec('SELECT record FROM service_imports WHERE id=?', candidate.id).toArray()[0];
       if (saved) { const prior = JSON.parse(saved.record); requireSba(sameImport(prior.candidate, candidate) && prior.candidate.instance.application.id === candidate.instance.application.id && prior.candidate.instance.application.repository === candidate.instance.application.repository); return prior; }
       if (candidate.instance.connections) for (const ref of Object.values(candidate.instance.connections)) this.activeConnection(ref.id, ref.revision);
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM service_imports').one().n < 128);
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM service_imports').one().n < 1024);
       const record = { id: candidate.id, candidate, createdAt: Date.now() };
       sql.exec('INSERT INTO service_imports VALUES(?,?)', record.id, JSON.stringify(record)); return record;
     });
   }
-  async deploymentDraft(owner, raw) {
+  async deploymentDraft(owner, raw, preloadedApplication = null) {
     if (raw?.instance?.id || raw?.instanceId) assertNotDeleting(this, owner, raw.instance?.id ?? raw.instanceId);
     if (raw?.action === 'repair') {
       this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
@@ -165,7 +165,8 @@ export class ConnectionVault extends DurableObject {
     const input=deploymentInput(raw);this.ctx.storage.transactionSync(()=>this.resourceGuard(owner));
     const {row:github,sealed}=this.activeConnection(input.github.id,input.github.revision);requireSba(github.provider==='github');
     const repository=applicationRepository(github,input.repository);
-    const application=await readApplication(this.env,repository,input.sourceSha,await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,github,sealed));
+    if(preloadedApplication)requireSba(preloadedApplication.repository===repository&&preloadedApplication.sourceSha===input.sourceSha);
+    const application=preloadedApplication??await readApplication(this.env,repository,input.sourceSha,await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,github,sealed));
     const {manifest,declaration}=application;
     this.activeConnection(github.id,github.revision);
     if(input.action==='application')return application;
@@ -175,7 +176,7 @@ export class ConnectionVault extends DurableObject {
     if(declaration.schemaVersion===2){automatic=await automaticDraft(this,owner,input,application);resources=automatic.resources;}
     else {requireSba(!Object.hasOwn(input,'accounts')&&!Object.hasOwn(input,'domains')&&!Object.hasOwn(input,'administrator'));
     for(const field of declaration.resources){const ref=connectionReference(input.resources[field.key]);const stored=this.ctx.storage.sql.exec('SELECT metadata FROM resources WHERE id=?',ref.id).toArray()[0];requireSba(stored);const row=JSON.parse(stored.metadata);
-      requireSba(row.revision===ref.revision&&row.connectionId===cloudflare.id&&row.connectionRevision===cloudflare.revision&&Date.now()-row.checkedAt<=300000);resources[field.key]=row;}
+      requireSba(row.revision===ref.revision&&row.connectionId===cloudflare.id&&row.connectionRevision===cloudflare.revision);requirePlan(Date.now()-row.checkedAt<=300000,'resource-listing-expired');resources[field.key]=row;}
     requireSba(Object.keys(input.resources).length===declaration.resources.length);}
     const configuration=automatic?.configuration??deploymentConfiguration(declaration,input.values,resources,cloudflare.target);
     const policy={...base,github:{...base.github,applicationRepository:repository},sourceSha:input.sourceSha,environment:input.environment,configuration,secretNames:manifest.secrets};
@@ -206,16 +207,51 @@ export class ConnectionVault extends DurableObject {
       if(prior){const old=JSON.parse(prior.record);requireSba(old.digest===record.digest);return {...old,alreadyReserved:true};}
       if(plan.operation){const source=plan.operation.action==='preview'?plan.operation.context.source:{instanceId:plan.operation.instanceId,taskId:plan.operation.previousTaskId};assertNotDeleting(this,owner,source.instanceId);const entries=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),source.instanceId);requireSba(entries.length&&entries[0].taskId===source.taskId);}
       for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
-      for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&(continuesInstance(plan)||Date.now()-row.checkedAt<=300000));}
+      for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision);requirePlan(continuesInstance(plan)||Date.now()-row.checkedAt<=300000,'resource-listing-expired');}
       if(plan.credentials)record.credentials=plan.credentials;
       if(plan.accounts)record.accountIds=[...new Set([...Object.values(plan.accounts).map(a=>a.accountId),...deploymentTargets(plan.application.declaration,plan.configuration).map(t=>t.accountId)])].sort();
       reserveBootstrap(this,owner,taskId,plan);
       reserveApplicationSecrets(this,owner,taskId,plan);
-      if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
+      if(createsResources(plan)){requirePlan(this.resourceCapacity()+Object.keys(plan.resources).length<=128,'capacity-limit-reached');record.preparation={phase:'reserved',intent:plan,resources:{}};}
+      requirePlan(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<4096,'capacity-limit-reached');sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
     });
   }
   deploymentIndex(owner){return this.ctx.storage.transactionSync(()=>{this.deploymentGuard(owner);return this.ctx.storage.sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record));});}
+  markPreviewDeleted(owner,instanceId){
+    connectedTaskId(instanceId);
+    return this.ctx.storage.transactionSync(()=>{
+      this.deploymentGuard(owner);
+      this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS preview_deleted_instances (instance TEXT PRIMARY KEY,deleted_at INTEGER NOT NULL)');
+      this.ctx.storage.sql.exec('INSERT OR IGNORE INTO preview_deleted_instances VALUES(?,?)',instanceId,Date.now());
+    });
+  }
+  deletedInstanceIds(owner){
+    return this.ctx.storage.transactionSync(()=>{
+      this.guard(owner);const sql=this.ctx.storage.sql,ids=[];
+      if(sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='service_deletions'").toArray().length){
+        for(const row of sql.exec('SELECT instance,record FROM service_deletions').toArray())if(JSON.parse(row.record).status==='deleted')ids.push(row.instance);
+      }
+      if(sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='preview_deleted_instances'").toArray().length){
+        for(const row of sql.exec('SELECT instance FROM preview_deleted_instances').toArray())ids.push(row.instance);
+      }
+      return ids;
+    });
+  }
+  serviceIndexData(owner){
+    return this.ctx.storage.transactionSync(()=>{
+      const deployments=this.deploymentIndex(owner),retired=this.retirementIndex(owner),deleted=this.deletedInstanceIds(owner),imported=this.importedIndex(owner);
+      return {deployments,excluded:[...new Set([...retired.map(row=>row.instanceId),...deleted])],imported};
+    });
+  }
+  serviceLookup(owner,instanceId){
+    return this.ctx.storage.transactionSync(()=>{
+      this.guard(owner);const isImported=importedId(instanceId);
+      if(!isImported)connectedTaskId(instanceId);
+      const imported=isImported?this.importedIndex(owner).find(row=>row.id===instanceId)??null:null;
+      const entries=isImported?[]:serviceEntries(this.deploymentIndex(owner),instanceId);
+      return {imported,entries,retirement:retirementRecord(this,owner,instanceId),deletion:deletionRecord(this,owner,instanceId)};
+    });
+  }
   deploymentCancellation(owner,taskId){
     ownerId(owner);connectedTaskId(taskId);const sql=this.ctx.storage.sql;
     requireSba(sql.exec('SELECT owner FROM connection_owner WHERE id=1').one().owner===owner);
@@ -235,7 +271,7 @@ export class ConnectionVault extends DurableObject {
       const prior=this.deploymentCancellation(owner,identity.taskId);
       if(prior){requireSba(sameCancellation(prior,identity));return prior;}
       sql.exec('CREATE TABLE IF NOT EXISTS connection_cancelled_deployments (task TEXT PRIMARY KEY,record TEXT NOT NULL)');
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_cancelled_deployments').one().n<32);
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_cancelled_deployments').one().n<512);
       const record={...identity,cancelledAt:Date.now()};
       sql.exec('INSERT INTO connection_cancelled_deployments VALUES(?,?)',identity.taskId,JSON.stringify(record));return record;
     });
@@ -281,17 +317,60 @@ export class ConnectionVault extends DurableObject {
     const stored = this.row(input.id); if (!stored) throw new Error('missing connection');
     const metadata = JSON.parse(stored.metadata);
     if (metadata.revision !== input.revision || metadata.state === 'disabled') throw new Error('stale connection');
-    let check;
+    const children = () => metadata.provider === 'github' && metadata.target.startsWith('@') ?
+      this.ctx.storage.sql.exec('SELECT id,metadata FROM connections WHERE id!=?', input.id).toArray()
+        .map(r => ({ id: r.id, metadata: JSON.parse(r.metadata) }))
+        .filter(r => r.metadata.parentId === input.id && r.metadata.state !== 'disabled') : [];
+    if (input.action === 'rotate') {
+      if (metadata.parentId) throw new Error('derived connection rotates via parent');
+      const check = await verifyConnection(metadata, input.token);
+      if (!check.ok) return { error: 'verification-failed' };
+      const time = Date.now(), nextRevision = metadata.revision + 1;
+      const next = { ...metadata, revision: nextRevision, state: 'verified', check: check.code, checkedAt: time, updatedAt: time };
+      const resealed = await sealToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, next, input.token);
+      const derived = await Promise.all(children().map(async child => {
+        const childCheck = await verifyConnection(child.metadata, input.token);
+        const childNext = { ...child.metadata, parentRevision: nextRevision, revision: child.metadata.revision + 1,
+          state: childCheck.ok ? 'verified' : 'failed', check: childCheck.code, checkedAt: time, updatedAt: time };
+        const childSealed = childCheck.ok ? await sealToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, childNext, input.token) : null;
+        return { id: child.id, expectedRevision: child.metadata.revision, next: childNext, sealed: childSealed };
+      }));
+      return this.ctx.storage.transactionSync(() => {
+        this.guard(owner); const current = JSON.parse(this.row(input.id).metadata);
+        if (current.revision !== input.revision || current.state === 'disabled') throw new Error('stale connection');
+        this.ctx.storage.sql.exec('UPDATE connections SET metadata=?,sealed=? WHERE id=?', JSON.stringify(next), resealed, input.id);
+        for (const item of derived) {
+          const live = this.row(item.id); if (!live) continue;
+          const liveMeta = JSON.parse(live.metadata);
+          if (liveMeta.state === 'disabled' || liveMeta.revision !== item.expectedRevision) continue;
+          if (item.sealed) this.ctx.storage.sql.exec('UPDATE connections SET metadata=?,sealed=? WHERE id=?', JSON.stringify(item.next), item.sealed, item.id);
+          else this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify(item.next), item.id);
+        }
+        return { connection: connectionMetadata(next) };
+      });
+    }
+    let check, resealed = null;
     if (input.action === 'verify') {
-      try { check = await verifyConnection(metadata, await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, stored.sealed)); }
-      catch { check = { ok: false, code: 'credential-unavailable' }; }
+      try {
+        const plain = await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, stored.sealed);
+        check = await verifyConnection(metadata, plain);
+        if (check.ok) resealed = await sealToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, plain);
+      } catch { check = { ok: false, code: 'credential-unavailable' }; }
     }
     return this.ctx.storage.transactionSync(() => {
       this.guard(owner); const current = JSON.parse(this.row(input.id).metadata);
       if (current.revision !== input.revision || current.state === 'disabled') throw new Error('stale connection');
-      const next = { ...current, revision: current.revision + 1, updatedAt: Date.now(),
-        ...(check ? { state: check.ok ? 'verified' : 'failed', check: check.code, checkedAt: Date.now() } : { state: 'disabled' }) };
-      this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify(next), input.id);
+      const now = Date.now(), nextRevision = current.revision + 1;
+      const next = { ...current, revision: nextRevision, updatedAt: now,
+        ...(check ? { state: check.ok ? 'verified' : 'failed', check: check.code, checkedAt: now } : { state: 'disabled' }) };
+      if (resealed) this.ctx.storage.sql.exec('UPDATE connections SET metadata=?,sealed=? WHERE id=?', JSON.stringify(next), resealed, input.id);
+      else this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify(next), input.id);
+      if (check?.ok) for (const child of children()) {
+        const live = this.row(child.id); if (!live) continue;
+        const liveMeta = JSON.parse(live.metadata);
+        if (liveMeta.state === 'disabled' || liveMeta.parentRevision !== current.revision) continue;
+        this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify({ ...liveMeta, parentRevision: nextRevision, updatedAt: now }), child.id);
+      }
       return { connection: connectionMetadata(next) };
     });
   }

@@ -4,9 +4,10 @@ import { exactSba, requireSba } from './sba-control.mjs';
 import { signSession, sameProof } from './access.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 
-export const canRestartUpdate = (plan, job) => plan.operation?.action === 'update' && !plan.previewOf && !plan.verificationOf &&
+export const canRestartUpdate = (plan, job) => !plan.verificationOf &&
+  ['deploy', 'update', 'preview', 'destroy-preview', 'repair'].includes(plan.operation?.action ?? 'deploy') &&
   ['dispatched', 'unknown'].includes(job?.status) && Number.isSafeInteger(job.runId) && job.runId > 0 &&
-  job.permitAt === null && job.result === null;
+  (job.permitId ?? null) === null && job.permitAt === null && job.result === null;
 
 export async function restartUpdateRequest(env, vault, session, action, input) {
   requireSba(connectedEnabled(env));

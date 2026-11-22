@@ -12,6 +12,8 @@ const paths = {
   history: 'M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2',
   settings: 'm9 3-.6 2.4-2 .9L4 5.7 2 9l1.7 1.8v2.4L2 15l2 3.3 2.4-.6 2 .9L9 21h4l.6-2.4 2-.9 2.4.6 2-3.3-1.7-1.8v-2.4L20 9l-2-3.3-2.4.6-2-.9L13 3Zm6 9a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   refresh: 'M20 7V3l-3 3a8 8 0 0 0-13 6m0 5v4l3-3a8 8 0 0 0 13-6',
+  cloud: 'M5 17h13a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 8 7.5a4.5 4.5 0 0 0-3 9.5Z',
+  mail: 'M3 6h18v12H3Zm0 1 9 6 9-6',
 };
 export function decorateIcons(root = document) {
 for (const host of root.querySelectorAll('[data-icon]')) {

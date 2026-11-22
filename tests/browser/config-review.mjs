@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { startConfigReview } from '../../src/config/server.mjs';
 import { compareConfigurations } from '../../src/config/compare.mjs';
 import { compileConfiguration } from '../../src/config/compile.mjs';
@@ -59,11 +60,12 @@ try {
   assert.equal(downloads.length, 1); // No replacement/reset/navigation auto-download.
   // Two real sample services keep the screenshot readable and show both data and ports.
   const display = structuredClone(source); display.services = display.services.slice(0, 2);
-  await ready(display); mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/config-review-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  await ready(display); mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: join(evidenceDir, 'config-review-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/config-review-mobile.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'config-review-mobile.png'), fullPage: true });
   // Same page: baseline and candidate are validated independently, then bound.
   const baselineInput = page.getByLabel('基线配置JSON · 可选 · 仅用户提供的历史配置');
   const changed = structuredClone(display); changed.services = [changed.services[1]];
@@ -102,10 +104,10 @@ try {
   await ready(changed); await baselineInput.setInputFiles(file(display)); await comparison.waitFor();
   await comparison.locator('article').filter({ has: page.getByRole('heading', { name: '论坛 · 配置有变化', exact: true }) }).getByText('test.deploymentName', { exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await page.screenshot({ path: 'test-results/config-comparison-desktop.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'config-comparison-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/config-comparison-mobile.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'config-comparison-mobile.png'), fullPage: true });
   await baselineInput.setInputFiles(file(display)); await comparison.waitFor();
   assert.equal(await page.locator('#changes>article').count(), 2);
   await page.evaluate(() => history.pushState({}, '', '/#comparison'));

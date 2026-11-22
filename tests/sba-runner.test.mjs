@@ -271,3 +271,29 @@ $result = [ordered]@{schemaVersion=2; taskId=$input.taskId; action=$input.action
   assert.deepEqual(output.result.checks, [{ id: 'fixture-ready', passed: true }]);
   assert.deepEqual(JSON.parse(await readFile(output.receiptPath, 'utf8')), output.result);
 });
+
+test('native Node .mjs entrypoint executes directly without PowerShell and produces a verified receipt', { skip: process.platform !== 'win32' }, async t => {
+  const f = await fixture(t);
+  const nodeManifest = { ...manifest, entrypoint: 'springbok.mjs' };
+  await rm(join(f.root, '.sba', 'springbok.ps1'));
+  await writeFile(join(f.root, '.sba', 'manifest.json'), JSON.stringify(nodeManifest), 'utf8');
+  await writeFile(join(f.root, '.sba', 'springbok.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+const reqPath = args[args.indexOf('-RequestPath') + 1];
+const resPath = args[args.indexOf('-ResultPath') + 1];
+const req = JSON.parse(readFileSync(reqPath, 'utf8'));
+if (!process.env.DEPLOY_TOKEN || process.env.GITHUB_TOKEN) process.exit(9);
+writeFileSync(resPath, JSON.stringify({
+  schemaVersion: req.schemaVersion, taskId: req.taskId, action: req.action,
+  sourceSha: req.sourceSha, applicationVersion: req.applicationVersion,
+  status: 'succeeded', checks: [{ id: 'mjs-ready', passed: true, durationMs: 12 }]
+}), 'utf8');
+`, 'utf8');
+  f.git(['add', '-A', '.sba']);
+  f.git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'native mjs entrypoint']);
+  f.input.sourceSha = f.git(['rev-parse', 'HEAD']);
+  const output = await executeCheckout({ checkout: f.root, request: f.input, tempRoot: f.base,
+    environment: { ...process.env, DEPLOY_TOKEN: 'synthetic-mjs-token', GITHUB_TOKEN: 'must-strip' } });
+  assert.equal(output.result.status, 'succeeded');
+  assert.deepEqual(output.result.checks, [{ id: 'mjs-ready', passed: true, durationMs: 12 }]);
+});

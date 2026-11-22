@@ -1,9 +1,13 @@
+const restartLabels = { deploy: '重新派发', update: '恢复升级', preview: '恢复预升级', 'destroy-preview': '恢复清理', repair: '恢复修复' };
+export function restartLabel(state) {
+  return restartLabels[state?.instance?.action ?? 'deploy'] ?? '恢复升级';
+}
 export async function resumePreparation(state, trigger, { request, refresh, notice, current }, restart = false) {
-  const title = restart ? '恢复升级' : '继续部署', route = restart ? 'restart' : 'resume';
-  const dialog = document.createElement('dialog'); dialog.className = 'service-dialog';
+  const title = restart ? restartLabel(state) : '继续部署', route = restart ? 'restart' : 'resume';
+  const dialog = document.createElement('dialog'); dialog.className = 'service-dialog'; dialog.dataset.dynamicDialog = 'true';
   dialog.setAttribute('aria-label', title);
   const heading = document.createElement('h2'); heading.textContent = title;
-  const details = document.createElement('dl'), message = document.createElement('p');
+  const details = document.createElement('dl'), message = document.createElement('p'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = '取消';
   const submit = document.createElement('button'); submit.type = 'button'; submit.className = 'primary'; submit.textContent = '确认' + title; submit.disabled = true;
   const actions = document.createElement('div'); actions.className = 'service-dialog-footer'; actions.append(cancel, submit);
@@ -19,7 +23,7 @@ export async function resumePreparation(state, trigger, { request, refresh, noti
     for (const [label, value] of [['任务', plan.taskId], ['版本', plan.instance.application.version + ' · ' + plan.instance.application.sourceSha], ['环境', plan.instance.environment], ['资源', Object.values(plan.instance.resources).map(row => row.kind + ' · ' + row.name).join('、')]]) {
       const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = label; dd.textContent = value; details.append(dt, dd);
     }
-    message.textContent = restart ? '将为原升级任务发起一次新执行，版本与配置保持不变。' : '将继续原任务，创建所列服务资源并执行固定版本。';
+    message.textContent = restart ? '将为未领取执行许可的原任务发起一次新执行，版本与配置保持不变。' : '将继续原任务，创建所列服务资源并执行固定版本。';
     submit.disabled = false;
   } catch (error) { message.textContent = error.message; }
   submit.addEventListener('click', async () => {

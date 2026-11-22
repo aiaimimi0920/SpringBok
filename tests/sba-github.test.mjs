@@ -226,3 +226,41 @@ test('recovery proof requires an exact first-attempt terminal failed run, never 
     assert.equal(calls.length, 1);
   }
 });
+
+test('findDispatchedRun resolves a unique exact first-attempt run for dispatch-unknown recovery and rejects ambiguous or tainted runs', async () => {
+  const responses = []; const { executor, calls } = client(responses);
+  const binding = await executor.prepare(request(), manifest());
+  responses.push(json({ workflow_runs: [{ ...run('other-title'), id: 29 }, { ...run(binding.title), id: 31 }] }));
+  const found = await executor.findDispatchedRun(request(), manifest());
+  assert.deepEqual(found, { status: 'dispatched', runId: 31, requestDigest: binding.requestDigest });
+  assert.equal(calls[0].url, 'https://api.github.com/repos/example/control/actions/workflows/20/runs?event=workflow_dispatch&per_page=30');
+  for (const list of [{ workflow_runs: [] }, { workflow_runs: [run(binding.title), { ...run(binding.title), id: 32 }] },
+    { workflow_runs: [{ ...run(binding.title), run_attempt: 2 }] }, { workflow_runs: [{ ...run(binding.title), head_sha: 'f'.repeat(40) }] }]) {
+    const c = client([json(list)]);
+    assert.equal(await c.executor.findDispatchedRun(request(), manifest()), null);
+  }
+});
+
+test('readApplication validates all .sba entries before parallel blob fetches', async () => {
+  const mBytes = Buffer.from(JSON.stringify(manifest())), dBytes = Buffer.from(JSON.stringify({ schemaVersion: 1 }));
+  const okResponses = [
+    json({ sha: 'a'.repeat(40), tree: { sha: '1'.repeat(40) } }),
+    json({ sha: '1'.repeat(40), truncated: false, tree: [{ path: '.sba', type: 'tree', mode: '040000', sha: '2'.repeat(40) }] }),
+    json({ sha: '2'.repeat(40), truncated: false, tree: [
+      { path: 'manifest.json', type: 'blob', mode: '100644', sha: '3'.repeat(40) },
+      { path: 'deployment.json', type: 'blob', mode: '100644', sha: '4'.repeat(40) },
+    ] }),
+    json({ sha: '3'.repeat(40), encoding: 'base64', size: mBytes.length, content: mBytes.toString('base64') }),
+    json({ sha: '4'.repeat(40), encoding: 'base64', size: dBytes.length, content: dBytes.toString('base64') }),
+  ];
+  const ok = client(okResponses);
+  const app = await ok.executor.readApplication('a'.repeat(40));
+  assert.equal(app.manifest.id, 'sample-app'); assert.equal(app.declaration.schemaVersion, 1); assert.equal(ok.calls.length, 5);
+  const missingDeployment = client([
+    json({ sha: 'a'.repeat(40), tree: { sha: '1'.repeat(40) } }),
+    json({ sha: '1'.repeat(40), truncated: false, tree: [{ path: '.sba', type: 'tree', mode: '040000', sha: '2'.repeat(40) }] }),
+    json({ sha: '2'.repeat(40), truncated: false, tree: [{ path: 'manifest.json', type: 'blob', mode: '100644', sha: '3'.repeat(40) }] }),
+  ]);
+  await assert.rejects(missingDeployment.executor.readApplication('a'.repeat(40)), /SBA_GITHUB_MANIFEST_INVALID/);
+  assert.equal(missingDeployment.calls.length, 3);
+});

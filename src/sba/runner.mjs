@@ -99,11 +99,14 @@ async function inspectTrustedCheckout(checkout, request) {
   return { root, manifest, input, entrypoint };
 }
 
+const pwshCache = new Map();
 export function nativePowerShell(runtime = WINDOWS_RUNTIME) {
   const profile = runtimeProfile(runtime);
   if (process.platform !== profile.platform) reject();
   if (profile.platform === 'win32') return join(process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   if (process.arch !== 'x64' || !process.env.RUNNER_TEMP || !isAbsolute(process.env.RUNNER_TEMP)) reject();
+  const cacheKey = `${process.env.RUNNER_TEMP}:${runtime.powershell}`;
+  if (pwshCache.has(cacheKey)) return pwshCache.get(cacheKey);
   const release = readFileSync('/etc/os-release', 'utf8');
   if (!/^ID=ubuntu$/m.test(release) || !/^VERSION_ID="24\.04"$/m.test(release)) reject();
   // 固定目录来自受信 workflow，不从应用 PATH、configuration 或 secret 选择解释器。
@@ -114,15 +117,32 @@ export function nativePowerShell(runtime = WINDOWS_RUNTIME) {
     env: runtimeEnvironment(process.env), encoding: 'utf8', timeout: 15000, maxBuffer: 1024, stdio: ['ignore', 'pipe', 'ignore'],
   }).trim();
   if (version !== runtime.powershell) reject();
+  pwshCache.set(cacheKey, executable);
   return executable;
+}
+export function nativeNode(runtime = WINDOWS_RUNTIME) {
+  const profile = runtimeProfile(runtime);
+  if (process.platform !== profile.platform || !isAbsolute(process.execPath) || process.versions.node.split('.')[0] !== runtime.node) reject();
+  if (profile.platform === 'linux') {
+    if (process.arch !== 'x64') reject();
+    const release = readFileSync('/etc/os-release', 'utf8');
+    if (!/^ID=ubuntu$/m.test(release) || !/^VERSION_ID="24\.04"$/m.test(release)) reject();
+  }
+  return process.execPath;
+}
+export function nativeEntrypointInterpreter(manifest) {
+  return manifest?.entrypoint?.endsWith('.mjs') ? nativeNode(manifest.runtime) : nativePowerShell(manifest?.runtime);
 }
 
 export function invokePowerShell({ root, manifest, entrypoint, requestPath, resultPath, environment, timeoutSeconds }) {
-  const executable = nativePowerShell(manifest?.runtime);
+  const isNode = entrypoint.endsWith('.mjs');
+  const executable = isNode ? nativeNode(manifest?.runtime) : nativePowerShell(manifest?.runtime);
   const linux = process.platform === 'linux';
+  const args = isNode
+    ? [entrypoint, '-RequestPath', requestPath, '-ResultPath', resultPath]
+    : ['-NoLogo', '-NoProfile', '-NonInteractive', ...(linux ? [] : ['-ExecutionPolicy', 'Bypass']), '-File', entrypoint, '-RequestPath', requestPath, '-ResultPath', resultPath];
   return new Promise(resolveResult => {
-    const child = spawn(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', ...(linux ? [] : ['-ExecutionPolicy', 'Bypass']),
-      '-File', entrypoint, '-RequestPath', requestPath, '-ResultPath', resultPath], {
+    const child = spawn(executable, args, {
       cwd: root, env: environment, shell: false, windowsHide: true, detached: linux,
       // 应用输出可能含业务数据或秘密；只消费经过校验的结果，不转发原始日志。
       stdio: 'ignore',
@@ -178,7 +198,7 @@ export async function readExecutionResult(path, request, execution) {
 // tempRoot 必须是执行器控制的目录；每次新建独立输入/输出位置，不接受旧结果。
 export async function executeCheckout({ checkout, request, tempRoot, environment = process.env, invoke = invokePowerShell }) {
   const checked = await inspectCheckout(checkout, request);
-  if (invoke === invokePowerShell) nativePowerShell(checked.manifest.runtime);
+  if (invoke === invokePowerShell) nativeEntrypointInterpreter(checked.manifest);
   const temporary = await realpath(tempRoot);
   if (temporary === checked.root || inside(checked.root, temporary)) reject();
   const directory = await mkdtemp(join(temporary, 'springbok-sba-'));

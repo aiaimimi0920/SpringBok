@@ -76,10 +76,11 @@ try {
   assert.equal(await page.locator('#enrollment-authorize').isEnabled(), false);
   const writes = posts('/api/admin/enrollments'); await page.reload(); await waitReady(); assert.equal(posts('/api/admin/enrollments'), writes);
   await b.getByRole('button', { name: '核对加入状态', exact: true }).click(); await page.getByText(/节点 pending/).waitFor();
-  mkdirSync('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/node-enrollment-synthetic-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true }); await page.screenshot({ path: join(evidenceDir, 'node-enrollment-synthetic-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/node-enrollment-synthetic-mobile.png', fullPage: true });
+  await page.screenshot({ path: join(evidenceDir, 'node-enrollment-synthetic-mobile.png'), fullPage: true });
   // 迟到的旧 owner 核对响应不能写入新身份页面。
   holdPath = `/api/admin/enrollments/${grant.nodeId}`; await a.getByRole('button', { name: '核对加入状态', exact: true }).click(); await waitHeld();
   token = f.jwt({ sub: 'other-enrollment-owner' }); await page.locator('#refresh').click(); await waitReady(); release(); release = null;

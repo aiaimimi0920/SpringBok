@@ -1,7 +1,7 @@
 import { boundResources, confirmedVersion, newerVersion, resourceCountText, resourceMetrics, statusText, statusTone, valueAt } from './service-model.mjs';
 import { resourceLabels } from './resource-model.mjs';
 import { importFields, importWorkerOptions, importDraft, importReview, importedDetails } from './service-import.js';
-import { resumePreparation } from './preparation-recovery.js';
+import { resumePreparation, restartLabel } from './preparation-recovery.js';
 import { applicationSecretFields } from './service-secrets.js';
 import { applicationSourceFields } from './service-source.js';
 import { retireService } from './service-retirement.js';
@@ -20,11 +20,11 @@ let selected = null, application = null, updateTarget = null, preview = null, bu
 let importing = false;
 let deletionReview = null, deletionGeneration = 0, deletionSubmitting = false, deletionFocus = null;
 let rehearsing = false, repairing = false, deletingPreview = false, testEnvironment = null;
-let returnFocus = null, pollTimer = null, listBusy = false, selectedResources = new Map();
+let returnFocus = null, pollTimer = null, listBusy = false, pendingFullRefresh = false, selectedResources = new Map();
 let previewExpiryTimer = null;
 const expiredPreview = () => !!preview && !importing && preview.expiresAt <= Date.now();
 const expiryMessage = '计划已过期，请重新预览';
-const expanded = new Set(), statistics = new Set(), usagePending = new Set();
+const expanded = new Set(), statistics = new Set(), usagePending = new Set(), activeControllers = new Set();
 const deletionChecks = new Set();
 const notice = (text, tone = 'info') => { $('service-notice').textContent = text; $('service-notice').dataset.tone = tone; };
 const dialogNotice = (text, tone = 'info') => { $('service-dialog-notice').textContent = text; $('service-dialog-notice').dataset.tone = tone; };
@@ -68,7 +68,10 @@ function restoreFocus() {
 }
 function invalidate() {
   deletionGeneration++; deletionReview = null; $('service-delete-dialog').close();
-  deletionChecks.clear();
+  for (const node of document.querySelectorAll('dialog[data-dynamic-dialog]')) node.close();
+  deletionChecks.clear(); pendingFullRefresh = false;
+  for (const controller of activeControllers) controller.abort();
+  activeControllers.clear();
   generation++; dialogGeneration++; session = null; clearTimeout(pollTimer); loadingCount = 0; loading(0);
   catalog.clear(); catalogOrder.clear(); instances.clear(); states.clear(); usage.clear(); historyRecords.clear(); usagePending.clear();
   registeredResources = []; adminProfiles = []; adminOverride = null;
@@ -80,11 +83,22 @@ function invalidate() {
 }
 async function request(path, body, timeoutMs = 0) {
   const version = generation;
-  const controller = timeoutMs ? new AbortController() : null, timer = controller && setTimeout(() => controller.abort(), timeoutMs);
+  const readOnly = !body || ['/catalog', '/versions', '/application', '/service-state', '/state', '/reconcile'].some(s => path.endsWith(s)) ||
+    (path === '/api/admin/resources' && ['inventory', 'usage'].includes(body?.action));
+  const deadline = timeoutMs || (readOnly ? 30000 : 0);
+  const controller = readOnly || deadline ? new AbortController() : null;
+  const timer = controller && deadline ? setTimeout(() => controller.abort(), deadline) : null;
+  if (controller && readOnly) activeControllers.add(controller);
   try {
-  const response = await fetch(path, { method: body ? 'POST' : 'GET', credentials: 'same-origin', redirect: 'error',
-    ...(controller ? { signal: controller.signal } : {}),
-    headers: body ? { 'content-type': 'application/json', 'x-csrf-token': session?.csrf ?? '' } : {}, ...(body ? { body: JSON.stringify(body) } : {}) });
+  let response;
+  try {
+    response = await fetch(path, { method: body ? 'POST' : 'GET', credentials: 'same-origin', redirect: 'error',
+      ...(controller ? { signal: controller.signal } : {}),
+      headers: body ? { 'content-type': 'application/json', 'x-csrf-token': session?.csrf ?? '' } : {}, ...(body ? { body: JSON.stringify(body) } : {}) });
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('读取超时，请稍后重试');
+    throw error;
+  }
   if (response.status === 403) {
     if (current(version)) { invalidate(); notice('身份验证失败，请重新登录', 'error'); }
     throw new Error('身份验证失败，请重新登录');
@@ -100,13 +114,21 @@ async function request(path, body, timeoutMs = 0) {
       ['email-routing-zone-mismatch', '收信根域与 Cloudflare 账户不匹配'],
       ['email-routing-not-ready', '所选根域的 Email Routing 尚未就绪'],
       ['email-routing-rule-unsupported', '当前 catch-all 配置不受支持'],
-      ['email-routing-occupied', '收信路由已被占用或归属已变化']
+      ['email-routing-occupied', '收信路由已被占用或归属已变化'],
+      ['connection-unavailable', '所选连接已失效、已停用或版本过期，请重新核验连接'],
+      ['resource-listing-expired', '云资源目录已超过 5 分钟有效期，请重新读取资源'],
+      ['account-lane-busy', '该云账户存在在途或待处理任务，当前执行通道已占用'],
+      ['resource-identity-conflict', '目标 Worker、域名或存储已被其他实例占用'],
+      ['version-not-newer', '候选版本必须高于当前已部署版本且提交 SHA 不同'],
+      ['declaration-incompatible', '候选版本部署声明、运行环境或绑定配置与当前实例不兼容'],
+      ['capacity-limit-reached', '资源或任务登记数量已达上限'],
+      ['github-upstream-unavailable', '无法从 GitHub 读取该提交的应用声明，请检查提交与仓库权限']
     ]);
     const result = await response.json().catch(() => null);
     throw new Error(messages.get(result?.error) ?? (path.endsWith('/plan') ? '计划校验失败：检查版本兼容性、连接、资源与公开配置' : '读取或操作未确认，请检查连接权限与平台状态'));
   }
   return await response.json();
-  } finally { if (timer) clearTimeout(timer); }
+  } finally { if (timer) clearTimeout(timer); if (controller) activeControllers.delete(controller); }
 }
 async function pool(items, callback, count = 2) {
   let next = 0;
@@ -120,7 +142,9 @@ function fold(key, label, content) {
   return details;
 }
 function renderInstances() {
-  const active = document.activeElement?.dataset.focusKey, scroll = $('service-list').scrollTop;
+  const active = document.activeElement?.dataset.focusKey;
+  const mainEl = document.querySelector('main'), scroll = mainEl?.scrollTop ?? 0;
+  const preScroll = new Map([...$('service-list').querySelectorAll('pre[data-scroll-key]')].map(node => [node.dataset.scrollKey, node.scrollTop]));
   const rows = [];
   for (const [id, entry] of instances) {
     const state = states.get(id), instance = state?.instance ?? entry.summary, app = instance?.application;
@@ -134,6 +158,13 @@ function renderInstances() {
     version.append(element('span', confirmed ? 'v' + confirmed.version : instance?.action === 'import' ? '版本未知' : app ? '目标 v' + app.version : '—'));
     if (instance?.action === 'update' && !['succeeded', 'deployed-unverified'].includes(status)) version.append(element('small', ' → v' + app.version));
     const target = element('div'); target.append(element('span', instance?.environment ?? '—'), element('small', connections.find(row => row.id === instance?.connections?.cloudflare.id)?.accountName ?? instance?.accountId ?? '—'));
+    if (!instance?.previewOf && ['succeeded', 'deployed-unverified', 'imported'].includes(status)) {
+      const liveUrl = (instance?.targets ?? []).find(t => t.kind === 'domain' && /^https:\/\/[a-z0-9.-]+(?::[0-9]+)?\/?$/i.test(t.value))?.value;
+      if (liveUrl) {
+        const link = focusKey(element('a', new URL(liveUrl).host, 'service-url'), id + '/live-url');
+        link.href = liveUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; target.append(link);
+      }
+    }
     const label = instance?.action === 'destroy-preview' || state?.job?.request?.context?.cleanup ? ({ running: '正在清理', failed: '清理失败', unknown: '清理结果未确认' })[status] : null;
     const availability = state?.verification?.status === 'succeeded' && !state?.deletion;
     const verifying = ['dispatching','dispatched','running'].includes(state?.verification?.status);
@@ -149,9 +180,13 @@ function renderInstances() {
     detail.addEventListener('click', () => { expanded.has(id) ? expanded.delete(id) : expanded.add(id); renderInstances(); });
     actions.append(detail);
     if (instance?.previewOf) {
-      for (const url of state?.testUrls ?? []) { const link = element('a', '测试地址'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; actions.append(link); }
+      for (const [urlIndex, url] of (state?.testUrls ?? []).entries()) { const link = focusKey(element('a', '测试地址'), id + '/test-url-' + urlIndex); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; actions.append(link); }
       const remove = focusKey(element('button', '删除测试环境', 'danger'), id + '/delete-preview'); remove.type = 'button'; remove.disabled = !state?.canDeletePreview || !session;
       remove.addEventListener('click', () => void openDeletePreview(state, remove)); actions.append(remove);
+      if (state?.canRestart) {
+        const restart = focusKey(element('button', restartLabel(state)), id + '/resume'); restart.type = 'button'; restart.disabled = !session;
+        restart.addEventListener('click', () => { const version = generation; restart.disabled = true; void resumePreparation(state, restart, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }, true); }); actions.append(restart);
+      }
     } else {
       const update = focusKey(element('button', '升级'), id + '/update'); update.type = 'button'; update.disabled = !state?.canUpdate || !session;
       update.addEventListener('click', () => void openDialog(state, update));
@@ -167,19 +202,20 @@ function renderInstances() {
         const check = focusKey(element('button', '核对删除结果'), id + '/delete-reconcile'); check.type = 'button'; check.disabled = !session || deletionChecks.has(id);
         check.addEventListener('click', async () => {
           if (!session || deletionChecks.has(id)) return;
-          const version = generation, hadFocus = document.activeElement === check; deletionChecks.add(id); check.disabled = true;
+          const version = generation, hadFocus = document.activeElement === check; let reconciledDeleted = false; deletionChecks.add(id); check.disabled = true;
           try {
             const result = await request(api + 'delete-reconcile', { instanceId: id, operationId: state.deletion.operationId });
-            if (current(version)) notice(result.status === 'deleted' ? '服务及关联数据已删除' : '删除结果仍未确认', result.status === 'deleted' ? 'success' : 'warning');
+            reconciledDeleted = result.status === 'deleted';
+            if (current(version)) notice(reconciledDeleted ? '服务及关联数据已删除' : '删除结果仍未确认', reconciledDeleted ? 'success' : 'warning');
           } catch (error) { if (current(version)) notice(error.message, 'error'); }
           finally { if (current(version)) {
             deletionChecks.delete(id); await refreshInstances();
-            if (current(version) && hadFocus && states.get(id)?.status === 'deleted' && document.activeElement === document.body) $('service-add').focus({ preventScroll: true });
+            if (current(version) && hadFocus && (reconciledDeleted || states.get(id)?.status === 'deleted') && document.activeElement === document.body) $('service-add').focus({ preventScroll: true });
           } }
         }); actions.append(check);
       }
       if (state?.canResume || state?.canRestart) {
-        const resume = focusKey(element('button', state.canRestart ? '恢复升级' : '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
+        const resume = focusKey(element('button', state.canRestart ? restartLabel(state) : '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
         resume.addEventListener('click', () => { const version = generation; resume.disabled = true; void resumePreparation(state, resume, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }, !!state.canRestart); }); actions.append(resume);
       }
       if(state?.canVerify){
@@ -204,8 +240,9 @@ function renderInstances() {
       if(state?.verification){
         const verified=state.verification,proof=element('dl');
         for(const [name,value] of [['部署结果',statusText(status)],['可用性验证',verified.status==='succeeded'?'通过':statusText(verified.status)],['验证任务',verified.taskId],['验证提交时间',new Date(verified.createdAt).toLocaleString()]])proof.append(element('dt',name),element('dd',value));
-        detailPanel.append(proof,fold(id+'/verification','验证回执',element('pre',JSON.stringify(verified.job?.result??{status:verified.status,errorCode:verified.errorCode??null},null,2))));
-        if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[0-9]+$/.test(verified.runUrl??'')){const link=element('a','验证记录');link.href=verified.runUrl;link.target='_blank';link.rel='noopener noreferrer';detailPanel.append(link);}
+        const verifyPre = element('pre',JSON.stringify(verified.job?.result??{status:verified.status,errorCode:verified.errorCode??null},null,2)); verifyPre.dataset.scrollKey = id + '/verify-pre';
+        detailPanel.append(proof,fold(id+'/verification','验证回执',verifyPre));
+        if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[0-9]+$/.test(verified.runUrl??'')){const link=focusKey(element('a','验证记录'),id+'/verify-run');link.href=verified.runUrl;link.target='_blank';link.rel='noopener noreferrer';detailPanel.append(link);}
       }
       if (state?.status === 'imported') detailPanel.append(importedDetails(state));
       for (const bound of boundResources(instance)) {
@@ -218,11 +255,16 @@ function renderInstances() {
         }).length > 1;
         detailPanel.append(fold(id + '/resource/' + bound.accountId + '/' + bound.kind + '/' + bound.id, `${resourceLabels[bound.kind]} · ${bound.name} · ${shared ? '共享资源用量' : '资源级用量'}`, metrics));
       }
+      if (state?.job?.result?.checks?.length) {
+        const checks = element('dl');
+        for (const check of state.job.result.checks) checks.append(element('dt', check.id), element('dd', (check.passed ? '通过' : '未通过') + (check.durationMs !== undefined ? ` · ${check.durationMs} ms` : '')));
+        detailPanel.append(fold(id + '/checks', '应用检查 · ' + state.job.result.checks.length, checks));
+      }
       const records = element('div');
       for (const item of state?.history ?? []) {
         const itemRow = element('div', undefined, 'service-history-row');
         const button = focusKey(element('button', `${({ update: '升级', repair: '修复', preview: '预升级测试', 'destroy-preview': '删除测试环境' })[item.action] ?? '部署'} · ${item.application ? 'v' + item.application.version : item.taskId} · ${new Date(item.createdAt).toLocaleString()}`), id + '/task/' + item.taskId); button.type = 'button';
-        const output = element('pre'), cached = historyRecords.get(item.taskId); if (cached) output.textContent = JSON.stringify(cached.job ?? cached, null, 2);
+        const output = element('pre'), cached = historyRecords.get(item.taskId); output.dataset.scrollKey = id + '/history-pre/' + item.taskId; if (cached) output.textContent = JSON.stringify(cached.job ?? cached, null, 2);
         button.addEventListener('click', async () => {
           if (historyRecords.has(item.taskId)) { historyRecords.delete(item.taskId); renderInstances(); return; }
           const version = generation; button.disabled = true;
@@ -234,39 +276,43 @@ function renderInstances() {
       }
       if (state?.status !== 'imported') detailPanel.append(fold(id + '/history', '执行记录 · ' + (state?.history?.length ?? 0), records));
       const result = element('pre', JSON.stringify(state?.deletion ?? (state?.status === 'imported' ? state.provenance : state?.job?.result ?? { status, errorCode: state?.errorCode ?? state?.job?.errorCode ?? null }), null, 2));
+      result.dataset.scrollKey = id + '/receipt-pre';
       detailPanel.append(fold(id + '/receipt', state?.status === 'imported' ? '导入来源' : '最近回执', result));
       if (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[0-9]+$/.test(state?.runUrl ?? '')) {
-        const link = element('a', 'GitHub Actions'); link.href = state.runUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; detailPanel.append(link);
+        const link = focusKey(element('a', 'GitHub Actions'), id + '/github-run'); link.href = state.runUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; detailPanel.append(link);
       }
     }
     li.append(detailPanel); rows.push(li);
   }
-  $('service-list').replaceChildren(...rows); $('service-list').scrollTop = scroll;
+  $('service-list').replaceChildren(...rows);
+  if (mainEl) mainEl.scrollTop = scroll;
+  for (const [key, top] of preScroll) if (top > 0) { const node = $('service-list').querySelector(`pre[data-scroll-key="${CSS.escape(key)}"]`); if (node) node.scrollTop = top; }
   $('service-empty').hidden = rows.length > 0;
   if (active) {
     const target = document.querySelector(`[data-focus-key="${CSS.escape(active)}"]`);
-    (target ?? (states.get(active.split('/')[0])?.status === 'deleted' ? $('service-add') : null))?.focus({ preventScroll: true });
+    (target ?? (!instances.has(active.split('/')[0]) || states.get(active.split('/')[0])?.status === 'deleted' ? $('service-add') : null))?.focus({ preventScroll: true });
   }
 }
 async function loadUsage(instance, version) {
   if (!instance?.connections || !session) return;
   const sources = new Map(boundResources(instance).filter(row => row.id && row.connectionId).map(row => [row.connectionId + '/' + row.kind, row]));
-  for (const [key, { kind, connectionId }] of sources) {
-    if (usagePending.has(key) || Date.now() - (usage.get(key)?.checkedAt ?? 0) < 60000) continue;
+  await pool([...sources], async ([key, { kind, connectionId }]) => {
+    if (usagePending.has(key) || Date.now() - (usage.get(key)?.checkedAt ?? 0) < 60000) return;
     usagePending.add(key);
     try {
       const result = await request('/api/admin/resources', { action: 'usage', connectionId, kind });
       if (current(version)) { usage.set(key, result); renderInstances(); }
     } catch { if (current(version)) usage.set(key, { status: 'unavailable', checkedAt: Date.now() }); }
     finally { if (current(version)) usagePending.delete(key); }
-  }
+  }, 2);
 }
 function activeInstance(state) {
   if (state?.status === 'deleted') return false;
   return state?.status === 'deleting' || ['dispatching','dispatched','running'].includes(state?.verification?.status) || ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'submitting'].includes(state?.job?.status ?? state?.status);
 }
 async function refreshInstances(activeOnly = false) {
-  if (listBusy || !session) return;
+  if (!session) return;
+  if (listBusy) { if (!activeOnly) pendingFullRefresh = true; return; }
   const version = generation; listBusy = true;
   try {
     if (!activeOnly) {
@@ -286,7 +332,8 @@ async function refreshInstances(activeOnly = false) {
   finally {
     if (current(version)) {
       listBusy = false; clearTimeout(pollTimer);
-      if ([...states.values()].some(activeInstance)) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(true); }, 5000);
+      if (pendingFullRefresh) { pendingFullRefresh = false; void refreshInstances(false); }
+      else if ([...states.values()].some(activeInstance)) pollTimer = setTimeout(() => { if (!document.hidden) void refreshInstances(true); }, 5000);
     }
   }
 }
@@ -488,7 +535,7 @@ function buildFields(data) {
       addField($('service-resources'), 'service-resource-' + field.key, field.label + ' · ' + resourceLabels[field.kind], output);
     }
     domainFields(data);
-    if(!updateTarget&&!rehearsing)prepareApplicationSecrets=applicationSecretFields(data,applicationSecretProfiles,$('service-inputs'),addField,request,clearPreview);
+    if(!rehearsing)prepareApplicationSecrets=applicationSecretFields(data,applicationSecretProfiles,$('service-inputs'),addField,request,clearPreview,!!updateTarget);
     if(data.declaration.administrator&&!updateTarget&&!rehearsing){
       const select=element('select'),password=element('input'),mode=element('select');
       fillOptions(select,adminProfiles.map(row=>[row.id,row.email]),'不初始化管理员');
@@ -570,6 +617,14 @@ async function selectService(row) {
 async function changeVersion() {
   if (!selected || busy || submitting) return;
   const version = ++dialogGeneration, pageVersion = generation, row = selected, sourceSha = $('service-version').value;
+  const previousFields = application?.status === 'ready' && !updateTarget && !importing && !rehearsing && !repairing
+    ? new Map((application.declaration.fields ?? []).map((field, index) => {
+        const node = $('service-field-' + index);
+        return node && !node.disabled ? [field.path.join('.') + ':' + field.type, node.value] : null;
+      }).filter(Boolean))
+    : null;
+  const previousEnv = !updateTarget && !importing && !rehearsing ? $('service-environment').value : '';
+  const previousCloudflare = !updateTarget ? $('service-cloudflare').value : '';
   application = null; selectedResources = new Map(); clearPreview(); selectionBusy = true; controls(); dialogNotice('正在读取版本…');
   try {
     const data = await request(api + 'application', { github: row.github, repository: row.repository, sourceSha }); if (!currentDialog(version, pageVersion)) return;
@@ -577,7 +632,17 @@ async function changeVersion() {
     if (importing && data.declaration.target === 'cloudflare-suite') throw new Error('此部署类型暂不支持导入');
     if (updateTarget && data.manifest.id !== updateTarget.instance.application.id) throw new Error('所选版本不是同一个服务');
     application = data; $('service-selection').textContent = data.repository + ' · v' + data.manifest.version; buildFields(data); dialogNotice('');
-    void loadVersions(row, version, pageVersion);
+    if (previousFields) {
+      for (const [index, field] of data.declaration.fields.entries()) {
+        const saved = previousFields.get(field.path.join('.') + ':' + field.type), node = $('service-field-' + index);
+        if (saved !== undefined && node && !node.disabled) node.value = saved;
+      }
+    }
+    if (previousEnv && !updateTarget && !importing && !rehearsing) {
+      $('service-environment').value = previousEnv;
+      for (const output of document.querySelectorAll('output[data-resource-template]')) output.value = output.dataset.resourceTemplate.replaceAll('{instance}', previousEnv);
+    }
+    if (previousCloudflare && !updateTarget && [...$('service-cloudflare').options].some(o => o.value === previousCloudflare)) $('service-cloudflare').value = previousCloudflare;
     await loadResources(version, pageVersion);
     if (currentDialog(version,pageVersion)) versionNotice(data);
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
@@ -661,7 +726,7 @@ async function prepare(event) {
       const result = await request(api + 'plan', { action: 'rehearse', instanceId: updateTarget.instance.id, previousTaskId: updateTarget.taskId, sourceSha: data.sourceSha, environment: testEnvironment });
       if (!currentDialog(version, pageVersion)) return;
       preview = result; const details = element('dl');
-      for (const [label, value] of [['源环境', updateTarget.instance.environment], ['当前版本', 'v' + updateTarget.instance.application.version], ['目标版本', `v${data.manifest.version} · ${data.sourceSha}`], ['测试环境', result.plan.policy.environment], ['测试地址', result.plan.operation.context.urls.join('、')], ['独立资源', Object.values(result.plan.resources).map(row => row.name).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
+      for (const [label, value] of [['源环境', updateTarget.instance.environment], ['当前版本', 'v' + updateTarget.instance.application.version], ['目标版本', `v${data.manifest.version} · ${data.sourceSha}`], ['测试环境', result.plan.policy.environment], ['测试地址', result.plan.operation.context.urls.join('、') || '—'], ['独立资源', Object.values(result.plan.resources).map(row => row.name).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
       const risk = element('p', '将复制当前数据到独立测试资源并执行迁移，可能产生云资源费用。线上服务不切换。'); risk.dataset.tone = 'warning';
       $('service-review').replaceChildren(details, risk); dialogNotice(''); return;
     }
@@ -724,13 +789,13 @@ async function prepare(event) {
       ...(accounts ? { accounts } : {}),
       ...(Object.keys(domains).length ? { domains } : {}),
       ...(administrator ? { administrator } : {}),
-      ...(applicationSecrets ? { applicationSecrets } : {}),
+      ...(applicationSecrets ? { applicationSecrets, ...(updateTarget ? { rotateApplicationSecrets: true } : {}) } : {}),
       ...(updateTarget ? { instance: { id: updateTarget.instance.id, previousTaskId: updateTarget.taskId } } : {}) };
     const result = await request(api + 'plan', body); if (!currentDialog(version, pageVersion)) return; preview = result;
     const details = element('dl');
     const plan = result.plan;
     if(administrator)details.append(element('dt','管理员邮箱'),element('dd',adminProfiles.find(row=>row.id===administrator.profile.id).email),element('dt','管理员密码'),element('dd',administrator.override?'本次配置':'已保存的默认密码'));
-    for (const [label, value] of [['服务', plan.application.manifest.name], ['版本', `v${plan.application.manifest.version} · ${plan.application.sourceSha}`], ['环境', plan.policy.environment], ['账户', connections.find(row => row.id === cloudflare.id)?.accountName ?? connections.find(row => row.id === cloudflare.id)?.target], ['绑定资源', Object.values(plan.resources).map(row => `${resourceLabels[row.kind]} · ${row.name}`).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
+    for (const [label, value] of [['服务', plan.application.manifest.name], ...(updateTarget ? [['当前版本', `v${updateTarget.instance.application.version} · ${updateTarget.instance.application.sourceSha}`]] : []), ['版本', `v${plan.application.manifest.version} · ${plan.application.sourceSha}`], ['环境', plan.policy.environment], ['账户', connections.find(row => row.id === cloudflare.id)?.accountName ?? connections.find(row => row.id === cloudflare.id)?.target], ['绑定资源', Object.values(plan.resources).map(row => `${resourceLabels[row.kind]} · ${row.name}`).join('、') || '—']]) details.append(element('dt', label), element('dd', value));
     if (automatic) {
       for (const account of data.declaration.accounts.slice(1)) details.append(element('dt', account.label), element('dd', plan.accounts[account.key].accountId));
       for (const field of data.declaration.fields) { const value = valueAt(plan.configuration, field.path); details.append(element('dt', field.label), element('dd', typeof value === 'string' ? value : JSON.stringify(value))); }
@@ -822,8 +887,9 @@ async function initialize() {
   const version = generation; loading(1); notice('');
   try {
     const auth = await request('/api/admin/state'); if (!current(version)) return; session = auth;
-    const result = await request('/api/admin/connections'); if (!current(version)) return; connections = result.connections;
-    const resources = await request('/api/admin/resources'); if (!current(version)) return; registeredResources = resources.resources; adminProfiles = resources.adminProfiles??[]; applicationSecretProfiles = resources.applicationSecretProfiles??[];
+    const [result, resources] = await Promise.all([request('/api/admin/connections'), request('/api/admin/resources')]);
+    if (!current(version)) return;
+    connections = result.connections; registeredResources = resources.resources; adminProfiles = resources.adminProfiles??[]; applicationSecretProfiles = resources.applicationSecretProfiles??[];
     await refreshInstances(); if (!current(version)) return; controls();
     if (location.hash || $('service-dialog').open) await openDialog();
   } catch (error) { if (current(version)) { invalidate(); notice(error.message, 'error'); } }

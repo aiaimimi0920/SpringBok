@@ -137,3 +137,30 @@ test('machine bootstrap, OIDC, digest, browser context and exact GitHub run all 
     state.badTitle=true;assert.equal((await machine()).status,403);state.badTitle=false;assert.equal((await machine()).status,200);
   }finally{await f.close();}
 });
+
+test('direct OIDC receipt callback and DO alarm settle tasks and release account lane without browser reconcile',async()=>{
+  const {f,state,preview,submit,machine,api}=await connectedFixture();try{
+    const first=await preview();await submit(first);
+    const permit=await (await machine()).json();
+    assert.equal(permit.receiptEndpoint,'https://runner.example.invalid/sba/v2/receipt');
+    const r=state.request;
+    const envelope={schemaVersion:1,runId:456,runAttempt:1,executorSha:state.executorSha,requestDigest:state.digest,permitId:permit.permitId,
+      result:{schemaVersion:r.schemaVersion,taskId:r.taskId,action:r.action,sourceSha:r.sourceSha,applicationVersion:r.applicationVersion,status:'succeeded',checks:[{id:'synthetic-check',passed:true}]}};
+    const pushed=await machine('receipt',{body:JSON.stringify({taskId:first.taskId,envelope})});
+    assert.equal(pushed.status,200);
+    assert.equal((await api('state',{taskId:first.taskId})).json().job.status,'succeeded');
+    const locks=await f.mf.getDurableObjectNamespace('DEPLOYMENT_LOCKS'),lockStub=locks.get(locks.idFromName('deployment-account/v1/'+'a'.repeat(32)));
+    const next=nextTask();
+    await lockStub.claim('2'.repeat(64),next,'a'.repeat(32),'other/repo/second',['d1:two'],'c'.repeat(64));
+    await lockStub.release(next);
+  }finally{await f.close();}
+  const b=await connectedFixture();try{
+    const plan=await b.preview();await b.submit(plan);
+    const permit=await (await b.machine()).json();
+    b.receipt(permit);
+    const ns=await b.f.mf.getDurableObjectNamespace('CONNECTED_TASKS'),stub=ns.get(ns.idFromName('connected/v1/'+plan.taskId));
+    const scheduled=await stub.runScheduledAlarm();
+    assert.ok(typeof scheduled==='number'&&scheduled>0,'permit schedules DO alarm');
+    assert.equal((await b.api('state',{taskId:plan.taskId})).json().job.status,'succeeded');
+  }finally{await b.f.close();}
+});

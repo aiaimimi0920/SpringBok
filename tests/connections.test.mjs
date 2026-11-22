@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { connectionInput } from '../cloud/connections-contract.mjs';
+import { connectionInput, ownerId, validVaultKey } from '../cloud/connections-contract.mjs';
 import { sealToken, openToken } from '../cloud/connections-crypto.mjs';
 import { verifyConnection } from '../cloud/connections-provider.mjs';
 const token = 'synthetic-not-a-real-token-123456';
@@ -14,6 +14,11 @@ test('connection contract rejects extra owner, SSRF targets, headers, malformed 
     { id: '../secret' }, { name: '' }, { provider: 'r2' }, { token: '' }, { name: 'a'.repeat(65) }, { action: 'deploy' }]) assert.throws(() => connectionInput({ ...good, ...change }));
   assert.throws(() => connectionInput({ ...good, provider: 'github', target: 'owner/../secret' }));
   assert.equal(connectionInput({ ...good, provider: 'github', target: 'owner/repo' }).target, 'owner/repo');
+  const rotated = { action: 'rotate', id: good.id, revision: 2, token };
+  assert.deepEqual(connectionInput(rotated), rotated);
+  for (const bad of [{ ...rotated, revision: 0 }, { ...rotated, token: 'short' }, { ...rotated, target: good.target }]) {
+    assert.throws(() => connectionInput(bad));
+  }
 });
 
 test('AES-GCM uses randomized envelopes and binds owner, row identity, provider and target', async () => {
@@ -24,6 +29,17 @@ test('AES-GCM uses randomized envelopes and binds owner, row identity, provider 
     [key, owner, { ...row, provider: 'github' }], [key, owner, { ...row, target: 'b'.repeat(32) }]]) await assert.rejects(openToken(k, o, r, a));
   await assert.rejects(openToken(key, owner, row, JSON.stringify({ ...JSON.parse(a), cipher: '00'.repeat(40) })));
   await assert.rejects(sealToken('invalid', owner, row, token));
+  const ring = JSON.stringify({ active: 'k2', keys: { k1: key, k2: '9'.repeat(64) } });
+  assert.equal(validVaultKey(ring), true);
+  assert.throws(() => ownerId(ring), 'keyring JSON must never pass as an ownerId');
+  assert.equal(validVaultKey(JSON.stringify({ active: 'missing', keys: { k1: key } })), false);
+  assert.equal(validVaultKey(JSON.stringify({ active: 'k1', keys: { k1: key, k2: key } })), false);
+  assert.equal(await openToken(ring, owner, row, a), token, 'legacy v1 envelope remains readable via keyring');
+  const v2 = await sealToken(ring, owner, row, token);
+  assert.equal(JSON.parse(v2).version, 2); assert.equal(JSON.parse(v2).keyId, 'k2');
+  assert.equal(await openToken(ring, owner, row, v2), token);
+  await assert.rejects(openToken(key, owner, row, v2), 'single raw key rejects v2 keyring envelope');
+  await assert.rejects(openToken(ring, owner, row, JSON.stringify({ ...JSON.parse(v2), keyId: 'k1' })), 'keyId is bound into v2 AAD');
 });
 
 test('provider checks only fixed official GETs, rejects redirects, errors, wrong identities and malformed bodies', async () => {

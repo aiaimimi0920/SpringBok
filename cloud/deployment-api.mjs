@@ -1,8 +1,7 @@
 import { connectionsEnabled } from './connections-api.mjs';
-import { sbaEnabled } from './sba-control.mjs';
+import { sbaEnabled, exactSba, deploymentPlanErrors } from './sba-control.mjs';
 import { signSession, sameProof } from './access.mjs';
 import { connectedEnabled, submitConnected, connectedState } from './connected-api.mjs';
-import { exactSba } from './sba-control.mjs';
 import { serviceIndex, serviceState } from './service-api.mjs';
 import { serviceImportRequest } from './service-import-api.mjs';
 import { serviceDeletionRequest } from './service-deletion-api.mjs';
@@ -50,5 +49,10 @@ export async function adminDeploymentRequest(request,env,session,readBody){
     if(input.action==='application')return reply(result);
     const expiresAt=Date.now()+120000,taskId='dc-'+crypto.randomUUID().replaceAll('-','');
     return reply({taskId,draft:input,plan:result,expiresAt,confirmation:await signSession(session,'deployment-confirm',[taskId,input,result.digest,expiresAt]),executionEnabled:connectedEnabled(env)});
-  }catch(error){return reply({error:[...domainPlanErrors,...emailPlanErrors].includes(error?.message)?error.message:'deployment-plan-rejected-check-source-resources-and-public-configuration'},409);}
+  }catch(error){
+    const raw=error?.message,isPlanOrSubmit=['/plan','/submit'].some(s=>url.pathname.endsWith(s));
+    const mapped=isPlanOrSubmit&&['missing connection','connection unavailable'].includes(raw)?'connection-unavailable':raw;
+    const allowed=[...domainPlanErrors,...emailPlanErrors,...(isPlanOrSubmit?deploymentPlanErrors:[])];
+    return reply({error:allowed.includes(mapped)?mapped:'deployment-plan-rejected-check-source-resources-and-public-configuration'},409);
+  }
 }

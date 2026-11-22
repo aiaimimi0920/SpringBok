@@ -137,3 +137,44 @@ test('missing Pages binding type is an explicit signed risk, never silently empt
     assert.equal((await s.service('delete-submit', { ...review, acceptUnverifiedReferences: true })).json().status, 'deleted');
   } finally { await s.f.close(); }
 });
+test('connection re-verification or token rotation after deploy allows deletion while mid-preview rotation invalidates stale delete plan', async () => {
+  const s = await deployed();
+  try {
+    const connId = s.input.cloudflare.id;
+    assert.equal((await s.f.call('/api/admin/connections', { ...s.session, body: { action: 'verify', id: connId, revision: 1 } })).status, 200);
+    const staleReview = (await s.service('delete-plan', s.body)).json();
+    assert.equal((await s.f.call('/api/admin/connections', { ...s.session, body: { action: 'rotate', id: connId, revision: 2, token: 'rotated-cloudflare-token-9876543210' } })).status, 200);
+    assert.equal((await s.service('delete-submit', staleReview)).status, 409, 'plan signed before connection rotation must fail closed');
+    assert.deepEqual(s.live.deletes, []);
+    const freshReview = (await s.service('delete-plan', s.body)).json();
+    assert.equal((await s.service('delete-submit', freshReview)).json().status, 'deleted');
+    assert.deepEqual((await s.service('services')).json().services, []);
+  } finally { await s.f.close(); }
+});
+test('bounded multi-page Pages deployments inspect every page before deletion and keep delete-unknown visible in service index', async () => {
+  const s = await deployed();
+  try {
+    const prior = s.state.provider;
+    let sharedOnPage2 = true;
+    s.state.provider = async (request, context) => {
+      const url = new URL(request.url);
+      if (request.method === 'GET' && url.pathname.endsWith('/pages/projects')) {
+        return Response.json({ success: true, result: [{ name: 'paged-pages', deployment_configs: { production: {} } }], result_info: { page: 1, total_pages: 1, total_count: 1 } });
+      }
+      if (request.method === 'GET' && url.pathname.endsWith('/pages/projects/paged-pages/deployments')) {
+        const page = Number(url.searchParams.get('page'));
+        const item = page === 1
+          ? { id: '11111111-1234-1234-1234-123456789abc', uses_functions: false }
+          : { id: '22222222-1234-1234-1234-123456789abc', uses_functions: false, ...(sharedOnPage2 ? { d1_databases: { DB: { id: s.resource.remoteId } } } : {}) };
+        return Response.json({ success: true, result: [item], result_info: { page, total_pages: 2, total_count: 2 } });
+      }
+      return prior(request, context);
+    };
+    assert.equal((await s.service('delete-plan', s.body)).status, 409, 'shared binding on page 2 must block deletion');
+    sharedOnPage2 = false;
+    const review = await s.service('delete-plan', s.body); assert.equal(review.status, 200, review.text);
+    s.live.lost = true;
+    assert.equal((await s.service('delete-submit', review.json())).json().status, 'delete-unknown');
+    assert.equal((await s.service('services')).json().services.length, 1, 'delete-unknown must remain in service index');
+  } finally { await s.f.close(); }
+});

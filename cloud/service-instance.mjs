@@ -1,5 +1,6 @@
 import { connectedStub, connectedTaskId } from './connected-store.mjs';
-import { sbaDigest, sbaRequest, canonicalSba, requireSba } from './sba-control.mjs';
+import { sbaDigest, sbaRequest, canonicalSba, requireSba, requirePlan } from './sba-control.mjs';
+import { compareVersions } from '../src/sba/contract.mjs';
 import { deploymentTargets } from './deployment-contract.mjs';
 
 export const serviceId = entry => entry.service?.id ?? entry.taskId;
@@ -22,15 +23,15 @@ export async function updateOperation(vault, owner, instance, plan) {
   const stub = connectedStub(vault.env, instance.previousTaskId), bootstrap = await stub.bootstrap(owner), job = await stub.inspect(owner);
   requireSba(job && ['succeeded', 'deployed-unverified'].includes(job.status) && job.result?.status === job.status);
   const old = bootstrap.plan;
-  requireSba(!old.previewOf);
-  requireSba((old.operation?.instanceId ?? instance.previousTaskId) === instance.id &&
-    plan.application.repository.toLowerCase() === old.application.repository.toLowerCase() &&
+  requireSba(!old.previewOf && (old.operation?.instanceId ?? instance.previousTaskId) === instance.id);
+  requirePlan(plan.application.repository.toLowerCase() === old.application.repository.toLowerCase() &&
     plan.application.manifest.id === old.application.manifest.id && plan.policy.environment === old.policy.environment &&
     canonicalSba(plan.application.manifest.runtime) === canonicalSba(old.application.manifest.runtime) &&
     plan.connections.cloudflare.id === old.connections.cloudflare.id &&
     canonicalSba(plan.configuration) === canonicalSba(old.configuration) &&
     canonicalSba(identities(plan.resources)) === canonicalSba(identities(old.resources)) &&
-    canonicalSba(deploymentTargets(plan.application.declaration, plan.configuration)) === canonicalSba(deploymentTargets(old.application.declaration, old.configuration)));
+    canonicalSba(deploymentTargets(plan.application.declaration, plan.configuration)) === canonicalSba(deploymentTargets(old.application.declaration, old.configuration)), 'declaration-incompatible');
+  requirePlan(plan.policy.sourceSha !== job.request.sourceSha && compareVersions(plan.application.manifest.version, job.request.applicationVersion) > 0, 'version-not-newer');
   const operation = { action: 'update', instanceId: instance.id, previousTaskId: instance.previousTaskId,
     previous: { sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion },
     previousResultDigest: await sbaDigest(job.result) };

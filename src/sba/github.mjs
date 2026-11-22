@@ -76,9 +76,9 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     const root = await treeEntries(commit.tree.sha);
     if (optional && !root.some(item => item?.path === '.sba')) return null;
     const directory = await treeEntries(entry(root, '.sba', 'tree', '040000'));
+    const targets = filenames.map(filename => ({ filename, blobSha: entry(directory, filename, 'blob', '100644') }));
     const files = {};
-    for (const filename of filenames) {
-      const blobSha = entry(directory, filename, 'blob', '100644');
+    await Promise.all(targets.map(async ({ filename, blobSha }) => {
       const file = await api(`${source}/blobs/${blobSha}`);
       try {
         if (file.sha !== blobSha || file.encoding !== 'base64' ||
@@ -87,7 +87,7 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
         if (raw.length !== file.size) throw new Error();
         files[filename] = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(raw, ch => ch.charCodeAt(0))));
       } catch { fail('SBA_GITHUB_MANIFEST_INVALID'); }
-    }
+    }));
     return files;
   }
   async function readFile(sourceSha, filename) { return (await readFiles(sourceSha, [filename]))[filename]; }
@@ -161,5 +161,25 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     return { status: 'receipt-available', runId, requestDigest: binding.requestDigest,
       artifact: { id: artifact.id, name: artifact.name, size: artifact.size_in_bytes, digest: artifact.digest } };
   }
-  return Object.freeze({ prepare, readManifest, readDeclaration, readApplication, hasApplication, dispatch, inspectRun, inspectUnstartedRun });
+  async function findDispatchedRun(request, manifest) {
+    const binding = await prepare(request, manifest);
+    try {
+      const list = await api(`${base}/actions/workflows/${c.workflowId}/runs?event=workflow_dispatch&per_page=30`);
+      if (!Array.isArray(list.workflow_runs) || list.workflow_runs.length > 30) return null;
+      const matches = list.workflow_runs.filter(run => run && positiveId(run.id) && run.workflow_id === c.workflowId &&
+        run.event === 'workflow_dispatch' && run.head_sha === c.executorSha && run.head_branch === c.ref &&
+        run.path === c.workflowPath && run.run_attempt === 1 && run.repository?.id === c.repositoryId &&
+        run.repository?.full_name === c.repository && run.head_repository?.id === c.repositoryId &&
+        run.head_repository?.full_name === c.repository && run.display_title === binding.title &&
+        Array.isArray(run.pull_requests) && run.pull_requests.length === 0);
+      if (matches.length !== 1) return null;
+      return { status: 'dispatched', runId: matches[0].id, requestDigest: binding.requestDigest };
+    } catch { return null; }
+  }
+  async function verifyCompletedRun(runId, request, manifest) {
+    const { run, binding } = await readRun(runId, request, manifest);
+    if (run.status !== 'completed' || run.conclusion !== 'success') fail('SBA_GITHUB_RUN_NOT_SUCCESSFUL');
+    return { runId, requestDigest: binding.requestDigest, executorSha: c.executorSha };
+  }
+  return Object.freeze({ prepare, readManifest, readDeclaration, readApplication, hasApplication, dispatch, findDispatchedRun, inspectRun, inspectUnstartedRun, verifyCompletedRun });
 }

@@ -8,6 +8,7 @@ import { telemetryAuthorization, requireTelemetry } from './telemetry-contract.m
 
 // 保留旧内部 probe；新通道只在当前 joined 角色认证的同一事务内领取和回报。
 export class NodeMailbox extends DurableObject {
+  #verifiedLedgerRaw = null;
   #context(value) {
     const context = nodeContext(value);
     if (this.env.ENABLE_NODE_MAILBOX !== 'yes' || !this.env.NODES || this.ctx.id.toString() !== this.env.NODES.idFromName(nodeMailboxName(context)).toString()) throw new Error('node mailbox disabled or mismatched');
@@ -33,20 +34,32 @@ export class NodeMailbox extends DurableObject {
     if (tables.length && (meta[0].schema_version === 3 ? ![3, 4].includes(tables.length) : tables.length !== meta[0].schema_version + 1)) throw new Error('incomplete node storage');
     if (meta[0].schema_version >= 2) this.#record();
     // schema 3 的观测表/行只由心跳路径校验；不让损坏观测阻断完好的任务领取/回执。
-    return nodeLedger(JSON.parse(rows[0].state), context);
+    return { ledger: nodeLedger(JSON.parse(rows[0].state), context), raw: rows[0].state };
+  }
+  async #ensureVerified(readResult, context) {
+    if (!readResult) return null;
+    if (this.#verifiedLedgerRaw !== readResult.raw) {
+      await verifyNodePlans(readResult.ledger, context);
+      this.#verifiedLedgerRaw = readResult.raw;
+    }
+    return readResult.ledger;
   }
   async #run(value, operation, input = null) {
     const context = this.#context(value);
     // 等待摘要校验时阻止其他 RPC 交错；最终写入和 claimed 同事务提交后才交付。
     return this.ctx.blockConcurrencyWhile(async () => {
-      const state = this.ctx.storage.transactionSync(() => this.#read(context));
-      await verifyNodePlans(state, context);
+      const readResult = this.ctx.storage.transactionSync(() => this.#read(context));
+      const state = await this.#ensureVerified(readResult, context);
       if (operation === 'snapshot') return { mode: 'internal-node-probe-only', executionReady: false, protocolVersion: 2, ...context, ...state };
       const result = nodeTransition(state, context, operation, input, Date.now());
-      if (result.changed) this.ctx.storage.transactionSync(() => {
-        this.#context(context);
-        this.ctx.storage.sql.exec('UPDATE node_ledger SET state=? WHERE id=1', JSON.stringify(result.state));
-      });
+      if (result.changed) {
+        const serialized = JSON.stringify(result.state);
+        this.ctx.storage.transactionSync(() => {
+          this.#context(context);
+          this.ctx.storage.sql.exec('UPDATE node_ledger SET state=? WHERE id=1', serialized);
+        });
+        this.#verifiedLedgerRaw = serialized;
+      }
       return result.response;
     });
   }
@@ -67,9 +80,9 @@ export class NodeMailbox extends DurableObject {
     const context = this.#context(value);
     requireEnrollment(this.env[feature] === 'yes');
     return this.ctx.blockConcurrencyWhile(async () => {
-      const ledger = this.ctx.storage.transactionSync(() => this.#read(context, initialize));
-      if (ledger === null) return perform(null, null, context);
-      await verifyNodePlans(ledger, context);
+      const readResult = this.ctx.storage.transactionSync(() => this.#read(context, initialize));
+      if (readResult === null) return perform(null, null, context);
+      await this.#ensureVerified(readResult, context);
       return this.ctx.storage.transactionSync(() => {
         this.#context(context); requireEnrollment(this.env[feature] === 'yes');
         const sql = this.ctx.storage.sql, meta = sql.exec('SELECT schema_version FROM node_meta').one();
@@ -78,7 +91,7 @@ export class NodeMailbox extends DurableObject {
           sql.exec('UPDATE node_meta SET schema_version=2 WHERE id=1');
         }
         const record = meta.schema_version >= 2 || initialize ? this.#record() : null;
-        return perform(sql, record, context, this.#read(context, false));
+        return perform(sql, record, context, this.#read(context, false)?.ledger ?? null);
       });
     });
   }
@@ -172,7 +185,11 @@ export class NodeMailbox extends DurableObject {
   }
   #probeTransition(sql, ledger, context, operation, input) {
     const result = nodeTransition(ledger, context, operation, input, Date.now());
-    if (result.changed) sql.exec('UPDATE node_ledger SET state=? WHERE id=1', JSON.stringify(result.state));
+    if (result.changed) {
+      const serialized = JSON.stringify(result.state);
+      sql.exec('UPDATE node_ledger SET state=? WHERE id=1', serialized);
+      this.#verifiedLedgerRaw = serialized;
+    }
     return result.response;
   }
   credentialProbe(value, role, token, enrollmentId, operation, input) {

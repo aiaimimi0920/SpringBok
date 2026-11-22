@@ -46,6 +46,7 @@ test('preview forks a persistent isolated instance, binds the source, and cleanu
     assert.ok(f.state.request.context.resources.every(row => row.remoteId !== original.configuration.database.id && row.remoteId !== original.configuration.server.name && row.remoteId !== original.configuration.url));
     f.complete(await (await f.machine()).json()); await f.f.restart();
     const deleted = (await f.service('service-state', stateBody(plan.taskId))).json(); assert.equal(deleted.status, 'deleted'); assert.equal(deleted.canDeletePreview, false); assert.deepEqual(deleted.testUrls, []); assert.equal(deleted.history.length, 2);
+    assert.deepEqual((await f.service('services')).json().services.map(row => row.id), [first.taskId]);
     assert.equal((await f.submit(remove)).status, 200); assert.equal(f.state.dispatches, 4); assert.equal(f.state.created.length, 2);
     const production = (await f.service('service-state', stateBody(first.taskId))).json(); assert.equal(production.job.request.applicationVersion, '2.0.0'); assert.deepEqual(production.configuration, original.configuration);
   } finally { await f.f.close(); }
@@ -94,4 +95,37 @@ test('partial cleanup and uncertain preview receipts remain visible and cannot b
       assert.equal((await f.service('service-state', stateBody(first.taskId))).json().job.request.applicationVersion, '1.0.0');
     } finally { await f.f.close(); }
   }
+});
+test('connection re-verification and rotation after deploy do not block rehearse or destroy-preview', async () => {
+  const f = await previewFixture();
+  try {
+    const first = await deployed(f);
+    assert.equal((await f.f.call('/api/admin/connections', { ...f.session, body: { action: 'verify', id: f.input.cloudflare.id, revision: 1 } })).status, 200);
+    assert.equal((await f.f.call('/api/admin/connections', { ...f.session, body: { action: 'verify', id: f.input.github.id, revision: 1 } })).status, 200);
+    const planResp = await f.service('plan', draft(first));
+    assert.equal(planResp.status, 200, planResp.text); const plan = planResp.json();
+    assert.equal((await f.submit(plan)).status, 200);
+    f.complete(await (await f.machine()).json(), 'succeeded');
+    await f.service('service-state', stateBody(plan.taskId));
+    assert.equal((await f.f.call('/api/admin/connections', { ...f.session, body: { action: 'rotate', id: f.input.cloudflare.id, revision: 2, token: 'rotated-preview-cf-token-1234567890' } })).status, 200);
+    const removeResp = await f.service('plan', { action: 'destroy-preview', instanceId: plan.taskId, previousTaskId: plan.taskId });
+    assert.equal(removeResp.status, 200, removeResp.text);
+    assert.equal((await f.submit(removeResp.json())).status, 200);
+  } finally { await f.f.close(); }
+});
+test('worker-only service without custom domain target supports isolated rehearse and cleanup', async () => {
+  const f = await previewFixture();
+  try {
+    f.state.declaration.targets = f.state.declaration.targets.filter(t => t.kind !== 'domain');
+    f.state.declaration.fields = f.state.declaration.fields.filter(field => field.path[0] !== 'url');
+    delete f.state.declaration.defaults.url;
+    const first = await deployed(f);
+    const planResp = await f.service('plan', draft(first));
+    assert.equal(planResp.status, 200, planResp.text); const plan = planResp.json();
+    assert.deepEqual(plan.plan.operation.context.urls, []);
+    assert.equal((await f.submit(plan)).status, 200);
+    f.complete(await (await f.machine()).json(), 'succeeded', { lifecycle: { resources: f.state.request.context.resources.map(r => ({ key: r.key, status: 'created' })), urls: [], snapshot: { id: 'f'.repeat(64), createdAt: 1791459200000 } } });
+    const previewState = (await f.service('service-state', stateBody(plan.taskId))).json();
+    assert.equal(previewState.canDeletePreview, true); assert.deepEqual(previewState.testUrls, []);
+  } finally { await f.f.close(); }
 });

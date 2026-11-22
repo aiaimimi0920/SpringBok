@@ -1,5 +1,5 @@
 import { connectedStub, connectedTaskId, accountStub } from './connected-store.mjs';
-import { sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba, sbaPolicy } from './sba-control.mjs';
+import { sbaRequest, sbaDigest, canonicalSba, exactSba, requireSba, requirePlan, sbaPolicy } from './sba-control.mjs';
 import { createGithubExecutor } from '../src/sba/github.mjs';
 import { recoverSbaReceipt } from '../src/sba/artifact.mjs';
 import { githubSourcePack, SOURCE_CONTENT_TYPE } from '../src/sba/source.mjs';
@@ -34,7 +34,7 @@ export async function submitConnected(env,session,input){
   requireSba(/^[a-f0-9]{32}$/.test(accountId));
   // 检查最终公开配置，而非只查资源声明；这是配置冲突保护，不是对应用代码的沙箱。
   const legacy=legacyIdentities(sbaPolicy(env).configuration),observed=deploymentIdentities(plan);
-  requireSba(observed.length<=256&&observed.every(value=>!legacy.includes(value)));
+  requireSba(observed.length<=256);requirePlan(observed.every(value=>!legacy.includes(value)),'resource-identity-conflict');
   const reservation=await vault.reserveDeployment(session.actor,input.taskId,plan);
   if(reservation.alreadyReserved)return connectedState(env,session.actor,input.taskId);
   return executeReserved(env,session.actor,input.taskId,plan,reservation);

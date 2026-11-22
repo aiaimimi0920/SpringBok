@@ -72,7 +72,7 @@ export function validateRequest(value, manifest) {
 }
 
 export function validateResult(value, request) {
-  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode', ...(previewAction(request.action) || repairedPreview(request) || repairedCleanup(request) ? ['lifecycle'] : [])]);
+  exact(value, ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion', 'status', 'checks'], ['errorCode', 'diagnostics', ...(previewAction(request.action) || repairedPreview(request) || repairedCleanup(request) ? ['lifecycle'] : [])]);
   for (const key of ['schemaVersion', 'taskId', 'action', 'sourceSha', 'applicationVersion']) {
     if (value[key] !== request[key]) fail('result identity mismatch');
   }
@@ -80,14 +80,24 @@ export function validateResult(value, request) {
   if (request.action === 'verify' && value.status === 'deployed-unverified') fail('verify cannot return an unverified deployment');
   if (!Array.isArray(value.checks) || value.checks.length > 30 || new Set(value.checks.map(item => item?.id)).size !== value.checks.length) fail('invalid checks');
   for (const check of value.checks) {
-    exact(check, ['id', 'passed']);
+    exact(check, ['id', 'passed'], ['durationMs']);
     if (!identifier(check.id) || typeof check.passed !== 'boolean') fail('invalid check');
+    if (Object.hasOwn(check, 'durationMs') && (!Number.isSafeInteger(check.durationMs) || check.durationMs < 0 || check.durationMs > 3600000)) fail('invalid check duration');
   }
   if (value.status === 'succeeded' && (!value.checks.length || value.checks.some(check => !check.passed))) fail('success requires passing application checks');
   if (request.schemaVersion === 3 && request.action === 'update' && ['succeeded', 'deployed-unverified'].includes(value.status)) {
     for (const id of ['backup-created', 'data-preserved']) if (!value.checks.some(check => check.id === id && check.passed)) fail('update requires backup and data preservation checks');
   }
   if (Object.hasOwn(value, 'errorCode') && (typeof value.errorCode !== 'string' || !/^[A-Z][A-Z0-9_]{1,79}$/.test(value.errorCode))) fail('invalid error code');
+  if (Object.hasOwn(value, 'diagnostics')) {
+    const d = value.diagnostics;
+    exact(d, [], ['failedStep', 'providerStatus', 'providerCode', 'durationMs']);
+    if (!Object.keys(d).length) fail('invalid diagnostics');
+    if (Object.hasOwn(d, 'failedStep') && !identifier(d.failedStep)) fail('invalid diagnostics');
+    if (Object.hasOwn(d, 'providerStatus') && (!Number.isSafeInteger(d.providerStatus) || d.providerStatus < 100 || d.providerStatus > 599)) fail('invalid diagnostics');
+    if (Object.hasOwn(d, 'providerCode') && !((Number.isSafeInteger(d.providerCode) && d.providerCode >= 0 && d.providerCode <= 999999999) || (typeof d.providerCode === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(d.providerCode)))) fail('invalid diagnostics');
+    if (Object.hasOwn(d, 'durationMs') && (!Number.isSafeInteger(d.durationMs) || d.durationMs < 0 || d.durationMs > 3600000)) fail('invalid diagnostics');
+  }
   if (previewAction(request.action)) validatePreviewResult(value, request);
   if (request.action === 'repair') validateRepairResult(value, request);
   return structuredClone(value);

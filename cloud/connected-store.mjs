@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SbaDeployment } from './sba-store.mjs';
 import { ownerId } from './connections-contract.mjs';
-import { sbaPolicy, connectedSbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba } from './sba-control.mjs';
+import { sbaPolicy, connectedSbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, requirePlan, exactSba } from './sba-control.mjs';
 import { importedId } from './service-import.mjs';
 import { cancellationRecord } from './deployment-cancellation.mjs';
 import { deploymentScope } from './deployment-suite.mjs';
@@ -286,16 +286,17 @@ export class DeploymentLocks extends DurableObject {
       requireSba(tables.length===0||tables.length===3);const lane=sql.exec('SELECT * FROM deployment_lane').toArray();requireSba(lane.length===1&&lane[0].id===1);
       const prior=sql.exec('SELECT identity FROM deployment_claims WHERE task=?',taskId).toArray()[0];if(prior){requireSba(prior.identity===identity&&lane[0].task===taskId);return {claimed:true};}
       if (sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='import_keys'").toArray().length) {
-        for (const key of [...keys, ...observed.map(value => 'identity:' + value)]) requireSba(!sql.exec('SELECT instance FROM import_keys WHERE key=?', key).toArray().length);
+        for (const key of [...keys, ...observed.map(value => 'identity:' + value)]) requirePlan(!sql.exec('SELECT instance FROM import_keys WHERE key=?', key).toArray().length, 'resource-identity-conflict');
       }
-      requireSba((repair?lane[0].task===update.previousTaskId:lane[0].task===null)&&sql.exec('SELECT COUNT(*) AS n FROM deployment_claims').one().n<4096);
+      requirePlan(repair?lane[0].task===update.previousTaskId:lane[0].task===null,'account-lane-busy');
+      requirePlan(sql.exec('SELECT COUNT(*) AS n FROM deployment_claims').one().n<4096,'capacity-limit-reached');
       if(update){
         const claims=sql.exec('SELECT identity FROM deployment_claims ORDER BY rowid').toArray().map(r=>JSON.parse(r.identity));
         const chain=claims.filter(r=>(r.instanceId??r.taskId)===update.instanceId),head=chain.at(-1),root=chain[0];
         requireSba(root?.taskId===update.instanceId&&head?.taskId===update.previousTaskId&&root.owner===owner&&head.owner===owner&&root.scope===scope&&head.scope===scope&&canonicalSba(root.resourceKeys)===canonicalSba(keys)&&canonicalSba(head.resourceKeys)===canonicalSba(keys));
       }
-      for(const value of observed){requireSba(typeof value==='string'&&value.length<=256);const held=sql.exec('SELECT task FROM deployment_keys WHERE key=?','identity:'+value).toArray()[0];requireSba(!held||update&&held.task===update.instanceId);}
-      for(const key of ['environment:'+scope,...keys]){requireSba(typeof key==='string'&&key.length<=350);if(update)requireSba(sql.exec('SELECT task FROM deployment_keys WHERE key=?',key).toArray()[0]?.task===update.instanceId);else sql.exec('INSERT INTO deployment_keys VALUES(?,?)',key,taskId);}
+      for(const value of observed){requireSba(typeof value==='string'&&value.length<=256);const held=sql.exec('SELECT task FROM deployment_keys WHERE key=?','identity:'+value).toArray()[0];requirePlan(!held||update&&held.task===update.instanceId,'resource-identity-conflict');}
+      for(const key of ['environment:'+scope,...keys]){requireSba(typeof key==='string'&&key.length<=350);if(update)requireSba(sql.exec('SELECT task FROM deployment_keys WHERE key=?',key).toArray()[0]?.task===update.instanceId);else{requirePlan(!sql.exec('SELECT task FROM deployment_keys WHERE key=?',key).toArray().length,'resource-identity-conflict');sql.exec('INSERT INTO deployment_keys VALUES(?,?)',key,taskId);}}
       sql.exec('INSERT INTO deployment_claims VALUES(?,?)',taskId,identity);sql.exec('UPDATE deployment_lane SET task=? WHERE id=1',taskId);return {claimed:true};
     });
   }

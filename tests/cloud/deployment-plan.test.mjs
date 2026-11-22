@@ -16,6 +16,7 @@ test('preview rejects foreign/stale resources, changed connection, secrets and f
     for(const patch of [{sourceSha:'main'},{owner:'forged'},{resources:{database:{id:input.resources.database.id,revision:9}}},{values:{...input.values,vars:{API_TOKEN:'secret'}}}])assert.equal((await post({...input,...patch})).status,409);
     assert.equal((await f.call('/api/admin/deployments/plan',{body:input})).status,403);
     assert.equal((await f.call('/api/admin/deployments/plan',{...session,token:f.jwt({sub:'other-owner'}),body:input})).status,403);
-    await f.call('/api/admin/connections',{...session,body:{action:'disable',...input.cloudflare}});assert.equal((await post(input)).status,409);
+    const disabled=await f.call('/api/admin/connections',{...session,body:{action:'disable',...input.cloudflare}});assert.equal(disabled.status,200);
+    const unavailable=await post(input);assert.equal(unavailable.status,409);assert.equal(unavailable.json().error,'connection-unavailable');
   }finally{await f.close();}
 });

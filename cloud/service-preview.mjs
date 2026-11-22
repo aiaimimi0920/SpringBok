@@ -1,7 +1,7 @@
 import { connectedStub, connectedTaskId } from './connected-store.mjs';
 import { serviceEntries } from './service-instance.mjs';
 import { deploymentTargets, deploymentValue } from './deployment-contract.mjs';
-import { exactSba, requireSba, canonicalSba, sbaDigest, sbaRequest, connectedSbaPolicy } from './sba-control.mjs';
+import { exactSba, requireSba, requirePlan, canonicalSba, sbaDigest, sbaRequest, connectedSbaPolicy } from './sba-control.mjs';
 import { compareVersions } from '../src/sba/contract.mjs';
 import { resourceIdentity, validatePreviewInventory } from '../src/sba/preview.mjs';
 import { repairedPreview } from '../src/sba/repair.mjs';
@@ -68,8 +68,8 @@ export async function servicePreviewDraft(vault, owner, input) {
   requireSba(input.action === 'rehearse' && !old.previewOf && typeof input.environment === 'string' && /^test-[a-f0-9]{12}$/.test(input.environment) && input.environment !== old.policy.environment);
   const candidate = await vault.deploymentDraft(owner, { action: 'application', github: connections.github, repository: old.application.repository, sourceSha: input.sourceSha });
   const d = candidate.declaration;
-  requireSba(candidate.manifest.schemaVersion === 3 && d.schemaVersion === 2 && candidate.manifest.id === old.application.manifest.id && input.sourceSha !== job.request.sourceSha && compareVersions(candidate.manifest.version, job.request.applicationVersion) > 0);
-  requireSba(canonicalSba(candidate.manifest.runtime) === canonicalSba(old.application.manifest.runtime));
+  requirePlan(candidate.manifest.schemaVersion === 3 && d.schemaVersion === 2 && candidate.manifest.id === old.application.manifest.id && canonicalSba(candidate.manifest.runtime) === canonicalSba(old.application.manifest.runtime), 'declaration-incompatible');
+  requirePlan(input.sourceSha !== job.request.sourceSha && compareVersions(candidate.manifest.version, job.request.applicationVersion) > 0, 'version-not-newer');
   // 每个可写目标必须从新实例名派生，不能默默继承线上 Worker/域名。
   requireSba(d.targets.every(target => target.kind === 'email-routing' || d.fields.find(field => canonicalSba(field.path) === canonicalSba(target.path))?.template?.includes('{instance}')));
   requireSba(d.targets.some(target => target.kind === 'domain'));

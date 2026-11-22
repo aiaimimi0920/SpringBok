@@ -5,7 +5,7 @@ import { connectionDigest, sealToken, openToken } from './connections-crypto.mjs
 import { verifyConnection } from './connections-provider.mjs';
 import { resourceInput, discoverResources } from './resources.mjs';
 import { deploymentInput, deploymentDeclaration, deploymentConfiguration, connectionReference, deploymentTargets } from './deployment-contract.mjs';
-import { sbaPolicy, connectedSbaPolicy, sbaDigest, requireSba } from './sba-control.mjs';
+import { sbaPolicy, connectedSbaPolicy, sbaDigest, requireSba, requirePlan } from './sba-control.mjs';
 import { applicationRepository, readApplication, serviceCatalog } from './service-catalog.mjs';
 import { serviceSummary, serviceEntries, updateOperation } from './service-instance.mjs';
 import { connectedTaskId } from './connected-store.mjs';
@@ -176,7 +176,7 @@ export class ConnectionVault extends DurableObject {
     if(declaration.schemaVersion===2){automatic=await automaticDraft(this,owner,input,application);resources=automatic.resources;}
     else {requireSba(!Object.hasOwn(input,'accounts')&&!Object.hasOwn(input,'domains')&&!Object.hasOwn(input,'administrator'));
     for(const field of declaration.resources){const ref=connectionReference(input.resources[field.key]);const stored=this.ctx.storage.sql.exec('SELECT metadata FROM resources WHERE id=?',ref.id).toArray()[0];requireSba(stored);const row=JSON.parse(stored.metadata);
-      requireSba(row.revision===ref.revision&&row.connectionId===cloudflare.id&&row.connectionRevision===cloudflare.revision&&Date.now()-row.checkedAt<=300000);resources[field.key]=row;}
+      requireSba(row.revision===ref.revision&&row.connectionId===cloudflare.id&&row.connectionRevision===cloudflare.revision);requirePlan(Date.now()-row.checkedAt<=300000,'resource-listing-expired');resources[field.key]=row;}
     requireSba(Object.keys(input.resources).length===declaration.resources.length);}
     const configuration=automatic?.configuration??deploymentConfiguration(declaration,input.values,resources,cloudflare.target);
     const policy={...base,github:{...base.github,applicationRepository:repository},sourceSha:input.sourceSha,environment:input.environment,configuration,secretNames:manifest.secrets};
@@ -207,13 +207,13 @@ export class ConnectionVault extends DurableObject {
       if(prior){const old=JSON.parse(prior.record);requireSba(old.digest===record.digest);return {...old,alreadyReserved:true};}
       if(plan.operation){const source=plan.operation.action==='preview'?plan.operation.context.source:{instanceId:plan.operation.instanceId,taskId:plan.operation.previousTaskId};assertNotDeleting(this,owner,source.instanceId);const entries=serviceEntries(sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record)),source.instanceId);requireSba(entries.length&&entries[0].taskId===source.taskId);}
       for(const ref of Object.values(plan.connections))this.activeConnection(ref.id,ref.revision);
-      for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision&&(continuesInstance(plan)||Date.now()-row.checkedAt<=300000));}
+      for(const row of Object.values(plan.resources)){if(plan.accounts&&row.provision)continue;const current=sql.exec('SELECT metadata FROM resources WHERE id=?',row.id).toArray()[0];requireSba(current&&JSON.parse(current.metadata).revision===row.revision);requirePlan(continuesInstance(plan)||Date.now()-row.checkedAt<=300000,'resource-listing-expired');}
       if(plan.credentials)record.credentials=plan.credentials;
       if(plan.accounts)record.accountIds=[...new Set([...Object.values(plan.accounts).map(a=>a.accountId),...deploymentTargets(plan.application.declaration,plan.configuration).map(t=>t.accountId)])].sort();
       reserveBootstrap(this,owner,taskId,plan);
       reserveApplicationSecrets(this,owner,taskId,plan);
-      if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<4096);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
+      if(createsResources(plan)){requirePlan(this.resourceCapacity()+Object.keys(plan.resources).length<=128,'capacity-limit-reached');record.preparation={phase:'reserved',intent:plan,resources:{}};}
+      requirePlan(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<4096,'capacity-limit-reached');sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
     });
   }
   deploymentIndex(owner){return this.ctx.storage.transactionSync(()=>{this.deploymentGuard(owner);return this.ctx.storage.sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record));});}

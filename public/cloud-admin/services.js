@@ -100,7 +100,15 @@ async function request(path, body, timeoutMs = 0) {
       ['email-routing-zone-mismatch', '收信根域与 Cloudflare 账户不匹配'],
       ['email-routing-not-ready', '所选根域的 Email Routing 尚未就绪'],
       ['email-routing-rule-unsupported', '当前 catch-all 配置不受支持'],
-      ['email-routing-occupied', '收信路由已被占用或归属已变化']
+      ['email-routing-occupied', '收信路由已被占用或归属已变化'],
+      ['connection-unavailable', '所选连接已失效、已停用或版本过期，请重新核验连接'],
+      ['resource-listing-expired', '云资源目录已超过 5 分钟有效期，请重新读取资源'],
+      ['account-lane-busy', '该云账户存在在途或待处理任务，当前执行通道已占用'],
+      ['resource-identity-conflict', '目标 Worker、域名或存储已被其他实例占用'],
+      ['version-not-newer', '候选版本必须高于当前已部署版本且提交 SHA 不同'],
+      ['declaration-incompatible', '候选版本部署声明、运行环境或绑定配置与当前实例不兼容'],
+      ['capacity-limit-reached', '资源或任务登记数量已达上限'],
+      ['github-upstream-unavailable', '无法从 GitHub 读取该提交的应用声明，请检查提交与仓库权限']
     ]);
     const result = await response.json().catch(() => null);
     throw new Error(messages.get(result?.error) ?? (path.endsWith('/plan') ? '计划校验失败：检查版本兼容性、连接、资源与公开配置' : '读取或操作未确认，请检查连接权限与平台状态'));

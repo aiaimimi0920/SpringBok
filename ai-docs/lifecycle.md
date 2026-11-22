@@ -25,8 +25,9 @@ update、preview、repair 必须比 previous 版本更高且 SHA 不同。verify
 | --- | --- |
 | schemaVersion、taskId、action、sourceSha、applicationVersion | 原样匹配请求身份 |
 | status | succeeded / deployed-unverified / failed / unknown |
-| checks | 最多 30 个唯一 `{id, passed}`；id 为小写标识，passed 为布尔值 |
+| checks | 最多 30 个唯一 `{id, passed, durationMs?}`；id 为小写标识，passed 为布尔值，可选 `durationMs` 为 `0..3600000` 毫秒整数 |
 | errorCode | 可选安全错误码，匹配 `[A-Z][A-Z0-9_]{1,79}`；不得添加原异常文本 |
+| diagnostics | 可选无秘密结构化诊断对象，仅允许 `failedStep`（小写标识）、`providerStatus`（`100..599` HTTP 状态码）、`providerCode`（`0..999999999` 整数或 `[A-Z][A-Z0-9_]{1,63}` 符号码）与 `durationMs`（`0..3600000`）中的至少一项；严禁写入自由文本、堆栈或凭据 |
 | lifecycle | 仅预升级动作、显式修复预升级副本或其清理可用；清理恢复包括写前失败及满足下文 resumeCleanup 条件的部分清理，不是任意 UNKNOWN 重试 |
 
 succeeded 必须至少一项检查且全部为 true。退出码 0 并不能单独证明成功；非零、缺失、身份不符或格式错误均不能接受为成功。deployed-unverified 不等于业务验收通过，verify 和 repair 不允许该状态。

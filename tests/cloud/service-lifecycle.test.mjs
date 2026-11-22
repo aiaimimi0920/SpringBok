@@ -79,10 +79,16 @@ test('update rejects downgrade, same version, changed target/resources/configura
   try {
     const first = (await service('plan', { ...input, github, repository: 'owner/repo' })).json(); await submit(first); receipt(await (await machine()).json()); await service('service-state', instanceBody(first.taskId));
     const body = { ...input, github, repository: 'owner/repo', sourceSha: updatedSha, instance: { id: first.taskId, previousTaskId: first.taskId } };
-    for (const version of ['1.0.0', '0.9.0']) { state.updateVersion = version; assert.equal((await service('plan', body)).status, 409); } state.updateVersion = '2.0.0';
-    for (const patch of [{ environment: 'changed' }, { values: { ...body.values, 'server.name': 'changed' } }, { values: { ...body.values, vars: { changed: true } } }, { repository: 'owner/second' }]) assert.equal((await service('plan', { ...body, ...patch })).status, 409);
+    for (const version of ['1.0.0', '0.9.0']) { const r = await (state.updateVersion = version, service('plan', body)); assert.equal(r.status, 409); assert.equal(r.json().error, 'version-not-newer'); } state.updateVersion = '2.0.0';
+    for (const patch of [{ environment: 'changed' }, { values: { ...body.values, 'server.name': 'changed' } }]) {
+      const r = await service('plan', { ...body, ...patch }); assert.equal(r.status, 409); assert.equal(r.json().error, 'declaration-incompatible');
+    }
+    assert.equal((await service('plan', { ...body, values: { ...body.values, vars: { changed: true } } })).status, 409);
+    assert.equal((await service('plan', { ...body, repository: 'owner/second' })).status, 409);
+    const missingRepo = await service('plan', { ...body, repository: 'other-org/missing' }); assert.equal(missingRepo.status, 409); assert.equal(missingRepo.json().error, 'github-upstream-unavailable');
     state.updateDeclaration = { resources: [] }; assert.equal((await service('plan', { ...body, resources: {} })).status, 409); state.updateDeclaration = null;
-    const initialAgain = (await service('plan', { ...input, github, repository: 'owner/repo' })).json(); assert.equal((await submit(initialAgain)).status, 409);
+    const initialAgain = (await service('plan', { ...input, github, repository: 'owner/repo' })).json();
+    const conflict = await submit(initialAgain); assert.equal(conflict.status, 409); assert.equal(conflict.json().error, 'resource-identity-conflict');
     assert.equal(state.dispatches, 1);
   } finally { await f.close(); }
 });

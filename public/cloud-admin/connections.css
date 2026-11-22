@@ -39,7 +39,6 @@
 #resource-dialog-notice[data-tone=error] { color: var(--neuro-danger-text); }
 #resource-save { flex-shrink: 0; margin-left: auto; }
 @media (max-width: 400px) { #resource-dialog { padding: 16px; } #resource-dialog .field { grid-template-columns: 80px minmax(0, 1fr); gap: 8px; } }
-.brand-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 #resource-save:disabled { color: var(--neuro-text-muted); background: var(--neuro-surface); border-color: var(--neuro-line); }
 .account-target { color: var(--neuro-text-muted); font: 12px ui-monospace, Consolas, monospace; }
 #resource-accounts .section-heading { flex-wrap: wrap; }

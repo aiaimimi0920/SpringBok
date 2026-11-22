@@ -4,10 +4,10 @@ export function restartLabel(state) {
 }
 export async function resumePreparation(state, trigger, { request, refresh, notice, current }, restart = false) {
   const title = restart ? restartLabel(state) : '继续部署', route = restart ? 'restart' : 'resume';
-  const dialog = document.createElement('dialog'); dialog.className = 'service-dialog';
+  const dialog = document.createElement('dialog'); dialog.className = 'service-dialog'; dialog.dataset.dynamicDialog = 'true';
   dialog.setAttribute('aria-label', title);
   const heading = document.createElement('h2'); heading.textContent = title;
-  const details = document.createElement('dl'), message = document.createElement('p');
+  const details = document.createElement('dl'), message = document.createElement('p'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = '取消';
   const submit = document.createElement('button'); submit.type = 'button'; submit.className = 'primary'; submit.textContent = '确认' + title; submit.disabled = true;
   const actions = document.createElement('div'); actions.className = 'service-dialog-footer'; actions.append(cancel, submit);

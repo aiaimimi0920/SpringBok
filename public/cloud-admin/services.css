@@ -6,6 +6,7 @@
 .service-title h2 { margin: 0 0 5px; font-size: 16px; }
 .service-title p { margin: 0; font-size: 12px; }
 .service-row small { display: block; font-size: 12px; }
+.service-url { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .service-version { font-family: ui-monospace, Consolas, monospace; }
 .service-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .service-actions button { min-height: 34px; padding: 6px 10px; font-size: 12px; }

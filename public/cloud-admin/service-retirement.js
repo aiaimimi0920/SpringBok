@@ -3,11 +3,11 @@ export async function retireService(state, trigger, { request, refresh, notice, 
   if (openRetirements.has(state.instance.id)) return;
   openRetirements.add(state.instance.id);
   const dialog = document.createElement('dialog');
-  dialog.className = 'service-delete-dialog';
+  dialog.className = 'service-delete-dialog'; dialog.dataset.dynamicDialog = 'true';
   const title = document.createElement('h2'); title.textContent = '退役登记 · ' + state.instance.environment;
   const risk = document.createElement('p'); risk.textContent = '退役后将从当前服务列表移除，历史记录保留。';
-  const list = document.createElement('dl'), message = document.createElement('p'); message.setAttribute('role', 'status'); message.textContent = '正在核对资源是否已不存在';
-  const actions = document.createElement('div'); actions.className = 'dialog-actions';
+  const list = document.createElement('dl'), message = document.createElement('p'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite'); message.textContent = '正在核对资源是否已不存在';
+  const actions = document.createElement('div'); actions.className = 'service-dialog-footer';
   const close = document.createElement('button'); close.type = 'button'; close.textContent = '取消';
   const submit = document.createElement('button'); submit.type = 'button'; submit.className = 'danger'; submit.textContent = '确认退役登记'; submit.disabled = true;
   actions.append(close, submit); dialog.append(title, risk, list, message, actions); document.body.append(dialog);
@@ -15,7 +15,7 @@ export async function retireService(state, trigger, { request, refresh, notice, 
   close.addEventListener('click', () => dialog.close());
   dialog.addEventListener('cancel', event => { if (submitting) event.preventDefault(); });
   dialog.addEventListener('close', () => { review = null; openRetirements.delete(state.instance.id); dialog.remove(); if (trigger.isConnected) trigger.focus(); });
-  dialog.showModal();
+  dialog.showModal(); close.focus();
   try {
     const result = await request('/api/admin/deployments/retire-plan', { instanceId: state.instance.id, previousTaskId: state.taskId });
     if (!current()) { dialog.close(); return; }

@@ -70,7 +70,7 @@ try {
   assert.equal(await sha.inputValue(), '', 'closing clears the source draft');
 
   await page.getByRole('button', { name: '指定来源', exact: true }).click();
-  await connection.selectOption(github.id); await repository.fill('owner/repo'); await sha.fill(updatedSha);
+  await connection.selectOption(github.id); await repository.fill('  owner/repo  '); await sha.fill('  ' + updatedSha.toUpperCase() + '  ');
   await read.click(); await page.locator('#service-selection').filter({ hasText: 'v2.0.0' }).waitFor();
   await page.setViewportSize({ width: 320, height: 780 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

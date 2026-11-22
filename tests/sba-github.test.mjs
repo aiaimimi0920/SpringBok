@@ -226,3 +226,17 @@ test('recovery proof requires an exact first-attempt terminal failed run, never 
     assert.equal(calls.length, 1);
   }
 });
+
+test('findDispatchedRun resolves a unique exact first-attempt run for dispatch-unknown recovery and rejects ambiguous or tainted runs', async () => {
+  const responses = []; const { executor, calls } = client(responses);
+  const binding = await executor.prepare(request(), manifest());
+  responses.push(json({ workflow_runs: [{ ...run('other-title'), id: 29 }, { ...run(binding.title), id: 31 }] }));
+  const found = await executor.findDispatchedRun(request(), manifest());
+  assert.deepEqual(found, { status: 'dispatched', runId: 31, requestDigest: binding.requestDigest });
+  assert.equal(calls[0].url, 'https://api.github.com/repos/example/control/actions/workflows/20/runs?event=workflow_dispatch&per_page=30');
+  for (const list of [{ workflow_runs: [] }, { workflow_runs: [run(binding.title), { ...run(binding.title), id: 32 }] },
+    { workflow_runs: [{ ...run(binding.title), run_attempt: 2 }] }, { workflow_runs: [{ ...run(binding.title), head_sha: 'f'.repeat(40) }] }]) {
+    const c = client([json(list)]);
+    assert.equal(await c.executor.findDispatchedRun(request(), manifest()), null);
+  }
+});

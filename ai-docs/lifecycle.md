@@ -51,6 +51,8 @@ unknown，不允许再次恢复或新建任务绕过。已有 bootstrap、creati
 多账号、预升级、更新及需要管理员秘密的准备任务不在此恢复范围内。
 这不是新的 SBA action，不重放已经执行的应用，不删除原记录或解锁其他任务。
 
+对于 connected 的 `deploy`、`update`、`preview`、`destroy-preview` 或 `repair` 任务：若派发响应丢失进入 `dispatch-unknown`，`reconcile` 可在固定执行器工作流列表中按唯一 `sba:<taskId>:<requestDigest>` 标题、executor SHA 与 `run_attempt=1` 反查并绑定 `runId`。若任务始终未消费一次性执行许可（`permitId === null` 且零秘密交付），且 GitHub 第 1 次运行已进入终态失败（`failure` / `cancelled` / `timed_out`），原 owner 经两分钟签名确认后可为同一不可变任务重新派发（最多 3 次尝试，保留每次未执行证明与原账户执行 lane，旧 `runId` 永久隔离，已领取许可或已产出结果的任务永不进入此通道）。
+
 | 动作 | 应用必须承担的行为 |
 | --- | --- |
 | deploy | 使用确认的配置与资源进行首次部署，验证真实可用性 |

@@ -121,7 +121,8 @@ export class ConnectedDeployment extends SbaDeployment {
   recoverUnstarted(){throw new Error('connected recovery not authorized');}
   async authorizeUnstartedRestart(actor){
     const {plan}=await this.bootstrap(actor);
-    requireSba(this.env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&plan.operation?.action==='update'&&!plan.previewOf&&!plan.verificationOf);
+    requireSba(this.env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!plan.verificationOf&&
+      ['deploy','update','preview','destroy-preview','repair'].includes(plan.operation?.action??'deploy'));
   }
   recoverAuthorized(){throw new Error('connected recovery not authorized');}
 }

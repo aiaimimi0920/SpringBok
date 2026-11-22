@@ -1,7 +1,7 @@
 import { boundResources, confirmedVersion, newerVersion, resourceCountText, resourceMetrics, statusText, statusTone, valueAt } from './service-model.mjs';
 import { resourceLabels } from './resource-model.mjs';
 import { importFields, importWorkerOptions, importDraft, importReview, importedDetails } from './service-import.js';
-import { resumePreparation } from './preparation-recovery.js';
+import { resumePreparation, restartLabel } from './preparation-recovery.js';
 import { applicationSecretFields } from './service-secrets.js';
 import { applicationSourceFields } from './service-source.js';
 import { retireService } from './service-retirement.js';
@@ -152,6 +152,10 @@ function renderInstances() {
       for (const url of state?.testUrls ?? []) { const link = element('a', '测试地址'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; actions.append(link); }
       const remove = focusKey(element('button', '删除测试环境', 'danger'), id + '/delete-preview'); remove.type = 'button'; remove.disabled = !state?.canDeletePreview || !session;
       remove.addEventListener('click', () => void openDeletePreview(state, remove)); actions.append(remove);
+      if (state?.canRestart) {
+        const restart = focusKey(element('button', restartLabel(state)), id + '/resume'); restart.type = 'button'; restart.disabled = !session;
+        restart.addEventListener('click', () => { const version = generation; restart.disabled = true; void resumePreparation(state, restart, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }, true); }); actions.append(restart);
+      }
     } else {
       const update = focusKey(element('button', '升级'), id + '/update'); update.type = 'button'; update.disabled = !state?.canUpdate || !session;
       update.addEventListener('click', () => void openDialog(state, update));
@@ -179,7 +183,7 @@ function renderInstances() {
         }); actions.append(check);
       }
       if (state?.canResume || state?.canRestart) {
-        const resume = focusKey(element('button', state.canRestart ? '恢复升级' : '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
+        const resume = focusKey(element('button', state.canRestart ? restartLabel(state) : '继续部署'), id + '/resume'); resume.type = 'button'; resume.disabled = !session;
         resume.addEventListener('click', () => { const version = generation; resume.disabled = true; void resumePreparation(state, resume, { request, refresh: refreshInstances, notice, current: () => current(version) && !!session }, !!state.canRestart); }); actions.append(resume);
       }
       if(state?.canVerify){

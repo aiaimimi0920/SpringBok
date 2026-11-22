@@ -101,3 +101,42 @@ test('lost new dispatch cannot be replayed and disabling execution rejects confi
     await f.restart();assert.equal((await api('state',{taskId:next.taskId})).json().attempts.length,1);
   } finally {await f.close();}
 });
+
+test('unstarted initial deploy and lost-dispatch run discovery can recover before permit consumption without replaying executed tasks', async () => {
+  const x = await serviceFixture(), { f, service, input, github, submit, api, state, token, machine } = x;
+  try {
+    state.dispatchLost = true;
+    const first = (await service('plan', { ...input, github, repository: 'owner/repo' })).json();
+    const submitted = await submit(first); assert.equal(submitted.json().job.status, 'dispatch-unknown');
+    const prior = state.provider;
+    let runConclusion = 'cancelled', nextId = 800;
+    state.provider = async (request, context) => {
+      if (request.url.includes('/runs?event=workflow_dispatch')) {
+        return Response.json({ workflow_runs: [{ id: 456, workflow_id: state.executorWorkflowId, event: 'workflow_dispatch',
+          head_sha: state.executorSha, head_branch: `sba-executor-${state.executorSha}`, path: state.executorWorkflowPath, run_attempt: 1,
+          repository: { id: 123, full_name: 'owner/executor' }, head_repository: { id: 123, full_name: 'owner/executor' },
+          display_title: `sba:${state.request.taskId}:${state.digest}`, pull_requests: [], status: 'completed', conclusion: runConclusion }] });
+      }
+      if (/\/actions\/runs\/\d+$/.test(request.url)) {
+        const id = Number(request.url.split('/').at(-1));
+        const base = await (await prior(new Request(request.url.replace(/\/\d+$/, '/456'), request), context)).json();
+        return Response.json({ ...base, id, status: id === 456 ? 'completed' : 'in_progress', conclusion: id === 456 ? runConclusion : null });
+      }
+      if (request.url.endsWith('/dispatches')) {
+        const id = ++nextId;
+        return Response.json({ workflow_run_id: id, run_url: `https://api.github.com/repos/owner/executor/actions/runs/${id}`, html_url: `https://github.com/owner/executor/actions/runs/${id}` });
+      }
+      return prior(request, context);
+    };
+    const reconciled = (await service('service-state', { instanceId: first.taskId, reconcile: true })).json();
+    assert.equal(reconciled.job.runId, 456); assert.equal(reconciled.job.status, 'unknown'); assert.equal(reconciled.canRestart, true);
+    state.dispatchLost = false;
+    const plan = await api('restart-plan', { taskId: first.taskId }); assert.equal(plan.status, 200, plan.text);
+    const { instance: _, ...body } = plan.json();
+    const restarted = await api('restart-submit', body); assert.equal(restarted.status, 200, restarted.text);
+    assert.equal(restarted.json().job.runId, 801);
+    const permit = await machine('permit', { headers: { authorization: `Bearer ${token({ run_id: '801' })}`, 'content-type': 'application/json' } });
+    assert.equal(permit.status, 200);
+    assert.equal((await api('restart-plan', { taskId: first.taskId })).status, 409, 'consumed permit can never restart');
+  } finally { await f.close(); }
+});

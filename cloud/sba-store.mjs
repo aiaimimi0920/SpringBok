@@ -131,7 +131,7 @@ export class SbaDeployment extends DurableObject {
     return this.#run(actor, async (job, _save, policy) => {
       exactSba(proof, ['runId', 'requestDigest', 'executorSha', 'conclusion', 'verifiedAt']);
       if (!job || job.runId !== proof.runId || !['dispatched', 'unknown'].includes(job.status)) return null;
-      requireSba(job && job.request.action === 'update' && ['dispatched', 'unknown'].includes(job.status) &&
+      requireSba(job && ['deploy', 'update', 'preview', 'destroy-preview', 'repair'].includes(job.request.action) && ['dispatched', 'unknown'].includes(job.status) &&
         job.permitId === null && job.permitAt === null && job.resultDeadline === null && job.result === null &&
         id(job.runId) && proof.runId === job.runId && proof.requestDigest === job.requestDigest &&
         proof.executorSha === policy.github.executorSha && ['failure', 'cancelled', 'timed_out'].includes(proof.conclusion) &&

@@ -67,11 +67,21 @@ export async function connectedState(env,owner,taskId,reconcile=false){
     return {taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null};
   }
   const policy=record.plan.policy;
-  if(reconcile){const job=await stub.inspect(owner);if(job?.status==='running'||missingDeadlineReceipt(job)){
-    const outcome=await recoverSbaReceipt(policy.github,job,{token:env.SBA_GITHUB_TOKEN});
-    if(outcome.status==='verified-receipt')await stub.settle(owner,outcome.envelope);
-    else if(outcome.status==='unknown')await stub.markUnknown(owner,taskId);
-  }}
+  if(reconcile){
+    let job=await stub.inspect(owner);
+    if(job?.status==='dispatch-unknown'&&job.runId===null&&job.permitId===null){
+      const found=await createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN}).findDispatchedRun(job.request,job.manifest);
+      if(found){await stub.attachRun(owner,taskId,found);job=await stub.inspect(owner);}
+    }
+    if(job?.status==='dispatched'&&job.permitId===null&&job.runId!==null){
+      try{await createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN}).inspectUnstartedRun(job.runId,job.request,job.manifest);await stub.markUnknown(owner,taskId);}
+      catch{/* Still queued/running or transient read failure; wait for permit or deadline. */}
+    }else if(job?.status==='running'||missingDeadlineReceipt(job)){
+      const outcome=await recoverSbaReceipt(policy.github,job,{token:env.SBA_GITHUB_TOKEN});
+      if(outcome.status==='verified-receipt')await stub.settle(owner,outcome.envelope);
+      else if(outcome.status==='unknown')await stub.markUnknown(owner,taskId);
+    }
+  }
   const snapshot=await stub.snapshot(owner);
   if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(snapshot.job?.status)){
     const index=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);

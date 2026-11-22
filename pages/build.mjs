@@ -11,17 +11,21 @@ export function safeHref(value) {
   if (/^[a-z][a-z0-9-]*\.html(?:#[a-z0-9-]+)?$/.test(value) || /^#[a-z0-9-]+$/.test(value)) return value;
   throw new Error('Unsupported documentation link: ' + value);
 }
-function inline(text) {
+function inline(text, linkMap = new Map()) {
   const tokens = /(`[^`]+`|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*)/g;
   return text.split(tokens).map(part => {
     if (part.startsWith('`') && part.endsWith('`')) return '<code>' + escapeHtml(part.slice(1, -1)) + '</code>';
     const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(part);
-    if (link) return `<a href="${escapeHtml(safeHref(link[2].replace(/\.md$/, '.html')))}">${escapeHtml(link[1])}</a>`;
+    if (link) {
+      const md = /^([a-z][a-z0-9-]*)\.md(#[a-z0-9-]+)?$/.exec(link[2]);
+      const resolved = md ? `${linkMap.get(md[1] + '.md') ?? md[1]}.html${md[2] ?? ''}` : link[2];
+      return `<a href="${escapeHtml(safeHref(resolved))}">${escapeHtml(link[1])}</a>`;
+    }
     if (part.startsWith('**') && part.endsWith('**')) return '<strong>' + escapeHtml(part.slice(2, -2)) + '</strong>';
     return escapeHtml(part);
   }).join('');
 }
-export function renderMarkdown(source) {
+export function renderMarkdown(source, linkMap = new Map()) {
   const lines = source.replaceAll('\r\n', '\n').split('\n');
   let html = '', index = 0, heading = 0, titleCount = 0;
   const toc = [];
@@ -42,25 +46,29 @@ export function renderMarkdown(source) {
     if (h) {
       const level = h[1].length, id = `section-${++heading}`;
       if (level === 1) titleCount++;
-      else toc.push({ id, title: h[2], level });
-      html += `<h${level} id="${id}">${inline(h[2])}</h${level}>`; index++; continue;
+      else toc.push({ id, title: h[2].replaceAll('`', ''), level });
+      html += `<h${level} id="${id}">${inline(h[2], linkMap)}</h${level}>`; index++; continue;
     }
     if (line.startsWith('|')) {
       const rows = [];
-      while (index < lines.length && lines[index].startsWith('|')) rows.push(lines[index++].slice(1, -1).split('|').map(v => v.trim()));
+      while (index < lines.length && lines[index].startsWith('|')) rows.push(lines[index++].slice(1, -1).split(/(?<!\\)\|/).map(v => v.replaceAll('\\|', '|').trim()));
       if (rows.length < 2 || !rows[1].every(v => /^:?-{3,}:?$/.test(v))) throw new Error('Invalid Markdown table');
       const width = rows[0].length;
       if (rows.some(row => row.length !== width)) throw new Error('Inconsistent table columns');
-      html += `<div class="table-scroll" role="region" aria-label="参考表格" tabindex="0"><table><thead><tr>${rows[0].map(v => `<th scope="col">${inline(v)}</th>`).join('')}</tr></thead><tbody>${rows.slice(2).map(row => '<tr>' + row.map(v => `<td>${inline(v)}</td>`).join('') + '</tr>').join('')}</tbody></table></div>`;
+      html += `<div class="table-scroll" role="region" aria-label="参考表格" tabindex="0"><table><thead><tr>${rows[0].map(v => `<th scope="col">${inline(v, linkMap)}</th>`).join('')}</tr></thead><tbody>${rows.slice(2).map(row => '<tr>' + row.map(v => `<td>${inline(v, linkMap)}</td>`).join('') + '</tr>').join('')}</tbody></table></div>`;
       continue;
     }
     if (/^(?:- |\d+\. )/.test(line)) {
       const ordered = /^\d/.test(line), pattern = ordered ? /^\d+\. / : /^- /, tag = ordered ? 'ol' : 'ul';
       const items = [];
       while (index < lines.length && pattern.test(lines[index])) items.push(lines[index++].replace(pattern, ''));
-      html += `<${tag}>${items.map(v => `<li>${inline(v)}</li>`).join('')}</${tag}>`; continue;
+      html += `<${tag}>${items.map(v => `<li>${inline(v, linkMap)}</li>`).join('')}</${tag}>`; continue;
     }
-    html += '<p>' + inline(line) + '</p>'; index++;
+    const paragraph = [];
+    while (index < lines.length && lines[index].trim() && !lines[index].startsWith('```') && !/^(?:#{1,3} |\||- |\d+\. )/.test(lines[index])) {
+      paragraph.push(lines[index++]);
+    }
+    html += '<p>' + inline(paragraph.join('\n'), linkMap) + '</p>';
   }
   if (titleCount !== 1) throw new Error('Each page must have exactly one H1');
   return { html, toc };
@@ -95,18 +103,26 @@ export async function build(output) {
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   await checkExample();
   const config = JSON.parse(await readFile(resolve(root, 'pages/site.json'), 'utf8'));
-  const ids = new Set();
+  const ids = new Set(), linkMap = new Map();
   for (const p of config.pages) {
     if (!/^[a-z][a-z0-9-]*$/.test(p.id) || ids.has(p.id)) throw new Error('Invalid page id');
     ids.add(p.id);
+    linkMap.set(p.source.split('/').at(-1), p.id);
   }
+  const renderedPages = [];
+  for (const page of config.pages) renderedPages.push({ page, rendered: renderMarkdown(await sourceFor(page), linkMap) });
+  const byId = new Map(renderedPages.map(({ page, rendered }) => [page.id, rendered]));
   const documents = [];
-  for (const page of config.pages) {
-    const rendered = renderMarkdown(await sourceFor(page));
+  for (const { page, rendered } of renderedPages) {
     for (const [, href] of rendered.html.matchAll(/href="([^"]+)"/g)) {
-      if (/^[a-z][a-z0-9-]*\.html$/.test(href) && !ids.has(href.slice(0, -5))) throw new Error('Broken internal link ' + href);
+      const local = /^([a-z][a-z0-9-]*)\.html(?:#([a-z0-9-]+))?$/.exec(href);
+      if (local && (!ids.has(local[1]) || (local[2] && !byId.get(local[1])?.html.includes(`id="${local[2]}"`)))) throw new Error('Broken internal link ' + href);
     }
-    const nav = config.pages.map(p => `<a href="${p.id}.html"${p.id === page.id ? ' aria-current="page"' : ''}><span>${escapeHtml(p.title)}</span></a>`).join('');
+    let lastGroup = null;
+    const nav = config.pages.map(p => {
+      const heading = p.group && p.group !== lastGroup ? `<p class="nav-group">${escapeHtml(lastGroup = p.group)}</p>` : '';
+      return `${heading}<a href="${p.id}.html"${p.id === page.id ? ' aria-current="page"' : ''}><span>${escapeHtml(p.title)}</span></a>`;
+    }).join('');
     const toc = rendered.toc.map(h => `<a href="#${h.id}" class="level-${h.level}">${escapeHtml(h.title)}</a>`).join('');
     const position = config.pages.indexOf(page), next = config.pages[position + 1];
     documents.push([page.id + '.html', `<!doctype html>

@@ -33,6 +33,10 @@ test('disk filters pseudo, unsupported and subtree binds before touching paths; 
   assert.deepEqual(called, ['/']); assert.equal(result.status, 'available'); assert.equal(result.mounts.length, 1);
   assert.deepEqual(result.filtered, { pseudo: 2, unsupported: 3, subtree: 2, unsafeTopology: 0 });
   assert.equal(isDiskSample(result), true); assert.ok(!JSON.stringify(result).includes('private'));
+  const btrfsRoot = row(1, 99, '/', 'btrfs', '/@') + row(2, 1, '/home', 'btrfs', '/@home');
+  const btrfsCalled = [], btrfsResult = await sample({ readInfo: async () => btrfsRoot, readStats: async () => stats({ type: 0x9123683en }), verifyPath: async path => btrfsCalled.push(path) });
+  assert.deepEqual(btrfsCalled, ['/']); assert.equal(btrfsResult.status, 'available'); assert.equal(btrfsResult.mounts.length, 1);
+  assert.equal(btrfsResult.filtered.subtree, 1);
 });
 
 test('disk fails closed on stacked/hidden mounts, unsafe path ancestors, parent cycles or missing namespace root', async () => {

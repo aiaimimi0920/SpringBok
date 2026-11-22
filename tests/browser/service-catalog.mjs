@@ -48,8 +48,9 @@ try {
   await page.getByRole('button', { name: '保存服务名称', exact: true }).click(); await waitSaved();
   await f.restart(); await page.reload(); await waitReady();
   assert.equal(await rows.first().getAttribute('data-service-id'), serviceId); assert.equal(await rows.first().locator('strong').textContent(), '网关服务');
-  mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/service-catalog-synthetic-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: `${evidenceDir}/service-catalog-synthetic-desktop.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.getByRole('button', { name: '归档服务条目', exact: true }).click(); await waitSaved();
@@ -71,7 +72,7 @@ try {
   changeBetweenReads = true; await page.locator('#catalog-refresh').click(); await page.getByText(/目录未确认/).waitFor();
   assert.equal(await page.locator('#service-add').isEnabled(), false); assert.equal(await page.locator('#server-add').isEnabled(), false);
   await page.locator('#catalog-refresh').click(); await waitReady();
-  await page.screenshot({ path: 'test-results/service-catalog-synthetic-mobile.png', fullPage: true });
+  await page.screenshot({ path: `${evidenceDir}/service-catalog-synthetic-mobile.png`, fullPage: true });
   holdRead = true; await page.locator('#catalog-refresh').click();
   const until = Date.now() + 10000; while (!releaseRead && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
   assert.ok(releaseRead); token = f.jwt({ sub: 'other-owner' }); await page.locator('#refresh').click(); await waitReady(); releaseRead();

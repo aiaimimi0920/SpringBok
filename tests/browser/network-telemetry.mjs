@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { adminFixture, origin } from '../cloud/admin-fixture.mjs';
 import { telemetryFlags, telemetryOptions, telemetryNode, telemetrySample, telemetryRpc, cpu, memory, disk, network } from '../cloud/telemetry-helper.mjs';
 
@@ -36,7 +37,8 @@ try {
   await panel(b).getByText(/接口 eth0；接收 0.03 bytes\/s；发送 10.00 bytes\/s；窗口接收 1 bytes.*陈旧/).waitFor();
   await panel(legacy).getByText(/网络未上报.*旧客户端/).waitFor();
   for (const n of nodes) assert.equal(requests.filter(r => r.path === n.path).length, 1);
-  mkdirSync('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/node-network-synthetic-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true }); await page.screenshot({ path: join(evidenceDir, 'node-network-synthetic-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   for (const reason of ['warming-up', 'context-changed', 'interface-set-changed']) {
     await refresh(v => { v.sample.network = unknown(reason); }); await panel(a).getByText(new RegExp(`网络：采集未知.*${reason}`)).waitFor(); await panel(a).getByText(/数值未知/).waitFor(); assert.equal((await panel(a).textContent()).includes('接收 0.00 bytes/s'), false);
@@ -49,9 +51,9 @@ try {
   }
   await refresh(v => { v.sample.network = network(300); v.sample.network.status = 'partial'; v.sample.network.reason = 'interface-unavailable'; v.sample.network.interfaces.push({ ...unknown('warming-up').interfaces[0], name: 'lo', reason: 'counter-regressed' }); });
   await panel(a).getByText(/网络：部分采集未知/).waitFor(); await panel(a).getByText(/接口 eth0；接收 10.00 bytes\/s/).waitFor(); await panel(a).getByText(/接口 lo；采集未知；counter-regressed/).waitFor();
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'test-results/node-network-synthetic-mobile-partial.png', fullPage: true });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: join(evidenceDir, 'node-network-synthetic-mobile-partial.png'), fullPage: true });
   await refresh(v => { const n = network(); n.intervalMs = Number.MAX_SAFE_INTEGER / 1000000; n.interfaces[0] = { ...n.interfaces[0], name: 'eth012345678901', rxBytes: Number.MAX_SAFE_INTEGER, txBytes: Number.MAX_SAFE_INTEGER, rxBytesPerSecond: 1000000000, txBytesPerSecond: 1000000000 }; v.sample.network = n; });
-  await panel(a).getByText(/9007199254740991 bytes/).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: 'test-results/node-network-synthetic-mobile-extreme.png', fullPage: true });
+  await panel(a).getByText(/9007199254740991 bytes/).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); await page.screenshot({ path: join(evidenceDir, 'node-network-synthetic-mobile-extreme.png'), fullPage: true });
   for (const field of ['cpu', 'memory', 'disk']) { await refresh(v => { v.sample[field] = null; }); await panel(a).getByText(/接口 eth0；接收 0.00 bytes\/s/).waitFor(); }
   await refresh(); await panel(a).getByText(/网络：采集可用.*最近已接收/).waitFor();
   await page.clock.fastForward(30001); await panel(a).getByText(/网络快照已过期/).waitFor(); assert.equal((await panel(a).textContent()).includes('bytes/s'), false);

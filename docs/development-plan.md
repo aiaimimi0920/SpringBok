@@ -6,8 +6,8 @@
 
 ## 当前任务
 
-**OPT-07：应用接入能力增强（多行业务秘密与显式轮换、公开配置键名去误杀、无自定义域名预升级与原生 `.mjs` 入口）；负责人：主 AI。**
-将业务秘密单值上限扩展至 16 KiB UTF-8 并支持多行 PEM/JWK 文本、可选档案备注名 `label` 及升级时显式 `rotateApplicationSecrets: true` 轮换（默认仍拒绝隐式替换）；消除部署配置敏感键正则对 `tokenEndpoint`/`passwordPolicy` 等公开元数据字段的误杀；允许仅含 `worker`/`pages` 目标而无自定义 `domain` 目标的 v2 服务发起隔离预升级；在 SBA 合同与执行器中支持原生 `.mjs` 入口与解释器探测进程内缓存。OPT-01～OPT-06 已推送分支待创建 PR / 待合并。
+**OPT-08：外部节点采集与账本优化、Pages 文档构建增强及 CI/测试流水线加固；负责人：主 AI。**
+支持 Linux Btrfs 子卷根挂载（`/@`）容量采集并在默认 30s 采集循环中消除系统定时器提前唤醒抖动；对未变更节点账本跳过只读心跳的 O(N) SHA-256 重复计算（保持内部 probe 账本 100 条边界与篡改必拒不变式）；增强 `pages/build.mjs` 支持跨文件 `#anchor` 链接、`site.json` 源映射、转义竖线表格、连续行合并单 `<p>` 与侧栏分组标题，移除文档测试中的明文个人标识字面量；补齐浏览器截图目录环境变量、将 `local-neuro-ui.mjs` 纳入浏览器工作流、启用 CI npm 依赖缓存、在 `admin-fixture.mjs` 进程级复用合成 RSA 密钥对与打包脚本，并新增 `tests/cloud/package.json` 用例完整性基线校验。OPT-01～OPT-07 已推送分支待创建 PR / 待合并。
 
 ## 1. 产品范围
 

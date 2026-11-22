@@ -31,10 +31,11 @@ try {
   await page.getByRole('button', { name: '刷新记录', exact: true }).click(); holdPreview(); blockPreview = false;
   await page.getByText('记录已刷新', { exact: true }).waitFor(); assert.equal(await page.locator('#confirm').isVisible(), false);
   await start.click(); await page.getByRole('dialog', { name: '确认固定测试计划' }).waitFor();
-  mkdirSync('test-results', { recursive: true }); await page.screenshot({ path: 'test-results/cloud-admin-synthetic-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true }); await page.screenshot({ path: `${evidenceDir}/cloud-admin-synthetic-desktop.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/cloud-admin-synthetic-mobile.png', fullPage: true });
+  await page.screenshot({ path: `${evidenceDir}/cloud-admin-synthetic-mobile.png`, fullPage: true });
   await page.getByRole('button', { name: '确认执行', exact: true }).evaluate(button => { button.click(); button.click(); });
   await page.getByText(/已提交 .*请刷新查看节点回执/).waitFor(); assert.equal(requests.filter(r => r.path === '/api/admin/submit').length, 1);
   await page.reload(); await page.getByText(/等待节点领取/).waitFor(); assert.equal(await start.isEnabled(), false);
@@ -54,9 +55,9 @@ try {
   await page.getByText(/rollback-v1：healthy/).waitFor();
   assert.equal(await start.isEnabled(), false);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'test-results/cloud-admin-synthetic-receipts-mobile.png', fullPage: true });
+  await page.screenshot({ path: `${evidenceDir}/cloud-admin-synthetic-receipts-mobile.png`, fullPage: true });
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await page.screenshot({ path: 'test-results/cloud-admin-synthetic-receipts-desktop.png', fullPage: true });
+  await page.screenshot({ path: `${evidenceDir}/cloud-admin-synthetic-receipts-desktop.png`, fullPage: true });
   console.log('PASS synthetic Access identity in real workerd + Chrome: protected assets, cancel/escape/back/stale preview, one submit, refresh persistence, mobile and four-stage receipt rendering (simulated Komodo)');
 } finally { bridge?.close(); executor?.close(); await browser?.close(); await f.close(); rmSync(directory, { recursive: true, force: true }); }
 

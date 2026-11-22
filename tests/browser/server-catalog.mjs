@@ -43,8 +43,9 @@ try {
   await page.getByRole('button', { name: '保存名称', exact: true }).click(); await waitSaved();
   assert.equal(await rows.first().getAttribute('data-server-id'), id);
   assert.equal(await rows.first().locator('strong').textContent(), '主服务器');
-  mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/server-catalog-synthetic-desktop.png', fullPage: true });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: `${evidenceDir}/server-catalog-synthetic-desktop.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.getByRole('button', { name: '归档条目', exact: true }).click(); await waitSaved();
@@ -62,7 +63,7 @@ try {
   await page.getByLabel('新服务器名称', { exact: true }).fill('回执丢失'); await page.locator('#server-add').click();
   await page.getByText(/请求 [a-f0-9-]{36}/).waitFor(); assert.equal(await page.locator('#server-add').isEnabled(), false);
   const writes = posts(); await page.reload(); await waitReady(); assert.equal(posts(), writes); assert.equal(await rows.count(), 3);
-  await page.screenshot({ path: 'test-results/server-catalog-synthetic-mobile.png', fullPage: true });
+  await page.screenshot({ path: `${evidenceDir}/server-catalog-synthetic-mobile.png`, fullPage: true });
   // 身份切换时忽略之前 owner 的迟到响应，不保留旧目录或本地凭据。
   holdRead = true; await page.locator('#catalog-refresh').click();
   const until = Date.now() + 10000; while (!releaseRead && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));

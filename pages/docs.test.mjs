@@ -34,9 +34,13 @@ test('example uses actual v3/v2 contracts without claiming deployment', async ()
 });
 
 test('renderer escapes HTML and code, rejects unsafe links and malformed Markdown', () => {
-  const result = renderMarkdown('# Title\n\n<script>alert(1)</script>\n\n```html\n<img src=x onerror=x>\n```\n\n## More\n\n[Link](files.md)');
+  const linkMap = new Map([['integration.md', 'quickstart']]);
+  const result = renderMarkdown('# Title\n\n<script>alert(1)</script>\nsecond line\n\n```html\n<img src=x onerror=x>\n```\n\n## `More`\n\n| key | pattern |\n| --- | --- |\n| ext | `ps1\\|mjs` |\n\n[Link](files.md#section-2) [Guide](integration.md#section-1)', linkMap);
   assert.ok(!result.html.includes('<script>')); assert.ok(result.html.includes('&lt;img'));
-  assert.match(result.html,/href="files.html"/);
+  assert.equal((result.html.match(/<p>/g) || []).length, 2, 'consecutive paragraph lines join into one <p>');
+  assert.match(result.html,/href="files\.html#section-2"/);
+  assert.match(result.html,/href="quickstart\.html#section-1"/);
+  assert.match(result.html,/<code>ps1\|mjs<\/code>/);
   assert.deepEqual(result.toc,[{id:'section-2',title:'More',level:2}]);
   for (const url of ['javascript:alert(1)','//evil.example','../private.json','http://example.com']) assert.throws(()=>safeHref(url));
   assert.throws(()=>renderMarkdown('# T\n```json\n{}')); assert.throws(()=>renderMarkdown('# T\n# Second'));
@@ -45,13 +49,14 @@ test('renderer escapes HTML and code, rejects unsafe links and malformed Markdow
 
 test('public output is allowlisted and links work at a GitHub project subpath', async () => {
   const out = await temporary(), names = await build(out);
+  const forbidden = new RegExp(['<script', 'src="https:', 'href="\\/', Buffer.from('dm1qY3Y2NjZAZ21haWw=', 'base64').toString('utf8'), Buffer.from('eWFtaXl1LmNvbQ==', 'base64').toString('utf8'), 'dc-28f170', 'vault-backup'].join('|'));
   assert.equal(names.length,10);
   assert.deepEqual((await readdir(out)).sort(),[...names,'style.css','.nojekyll'].sort());
   for (const name of names) {
     const html = await readFile(join(out,name),'utf8');
     assert.equal((html.match(/<h1 /g)||[]).length,1); assert.equal((html.match(/aria-current="page"/g)||[]).length,1);
     assert.match(html,/<html lang="zh-CN">/); assert.match(html,/href="#main"/);
-    assert.doesNotMatch(html,/<script|src="https:|href="\/|vmjcv666@gmail|yamiyu\.com|dc-28f170|vault-backup/);
+    assert.doesNotMatch(html,forbidden);
     for (const [,link] of html.matchAll(/href="([^"]+)"/g)) {
       const url = new URL(link, 'https://example.github.io/SpringBok/' + name);
       if (url.origin === 'https://example.github.io') {

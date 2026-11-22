@@ -102,12 +102,13 @@ try {
   await preview.getByLabel('计划操作', { exact: true }).selectOption('promote');
   await check(preview, '目标配置尚未准备：此预览不会写入部署配置');
   assert.deepEqual(errors, []);
-  mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/demo-desktop.png', fullPage: true });
-  await preview.screenshot({ path: 'test-results/plan-desktop.png' });
+  const evidenceDir = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: join(evidenceDir, 'demo-desktop.png'), fullPage: true });
+  await preview.screenshot({ path: join(evidenceDir, 'plan-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: 'test-results/demo-mobile.png', fullPage: true });
-  await preview.screenshot({ path: 'test-results/plan-mobile.png' });
+  await page.screenshot({ path: join(evidenceDir, 'demo-mobile.png'), fullPage: true });
+  await preview.screenshot({ path: join(evidenceDir, 'plan-mobile.png') });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   console.log('PASS: real Chrome UI, four cards, keyboard acceptance, failure/retry, v1/v2/rollback, reload/restart, stale session/tab, repeated click, read-only plan preview/unknown/rollback/stale responses, mobile layout');
 } finally {

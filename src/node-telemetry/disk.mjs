@@ -83,7 +83,7 @@ export function selectDiskMounts(entries) {
   for (const entry of entries) {
     if (PSEUDO.has(entry.fsType)) filtered.pseudo++;
     else if (!TYPES.has(entry.fsType)) filtered.unsupported++;
-    else if (entry.root !== '/') filtered.subtree++; // 首版不重复统计 bind/subvolume 子树或 file bind。
+    else if (entry.root !== '/' && !(entry.fsType === 'btrfs' && entry.mountPoint === '/')) filtered.subtree++; // 兼容 Btrfs 子卷根挂载（如 /@），不重复统计其他 bind/subvolume 子树。
     else if (!safe(entry)) filtered.unsafeTopology++;
     else mounts.push(entry);
   }

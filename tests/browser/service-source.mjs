@@ -74,10 +74,11 @@ try {
   await read.click(); await page.locator('#service-selection').filter({ hasText: 'v2.0.0' }).waitFor();
   await page.setViewportSize({ width: 320, height: 780 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/service-source-synthetic-mobile.png', fullPage: true });
+  const directory = process.env.UI_EVIDENCE_DIR ?? 'test-results';
+  mkdirSync(directory, { recursive: true });
+  await page.screenshot({ path: `${directory}/service-source-synthetic-mobile.png`, fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({ path: 'test-results/service-source-synthetic-desktop.png', fullPage: true });
+  await page.screenshot({ path: `${directory}/service-source-synthetic-desktop.png`, fullPage: true });
   auth.token = suite.f.jwt({ email: 'denied@example.invalid' });
   await read.click(); await page.locator('#service-notice').filter({ hasText: '身份验证失败' }).waitFor();
   assert.equal(await page.locator('#service-dialog').isVisible(), false);

@@ -110,21 +110,27 @@ export class SbaDeployment extends DurableObject {
   #write(job) { this.ctx.storage.transactionSync(() => this.ctx.storage.sql.exec('UPDATE sba_deployment SET state=? WHERE id=1', JSON.stringify(job))); }
   snapshot(actor) { return this.#run(actor, (job, _save, _policy, history) => ({ ...sbaSummary(job), ...(history.length ? { history } : {}) })); }
   inspect(actor) { return this.#run(actor, job => job); }
-  authorizeUnstartedRestart() { throw new Error('restart not authorized'); }
-  unstartedAttempts(actor) {
-    return this.#run(actor, async job => {
-      const sql = this.ctx.storage.sql;
-      if (!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='sba_unstarted_attempts'").toArray().length) return [];
-      const rows = sql.exec('SELECT * FROM sba_unstarted_attempts ORDER BY rowid').toArray();
-      requireSba(rows.length <= 3);
-      return Promise.all(rows.map(async row => {
-        const record = JSON.parse(row.record);
-        requireSba(await sbaDigest(record) === row.digest && record.job.requestDigest === job.requestDigest &&
-          record.job.runId === row.run_id && record.job.permitId === null && record.job.result === null);
-        return { job: sbaSummary(record.job).job, proof: record.proof, outcome: 'not-executed' };
-      }));
-    });
+  async #readAttempts(job) {
+    const sql = this.ctx.storage.sql;
+    if (!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='sba_unstarted_attempts'").toArray().length) return [];
+    const rows = sql.exec('SELECT * FROM sba_unstarted_attempts ORDER BY rowid').toArray();
+    requireSba(rows.length <= 3);
+    return Promise.all(rows.map(async row => {
+      const record = JSON.parse(row.record);
+      requireSba(await sbaDigest(record) === row.digest && record.job.requestDigest === job.requestDigest &&
+        record.job.runId === row.run_id && record.job.permitId === null && record.job.result === null);
+      return { job: sbaSummary(record.job).job, proof: record.proof, outcome: 'not-executed' };
+    }));
   }
+  inspectBundle(actor) {
+    return this.#run(actor, async (job, _save, _policy, history) => ({
+      job,
+      snapshot: { ...sbaSummary(job), ...(history.length ? { history } : {}) },
+      attempts: await this.#readAttempts(job),
+    }));
+  }
+  authorizeUnstartedRestart() { throw new Error('restart not authorized'); }
+  unstartedAttempts(actor) { return this.#run(actor, job => this.#readAttempts(job)); }
   async restartUnstarted(actor, proof) {
     requireSba(typeof actor === 'string' && /^[a-f0-9]{64}$/.test(actor));
     await this.authorizeUnstartedRestart(actor);

@@ -5,7 +5,7 @@
   "workers_dev": false,
   "preview_urls": false,
   "routes": [{ "pattern": "springbok-test.aiaimimi.com", "custom_domain": true }],
-  "limits": { "cpu_ms": 10 },
+  "limits": { "cpu_ms": 1000 },
   "vars": {
     "ENABLE_PROTOCOL_TEST": "no",
     "ENABLE_FIXTURE_CYCLE": "no",

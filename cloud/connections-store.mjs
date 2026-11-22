@@ -147,12 +147,12 @@ export class ConnectionVault extends DurableObject {
       this.importGuard(owner); const sql = this.ctx.storage.sql, saved = sql.exec('SELECT record FROM service_imports WHERE id=?', candidate.id).toArray()[0];
       if (saved) { const prior = JSON.parse(saved.record); requireSba(sameImport(prior.candidate, candidate) && prior.candidate.instance.application.id === candidate.instance.application.id && prior.candidate.instance.application.repository === candidate.instance.application.repository); return prior; }
       if (candidate.instance.connections) for (const ref of Object.values(candidate.instance.connections)) this.activeConnection(ref.id, ref.revision);
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM service_imports').one().n < 128);
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM service_imports').one().n < 1024);
       const record = { id: candidate.id, candidate, createdAt: Date.now() };
       sql.exec('INSERT INTO service_imports VALUES(?,?)', record.id, JSON.stringify(record)); return record;
     });
   }
-  async deploymentDraft(owner, raw) {
+  async deploymentDraft(owner, raw, preloadedApplication = null) {
     if (raw?.instance?.id || raw?.instanceId) assertNotDeleting(this, owner, raw.instance?.id ?? raw.instanceId);
     if (raw?.action === 'repair') {
       this.ctx.storage.transactionSync(() => this.resourceGuard(owner));
@@ -165,7 +165,8 @@ export class ConnectionVault extends DurableObject {
     const input=deploymentInput(raw);this.ctx.storage.transactionSync(()=>this.resourceGuard(owner));
     const {row:github,sealed}=this.activeConnection(input.github.id,input.github.revision);requireSba(github.provider==='github');
     const repository=applicationRepository(github,input.repository);
-    const application=await readApplication(this.env,repository,input.sourceSha,await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,github,sealed));
+    if(preloadedApplication)requireSba(preloadedApplication.repository===repository&&preloadedApplication.sourceSha===input.sourceSha);
+    const application=preloadedApplication??await readApplication(this.env,repository,input.sourceSha,await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,github,sealed));
     const {manifest,declaration}=application;
     this.activeConnection(github.id,github.revision);
     if(input.action==='application')return application;
@@ -212,10 +213,45 @@ export class ConnectionVault extends DurableObject {
       reserveBootstrap(this,owner,taskId,plan);
       reserveApplicationSecrets(this,owner,taskId,plan);
       if(createsResources(plan)){requireSba(this.resourceCapacity()+Object.keys(plan.resources).length<=128);record.preparation={phase:'reserved',intent:plan,resources:{}};}
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<128);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_deployments').one().n<4096);sql.exec('INSERT INTO connection_deployments VALUES(?,?)',taskId,JSON.stringify(record));return record;
     });
   }
   deploymentIndex(owner){return this.ctx.storage.transactionSync(()=>{this.deploymentGuard(owner);return this.ctx.storage.sql.exec('SELECT record FROM connection_deployments ORDER BY rowid DESC').toArray().map(r=>JSON.parse(r.record));});}
+  markPreviewDeleted(owner,instanceId){
+    connectedTaskId(instanceId);
+    return this.ctx.storage.transactionSync(()=>{
+      this.deploymentGuard(owner);
+      this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS preview_deleted_instances (instance TEXT PRIMARY KEY,deleted_at INTEGER NOT NULL)');
+      this.ctx.storage.sql.exec('INSERT OR IGNORE INTO preview_deleted_instances VALUES(?,?)',instanceId,Date.now());
+    });
+  }
+  deletedInstanceIds(owner){
+    return this.ctx.storage.transactionSync(()=>{
+      this.guard(owner);const sql=this.ctx.storage.sql,ids=[];
+      if(sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='service_deletions'").toArray().length){
+        for(const row of sql.exec('SELECT instance,record FROM service_deletions').toArray())if(JSON.parse(row.record).status==='deleted')ids.push(row.instance);
+      }
+      if(sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='preview_deleted_instances'").toArray().length){
+        for(const row of sql.exec('SELECT instance FROM preview_deleted_instances').toArray())ids.push(row.instance);
+      }
+      return ids;
+    });
+  }
+  serviceIndexData(owner){
+    return this.ctx.storage.transactionSync(()=>{
+      const deployments=this.deploymentIndex(owner),retired=this.retirementIndex(owner),deleted=this.deletedInstanceIds(owner),imported=this.importedIndex(owner);
+      return {deployments,excluded:[...new Set([...retired.map(row=>row.instanceId),...deleted])],imported};
+    });
+  }
+  serviceLookup(owner,instanceId){
+    return this.ctx.storage.transactionSync(()=>{
+      this.guard(owner);const isImported=importedId(instanceId);
+      if(!isImported)connectedTaskId(instanceId);
+      const imported=isImported?this.importedIndex(owner).find(row=>row.id===instanceId)??null:null;
+      const entries=isImported?[]:serviceEntries(this.deploymentIndex(owner),instanceId);
+      return {imported,entries,retirement:retirementRecord(this,owner,instanceId),deletion:deletionRecord(this,owner,instanceId)};
+    });
+  }
   deploymentCancellation(owner,taskId){
     ownerId(owner);connectedTaskId(taskId);const sql=this.ctx.storage.sql;
     requireSba(sql.exec('SELECT owner FROM connection_owner WHERE id=1').one().owner===owner);
@@ -235,7 +271,7 @@ export class ConnectionVault extends DurableObject {
       const prior=this.deploymentCancellation(owner,identity.taskId);
       if(prior){requireSba(sameCancellation(prior,identity));return prior;}
       sql.exec('CREATE TABLE IF NOT EXISTS connection_cancelled_deployments (task TEXT PRIMARY KEY,record TEXT NOT NULL)');
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_cancelled_deployments').one().n<32);
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM connection_cancelled_deployments').one().n<512);
       const record={...identity,cancelledAt:Date.now()};
       sql.exec('INSERT INTO connection_cancelled_deployments VALUES(?,?)',identity.taskId,JSON.stringify(record));return record;
     });

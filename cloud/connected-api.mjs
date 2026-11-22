@@ -11,6 +11,7 @@ import { continuesInstance, createsResources } from './service-preview.mjs';
 import { deploymentIdentities, legacyIdentities } from './deployment-ownership.mjs';
 import { sbaDiagnosticHeaders } from '../src/sba/diagnostics.mjs';
 import { missingDeadlineReceipt } from './late-receipt.mjs';
+import { repairedCleanup } from '../src/sba/cleanup-repair.mjs';
 export const connectedEnabled=env=>env.ENABLE_CONNECTED_DEPLOYMENTS==='yes'&&!!env.CONNECTED_TASKS&&!!env.DEPLOYMENT_LOCKS;
 const vaultFor=(env,owner)=>env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${owner}`));
 const reply=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
@@ -60,33 +61,42 @@ export async function executeReserved(env,owner,taskId,plan,reservation,recovery
   const outcome=await executor.dispatch(request,plan.application.manifest);
   return {...await stub.attachRun(owner,taskId,outcome),taskId};
 }
-export async function connectedState(env,owner,taskId,reconcile=false){
-  connectedTaskId(taskId);const stub=connectedStub(env,taskId);let record;
-  try{record=await stub.bootstrap(owner);}catch{
-    const entry=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(entry);
-    return {taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null};
+export async function connectedStateBundle(env,owner,taskId,reconcile=false,fallbackEntry=undefined){
+  connectedTaskId(taskId);const stub=connectedStub(env,taskId);let bundle;
+  try{bundle=await stub.fullState(owner);}catch{
+    const entry=fallbackEntry!==undefined?fallbackEntry:(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(entry);
+    return {bundle:null,publicState:{taskId,job:null,status:'preparation-unconfirmed',errorCode:entry.preparation?.errorCode??'DEPLOYMENT_PREPARATION_UNCONFIRMED',preparation:entry.preparation?{phase:entry.preparation.phase,resources:entry.preparation.resources}:null,message:'任务准备未确认，可能存在目标占用或持久状态故障。不要通过新建任务重试。',runUrl:null}};
   }
-  const policy=record.plan.policy;
+  const policy=bundle.record.plan.policy;
   if(reconcile){
-    let job=await stub.inspect(owner);
+    let job=bundle.job,mutated=false;
     if(job?.status==='dispatch-unknown'&&job.runId===null&&job.permitId===null){
       const found=await createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN}).findDispatchedRun(job.request,job.manifest);
-      if(found){await stub.attachRun(owner,taskId,found);job=await stub.inspect(owner);}
+      if(found){await stub.attachRun(owner,taskId,found);bundle=await stub.fullState(owner);job=bundle.job;}
     }
     if(job?.status==='dispatched'&&job.permitId===null&&job.runId!==null){
-      try{await createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN}).inspectUnstartedRun(job.runId,job.request,job.manifest);await stub.markUnknown(owner,taskId);}
+      try{await createGithubExecutor(policy.github,{token:env.SBA_GITHUB_TOKEN}).inspectUnstartedRun(job.runId,job.request,job.manifest);await stub.markUnknown(owner,taskId);mutated=true;}
       catch{/* Still queued/running or transient read failure; wait for permit or deadline. */}
     }else if(job?.status==='running'||missingDeadlineReceipt(job)){
       const outcome=await recoverSbaReceipt(policy.github,job,{token:env.SBA_GITHUB_TOKEN});
-      if(outcome.status==='verified-receipt')await stub.settle(owner,outcome.envelope);
-      else if(outcome.status==='unknown')await stub.markUnknown(owner,taskId);
+      if(outcome.status==='verified-receipt'){await stub.settle(owner,outcome.envelope);mutated=true;}
+      else if(outcome.status==='unknown'){await stub.markUnknown(owner,taskId);mutated=true;}
+    }
+    if(mutated)bundle=await stub.fullState(owner);
+  }
+  const {record,job,snapshot,attempts,laneReleased}=bundle;
+  if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(snapshot.job?.status)&&!laneReleased){
+    const vault=vaultFor(env,owner),index=fallbackEntry!==undefined?fallbackEntry:(await vault.deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);
+    for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);
+    await stub.markLaneReleased(owner);
+    if((record.plan.operation?.action==='destroy-preview'||repairedCleanup(job?.request??{}))&&job?.status==='succeeded'&&record.plan.operation?.instanceId){
+      await vault.markPreviewDeleted(owner,record.plan.operation.instanceId);
     }
   }
-  const snapshot=await stub.snapshot(owner);
-  if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(snapshot.job?.status)){
-    const index=(await vaultFor(env,owner).deploymentIndex(owner)).find(r=>r.taskId===taskId);requireSba(index);for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(taskId);
-  }
-  return {...snapshot,attempts:await stub.unstartedAttempts(owner),taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null};
+  return {bundle,publicState:{...snapshot,attempts,taskId,runUrl:snapshot.job?.runId?`https://github.com/${policy.github.repository}/actions/runs/${snapshot.job.runId}`:null}};
+}
+export async function connectedState(env,owner,taskId,reconcile=false){
+  return (await connectedStateBundle(env,owner,taskId,reconcile)).publicState;
 }
 export async function connectedMachineRouter(request,env,readBody){
   let input,bodyError;
@@ -109,8 +119,14 @@ export async function connectedMachineRouter(request,env,readBody){
       requireSba(input.envelope?.runId===identity.runId);
       const summary=await stub.settle(record.owner,input.envelope);
       if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(summary.job?.status)){
-        const index=(await vaultFor(env,record.owner).deploymentIndex(record.owner)).find(r=>r.taskId===input.taskId);
-        if(index)for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(input.taskId);
+        const vault=vaultFor(env,record.owner),index=(await vault.deploymentIndex(record.owner)).find(r=>r.taskId===input.taskId);
+        if(index){
+          for(const id of index.accountIds??[index.accountId])await accountStub(env,id).release(input.taskId);
+          await stub.markLaneReleased(record.owner);
+        }
+        if((record.plan.operation?.action==='destroy-preview'||repairedCleanup(summary.job?.request??{}))&&summary.job?.status==='succeeded'&&record.plan.operation?.instanceId){
+          await vault.markPreviewDeleted(record.owner,record.plan.operation.instanceId);
+        }
       }
       return reply({settled:true});
     }

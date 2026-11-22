@@ -148,5 +148,33 @@ test('connection re-verification or token rotation after deploy allows deletion 
     assert.deepEqual(s.live.deletes, []);
     const freshReview = (await s.service('delete-plan', s.body)).json();
     assert.equal((await s.service('delete-submit', freshReview)).json().status, 'deleted');
+    assert.deepEqual((await s.service('services')).json().services, []);
+  } finally { await s.f.close(); }
+});
+test('bounded multi-page Pages deployments inspect every page before deletion and keep delete-unknown visible in service index', async () => {
+  const s = await deployed();
+  try {
+    const prior = s.state.provider;
+    let sharedOnPage2 = true;
+    s.state.provider = async (request, context) => {
+      const url = new URL(request.url);
+      if (request.method === 'GET' && url.pathname.endsWith('/pages/projects')) {
+        return Response.json({ success: true, result: [{ name: 'paged-pages', deployment_configs: { production: {} } }], result_info: { page: 1, total_pages: 1, total_count: 1 } });
+      }
+      if (request.method === 'GET' && url.pathname.endsWith('/pages/projects/paged-pages/deployments')) {
+        const page = Number(url.searchParams.get('page'));
+        const item = page === 1
+          ? { id: '11111111-1234-1234-1234-123456789abc', uses_functions: false }
+          : { id: '22222222-1234-1234-1234-123456789abc', uses_functions: false, ...(sharedOnPage2 ? { d1_databases: { DB: { id: s.resource.remoteId } } } : {}) };
+        return Response.json({ success: true, result: [item], result_info: { page, total_pages: 2, total_count: 2 } });
+      }
+      return prior(request, context);
+    };
+    assert.equal((await s.service('delete-plan', s.body)).status, 409, 'shared binding on page 2 must block deletion');
+    sharedOnPage2 = false;
+    const review = await s.service('delete-plan', s.body); assert.equal(review.status, 200, review.text);
+    s.live.lost = true;
+    assert.equal((await s.service('delete-submit', review.json())).json().status, 'delete-unknown');
+    assert.equal((await s.service('services')).json().services.length, 1, 'delete-unknown must remain in service index');
   } finally { await s.f.close(); }
 });

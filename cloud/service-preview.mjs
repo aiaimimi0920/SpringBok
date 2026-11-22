@@ -79,7 +79,7 @@ export async function servicePreviewDraft(vault, owner, input) {
   const accounts = Object.fromEntries(d.accounts.slice(1).map(account => { const ref = connections['cloudflare_' + account.key]; requireSba(ref); return [account.key, ref]; }));
   const plan = await vault.deploymentDraft(owner, { action: 'preview', github: connections.github, repository: old.application.repository, sourceSha: input.sourceSha,
     cloudflare: connections.cloudflare, environment: input.environment, values, resources: {}, accounts,
-    ...(old.applicationSecrets?{applicationSecrets:old.applicationSecrets}:{}) });
+    ...(old.applicationSecrets?{applicationSecrets:old.applicationSecrets}:{}) }, candidate);
   const source = { instanceId: input.instanceId, taskId: input.previousTaskId, sourceSha: job.request.sourceSha, applicationVersion: job.request.applicationVersion,
     environment: old.policy.environment, configuration: old.configuration, resources: previewInventory(old), resultDigest: await sbaDigest(job.result) };
   validatePreviewInventory(source.resources, { source: true });

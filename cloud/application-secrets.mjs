@@ -52,7 +52,7 @@ export async function saveApplicationSecrets(vault, owner, input) {
     sealed[name] = await sealToken(vault.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadataFor(profile,name), value);
   }
   return vault.ctx.storage.transactionSync(() => {
-    guard(vault, owner); requireSba(!stored(vault, input.id) && vault.ctx.storage.sql.exec('SELECT COUNT(*) AS n FROM application_secrets').one().n < 128);
+    guard(vault, owner); requireSba(!stored(vault, input.id) && vault.ctx.storage.sql.exec('SELECT COUNT(*) AS n FROM application_secrets').one().n < 1024);
     vault.ctx.storage.sql.exec('INSERT INTO application_secrets VALUES(?,?,?)', input.id, JSON.stringify(profile), JSON.stringify(sealed));
     return { profile };
   });

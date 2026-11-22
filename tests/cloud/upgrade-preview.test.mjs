@@ -46,6 +46,7 @@ test('preview forks a persistent isolated instance, binds the source, and cleanu
     assert.ok(f.state.request.context.resources.every(row => row.remoteId !== original.configuration.database.id && row.remoteId !== original.configuration.server.name && row.remoteId !== original.configuration.url));
     f.complete(await (await f.machine()).json()); await f.f.restart();
     const deleted = (await f.service('service-state', stateBody(plan.taskId))).json(); assert.equal(deleted.status, 'deleted'); assert.equal(deleted.canDeletePreview, false); assert.deepEqual(deleted.testUrls, []); assert.equal(deleted.history.length, 2);
+    assert.deepEqual((await f.service('services')).json().services.map(row => row.id), [first.taskId]);
     assert.equal((await f.submit(remove)).status, 200); assert.equal(f.state.dispatches, 4); assert.equal(f.state.created.length, 2);
     const production = (await f.service('service-state', stateBody(first.taskId))).json(); assert.equal(production.job.request.applicationVersion, '2.0.0'); assert.deepEqual(production.configuration, original.configuration);
   } finally { await f.f.close(); }

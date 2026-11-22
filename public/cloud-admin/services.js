@@ -171,14 +171,15 @@ function renderInstances() {
         const check = focusKey(element('button', '核对删除结果'), id + '/delete-reconcile'); check.type = 'button'; check.disabled = !session || deletionChecks.has(id);
         check.addEventListener('click', async () => {
           if (!session || deletionChecks.has(id)) return;
-          const version = generation, hadFocus = document.activeElement === check; deletionChecks.add(id); check.disabled = true;
+          const version = generation, hadFocus = document.activeElement === check; let reconciledDeleted = false; deletionChecks.add(id); check.disabled = true;
           try {
             const result = await request(api + 'delete-reconcile', { instanceId: id, operationId: state.deletion.operationId });
-            if (current(version)) notice(result.status === 'deleted' ? '服务及关联数据已删除' : '删除结果仍未确认', result.status === 'deleted' ? 'success' : 'warning');
+            reconciledDeleted = result.status === 'deleted';
+            if (current(version)) notice(reconciledDeleted ? '服务及关联数据已删除' : '删除结果仍未确认', reconciledDeleted ? 'success' : 'warning');
           } catch (error) { if (current(version)) notice(error.message, 'error'); }
           finally { if (current(version)) {
             deletionChecks.delete(id); await refreshInstances();
-            if (current(version) && hadFocus && states.get(id)?.status === 'deleted' && document.activeElement === document.body) $('service-add').focus({ preventScroll: true });
+            if (current(version) && hadFocus && (reconciledDeleted || states.get(id)?.status === 'deleted') && document.activeElement === document.body) $('service-add').focus({ preventScroll: true });
           } }
         }); actions.append(check);
       }
@@ -249,7 +250,7 @@ function renderInstances() {
   $('service-empty').hidden = rows.length > 0;
   if (active) {
     const target = document.querySelector(`[data-focus-key="${CSS.escape(active)}"]`);
-    (target ?? (states.get(active.split('/')[0])?.status === 'deleted' ? $('service-add') : null))?.focus({ preventScroll: true });
+    (target ?? (!instances.has(active.split('/')[0]) || states.get(active.split('/')[0])?.status === 'deleted' ? $('service-add') : null))?.focus({ preventScroll: true });
   }
 }
 async function loadUsage(instance, version) {

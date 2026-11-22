@@ -240,3 +240,27 @@ test('findDispatchedRun resolves a unique exact first-attempt run for dispatch-u
     assert.equal(await c.executor.findDispatchedRun(request(), manifest()), null);
   }
 });
+
+test('readApplication validates all .sba entries before parallel blob fetches', async () => {
+  const mBytes = Buffer.from(JSON.stringify(manifest())), dBytes = Buffer.from(JSON.stringify({ schemaVersion: 1 }));
+  const okResponses = [
+    json({ sha: 'a'.repeat(40), tree: { sha: '1'.repeat(40) } }),
+    json({ sha: '1'.repeat(40), truncated: false, tree: [{ path: '.sba', type: 'tree', mode: '040000', sha: '2'.repeat(40) }] }),
+    json({ sha: '2'.repeat(40), truncated: false, tree: [
+      { path: 'manifest.json', type: 'blob', mode: '100644', sha: '3'.repeat(40) },
+      { path: 'deployment.json', type: 'blob', mode: '100644', sha: '4'.repeat(40) },
+    ] }),
+    json({ sha: '3'.repeat(40), encoding: 'base64', size: mBytes.length, content: mBytes.toString('base64') }),
+    json({ sha: '4'.repeat(40), encoding: 'base64', size: dBytes.length, content: dBytes.toString('base64') }),
+  ];
+  const ok = client(okResponses);
+  const app = await ok.executor.readApplication('a'.repeat(40));
+  assert.equal(app.manifest.id, 'sample-app'); assert.equal(app.declaration.schemaVersion, 1); assert.equal(ok.calls.length, 5);
+  const missingDeployment = client([
+    json({ sha: 'a'.repeat(40), tree: { sha: '1'.repeat(40) } }),
+    json({ sha: '1'.repeat(40), truncated: false, tree: [{ path: '.sba', type: 'tree', mode: '040000', sha: '2'.repeat(40) }] }),
+    json({ sha: '2'.repeat(40), truncated: false, tree: [{ path: 'manifest.json', type: 'blob', mode: '100644', sha: '3'.repeat(40) }] }),
+  ]);
+  await assert.rejects(missingDeployment.executor.readApplication('a'.repeat(40)), /SBA_GITHUB_MANIFEST_INVALID/);
+  assert.equal(missingDeployment.calls.length, 3);
+});

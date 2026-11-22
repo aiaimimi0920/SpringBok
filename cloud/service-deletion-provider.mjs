@@ -28,6 +28,37 @@ async function list(account, token, path, transport) {
   requireSba(!body.result_info || (body.result_info.total_pages ?? 1) <= 1 && (body.result_info.total_count ?? body.result.length) <= body.result.length);
   return body.result;
 }
+async function listPaged(account, token, basePath, keyOf, transport) {
+  const rows = []; let totalPages = null, totalCount = null;
+  for (let page = 1; page <= 20; page++) {
+    const body = await readJson(endpoint(account, `${basePath}?page=${page}`), token, false, transport);
+    requireSba(body.success === true && Array.isArray(body.result) && body.result.length <= 1000);
+    if (!body.result_info) {
+      requireSba(page === 1);
+      return body.result;
+    }
+    const pages = body.result_info.total_pages ?? 1, count = body.result_info.total_count ?? body.result.length;
+    requireSba(Number.isSafeInteger(pages) && pages >= 1 && pages <= 20 && Number.isSafeInteger(count) && count >= 0 && count <= 1000);
+    requireSba((body.result_info.page ?? page) === page);
+    if (totalPages === null) { totalPages = pages; totalCount = count; }
+    requireSba(pages === totalPages && count === totalCount);
+    rows.push(...body.result);
+    requireSba(rows.length <= totalCount);
+    if (page >= totalPages) {
+      requireSba(rows.length === totalCount && new Set(rows.map(keyOf)).size === rows.length);
+      return rows;
+    }
+    requireSba(body.result.length > 0 && rows.length < totalCount);
+  }
+  requireSba(false);
+}
+async function mapPool(items, limit, fn) {
+  const out = new Array(items.length); let index = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) { const current = index++; out[current] = await fn(items[current]); }
+  }));
+  return out;
+}
 function bindingIdentity(accountId, binding) {
   if (binding.type === 'd1') return identity({ accountId, kind: 'd1', remoteId: binding.id });
   if (binding.type === 'kv_namespace') return identity({ accountId, kind: 'kv', remoteId: binding.namespace_id });
@@ -53,10 +84,13 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
       requireSba(typeof d.id === 'string' && /^[a-f0-9]{32,64}$/.test(d.id) && typeof d.hostname === 'string' && /^[a-z0-9.-]{1,253}$/.test(d.hostname));
       result.push({ kind: 'domain', accountId, remoteId: d.id, name: d.hostname, worker: d.service, present: true });
     }
-    for (const worker of workers) {
+    const workerSettings = await mapPool(workers, 4, async worker => {
       const body = await readJson(endpoint(accountId, `/workers/scripts/${worker.id}/settings`), token, false, transport);
       requireSba(body.success === true && Array.isArray(body.result?.bindings) && body.result.bindings.length <= 128);
-      for (const binding of body.result.bindings) {
+      return { worker, bindings: body.result.bindings };
+    });
+    for (const { worker, bindings } of workerSettings) {
+      for (const binding of bindings) {
         const key = bindingIdentity(accountId, binding);
         if (selected.has(worker.id)) {
           // 未登记的数据绑定不能随 Worker 被隐式销毁。
@@ -68,10 +102,10 @@ export async function inspectDeletion(rows, tokens, transport = fetch) {
       }
     }
     // Pages 的当前配置和保留部署也可能继续引用同一存储，不能只看 Worker 列表。
-    const projects = await list(accountId, token, '/pages/projects?page=1', transport);
+    const projects = await listPaged(accountId, token, '/pages/projects', p => p?.name, transport);
     for (const project of projects) {
       requireSba(name(project.name) && project.deployment_configs && typeof project.deployment_configs === 'object');
-      const deployments = await list(accountId, token, `/pages/projects/${project.name}/deployments?page=1`, transport);
+      const deployments = await listPaged(accountId, token, `/pages/projects/${project.name}/deployments`, d => d?.id, transport);
       // 实际 API 可返回绑定字段，但 OpenAPI 未保证；Functions 部署缺少字段时不能当空绑定。
       for (const [field, kind] of [['d1_databases', 'd1'], ['kv_namespaces', 'kv'], ['r2_buckets', 'r2']]) {
         const unknown = deployments.filter(d => d.uses_functions !== false && !Object.hasOwn(d, field));

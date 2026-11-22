@@ -6,7 +6,7 @@ import { importedId } from './service-import.mjs';
 import { cancellationRecord } from './deployment-cancellation.mjs';
 import { deploymentScope } from './deployment-suite.mjs';
 import { repairPreviewContext, repairPreviewBaseline } from '../src/sba/repair.mjs';
-import { repairCleanupContext, cleanupRepairable } from '../src/sba/cleanup-repair.mjs';
+import { repairCleanupContext, cleanupRepairable, repairedCleanup } from '../src/sba/cleanup-repair.mjs';
 import { partialCleanupRepairable, repairCleanupProgress } from '../src/sba/cleanup-progress.mjs';
 import { missingDeadlineReceipt, validateLateEnvelope, recoveredJob } from './late-receipt.mjs';
 import { sbaSummary } from './sba-control.mjs';
@@ -16,8 +16,8 @@ export const connectedTaskId = value => { requireSba(typeof value==='string'&&/^
 export const connectedStub = (env,taskId) => env.CONNECTED_TASKS.get(env.CONNECTED_TASKS.idFromName(`connected/v1/${connectedTaskId(taskId)}`));
 export const accountStub = (env,accountId) => {requireSba(deploymentScope(accountId));return env.DEPLOYMENT_LOCKS.get(env.DEPLOYMENT_LOCKS.idFromName(`deployment-account/v1/${accountId}`));};
 export class ConnectedDeployment extends SbaDeployment {
-  async receiptObservation(actor, original) {
-    const {plan}=await this.bootstrap(actor),sql=this.ctx.storage.sql;
+  async receiptObservation(actor, original, preloadedPlan = null) {
+    const plan=preloadedPlan??(await this.bootstrap(actor)).plan,sql=this.ctx.storage.sql;
     if(!sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_late_receipt'").toArray().length)return null;
     const rows=sql.exec('SELECT * FROM connected_late_receipt').toArray();
     requireSba(rows.length===1&&rows[0].id===1);
@@ -32,6 +32,25 @@ export class ConnectedDeployment extends SbaDeployment {
   async snapshot(actor) {
     const original=await super.snapshot(actor),raw=await super.inspect(actor),observation=await this.receiptObservation(actor,raw);
     return observation?{...original,...sbaSummary(observation.job),receiptRecovery:{original:sbaSummary(observation.record.original),observedAt:observation.record.observedAt}}:original;
+  }
+  async fullState(actor) {
+    const record=await this.bootstrap(actor);
+    const {job:raw,snapshot:base,attempts}=await this.inspectBundle(actor);
+    const observation=await this.receiptObservation(actor,raw,record.plan);
+    const job=observation?.job??raw;
+    const snapshot=observation?{...base,...sbaSummary(observation.job),receiptRecovery:{original:sbaSummary(observation.record.original),observedAt:observation.record.observedAt}}:base;
+    const sql=this.ctx.storage.sql;
+    const verification=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_verification'").toArray().length?JSON.parse(sql.exec('SELECT record FROM connected_verification WHERE id=1').one().record):null;
+    const laneReleased=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_lane_release'").toArray().length>0;
+    return {record,job,snapshot,attempts,verification,laneReleased};
+  }
+  markLaneReleased(actor) {
+    ownerId(actor);
+    this.ctx.storage.transactionSync(()=>{
+      const sql=this.ctx.storage.sql;
+      sql.exec('CREATE TABLE IF NOT EXISTS connected_lane_release (id INTEGER PRIMARY KEY CHECK(id=1),released_at INTEGER NOT NULL)');
+      sql.exec('INSERT OR IGNORE INTO connected_lane_release VALUES(1,?)',Date.now());
+    });
   }
   async settle(actor,envelope) {
     let raw=await super.inspect(actor);
@@ -134,7 +153,13 @@ export class ConnectedDeployment extends SbaDeployment {
       if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(after?.status)){
         const vault=this.env.CONNECTIONS.get(this.env.CONNECTIONS.idFromName(`connections/v1/${record.owner}`));
         const index=(await vault.deploymentIndex(record.owner)).find(r=>r.taskId===record.taskId);
-        if(index)for(const id of index.accountIds??[index.accountId])await accountStub(this.env,id).release(record.taskId);
+        if(index){
+          for(const id of index.accountIds??[index.accountId])await accountStub(this.env,id).release(record.taskId);
+          this.markLaneReleased(record.owner);
+        }
+        if((record.plan.operation?.action==='destroy-preview'||repairedCleanup(after.request??{}))&&after.status==='succeeded'&&record.plan.operation?.instanceId){
+          await vault.markPreviewDeleted(record.owner,record.plan.operation.instanceId);
+        }
       }else if(['dispatching','dispatched','dispatch-unknown','running'].includes(after?.status)){
         const deadline=after.resultDeadline??after.permitDeadline;
         await this.ctx.storage.setAlarm(Math.min(Date.now()+120000,Math.max(Date.now()+5000,deadline+1000)));
@@ -212,7 +237,7 @@ export class DeploymentLocks extends DurableObject {
       else requireSba(tables.length === 2);
       const prior = sql.exec('SELECT identity FROM import_claims WHERE id=?', id).toArray()[0];
       if (prior) { requireSba(prior.identity === identity); return { registered: true }; }
-      requireSba(sql.exec('SELECT COUNT(*) AS n FROM import_claims').one().n < 128);
+      requireSba(sql.exec('SELECT COUNT(*) AS n FROM import_claims').one().n < 1024);
       // Mirror claims into the old key table: a rolled-back controller must also
       // reject deployments onto imported resources, without owning the task lane.
       const deployed = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('deployment_claims','deployment_keys','deployment_lane')").toArray().length;
@@ -263,7 +288,7 @@ export class DeploymentLocks extends DurableObject {
       if (sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='import_keys'").toArray().length) {
         for (const key of [...keys, ...observed.map(value => 'identity:' + value)]) requireSba(!sql.exec('SELECT instance FROM import_keys WHERE key=?', key).toArray().length);
       }
-      requireSba((repair?lane[0].task===update.previousTaskId:lane[0].task===null)&&sql.exec('SELECT COUNT(*) AS n FROM deployment_claims').one().n<128);
+      requireSba((repair?lane[0].task===update.previousTaskId:lane[0].task===null)&&sql.exec('SELECT COUNT(*) AS n FROM deployment_claims').one().n<4096);
       if(update){
         const claims=sql.exec('SELECT identity FROM deployment_claims ORDER BY rowid').toArray().map(r=>JSON.parse(r.identity));
         const chain=claims.filter(r=>(r.instanceId??r.taskId)===update.instanceId),head=chain.at(-1),root=chain[0];

@@ -6,8 +6,8 @@
 
 ## 当前任务
 
-**OPT-03：Runner 主动回执回调、DO 定时自动收尾与修复脱离 7 天产物过期限制；负责人：主 AI。**
-为执行工作流增加 OIDC 令牌过期前刷签与末尾最佳努力 `POST /sba/v2/receipt` 主动回执回调（保留 GitHub Artifact 兜底）；在 `ConnectedDeployment` 注册指数退避 `alarm()` 实现无人值守后台核对收尾与成功放锁；使 `service-repair` 在 GitHub Artifact 过期后仍可基于已验签持久化的 DO 结果与 GitHub Run 元数据发起受控修复，并将执行器产物保留期上调至 30 天。OPT-01、OPT-02 已推送分支待创建 PR / 待合并。
+**OPT-04：控制面持久容量扩容、删除预检分页并发与状态查询 RPC 合并加速；负责人：主 AI。**
+扩容 `connection_deployments`/`deployment_claims`（4096）、`service_imports`/`import_claims`/`application_secrets`（1024）与 `connection_cancelled_deployments`（512）容量上限并调升 Worker `cpu_ms` 预算；在 `serviceIndex` 直接排除已确认 `deleted` 的实例与预升级副本；合并 `ConnectedDeployment.fullState` 与 `ConnectionVault.serviceLookup`/`serviceIndexData` 减少每次面板刷新的 DO RPC 往返与已终态任务的重复放锁调用；并行读取 `.sba` blob、复用预升级草稿内同提交应用定义，并为删除预检补充 Pages 项目/部署有界分页（最多 20 页/1000 项）与 Worker 配置有界并发读取。OPT-01～OPT-03 已推送分支待创建 PR / 待合并。
 
 ## 1. 产品范围
 

@@ -76,9 +76,9 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     const root = await treeEntries(commit.tree.sha);
     if (optional && !root.some(item => item?.path === '.sba')) return null;
     const directory = await treeEntries(entry(root, '.sba', 'tree', '040000'));
+    const targets = filenames.map(filename => ({ filename, blobSha: entry(directory, filename, 'blob', '100644') }));
     const files = {};
-    for (const filename of filenames) {
-      const blobSha = entry(directory, filename, 'blob', '100644');
+    await Promise.all(targets.map(async ({ filename, blobSha }) => {
       const file = await api(`${source}/blobs/${blobSha}`);
       try {
         if (file.sha !== blobSha || file.encoding !== 'base64' ||
@@ -87,7 +87,7 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
         if (raw.length !== file.size) throw new Error();
         files[filename] = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(raw, ch => ch.charCodeAt(0))));
       } catch { fail('SBA_GITHUB_MANIFEST_INVALID'); }
-    }
+    }));
     return files;
   }
   async function readFile(sourceSha, filename) { return (await readFiles(sourceSha, [filename]))[filename]; }

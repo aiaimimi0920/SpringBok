@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { SbaDeployment } from './sba-store.mjs';
+import { SbaDeployment, needsDispatchDiscovery } from './sba-store.mjs';
 import { ownerId } from './connections-contract.mjs';
 import { sbaPolicy, connectedSbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, requirePlan, exactSba } from './sba-control.mjs';
 import { importedId } from './service-import.mjs';
@@ -42,11 +42,16 @@ export class ConnectedDeployment extends SbaDeployment {
     const snapshot=observation?{...base,...sbaSummary(observation.job),receiptRecovery:{original:sbaSummary(observation.record.original),observedAt:observation.record.observedAt}}:base;
     const sql=this.ctx.storage.sql;
     const verification=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_verification'").toArray().length?JSON.parse(sql.exec('SELECT record FROM connected_verification WHERE id=1').one().record):null;
-    const laneReleased=sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_lane_release'").toArray().length>0;
+    const laneReleased=this.laneReleased();
     return {uninitialized:false,record,job,snapshot,attempts,verification,laneReleased};
   }
-  markLaneReleased(actor) {
-    ownerId(actor);
+  laneReleased() {
+    const sql=this.ctx.storage.sql;
+    return sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='connected_lane_release'").toArray().length>0 &&
+      sql.exec('SELECT id FROM connected_lane_release WHERE id=1').toArray().length===1;
+  }
+  async markLaneReleased(actor) {
+    ownerId(actor);await this.bootstrap(actor);
     this.ctx.storage.transactionSync(()=>{
       const sql=this.ctx.storage.sql;
       sql.exec('CREATE TABLE IF NOT EXISTS connected_lane_release (id INTEGER PRIMARY KEY CHECK(id=1),released_at INTEGER NOT NULL)');
@@ -120,8 +125,8 @@ export class ConnectedDeployment extends SbaDeployment {
   async policyFor(actor){const record=await this.bootstrap(actor);return sbaPolicy({...this.env,SBA_POLICY:JSON.stringify(record.plan.policy)});}
   async requestFor(policy,taskId,manifest){const record=await this.bootstrap();requireSba(record.taskId===taskId);return sbaRequest(policy,taskId,manifest,record.plan.operation??null);}
   async begin(actor,input){const record=await this.bootstrap(actor);requireSba(input.request.taskId===record.taskId);return super.begin(actor,input);}
-  async attachRun(actor,taskId,outcome){
-    const summary=await super.attachRun(actor,taskId,outcome);
+  async attachRun(actor,taskId,outcome,observedSubmission=null){
+    const summary=await super.attachRun(actor,taskId,outcome,observedSubmission);
     if(['dispatched','dispatch-unknown'].includes(summary.job?.status))await this.ctx.storage.setAlarm(Date.now()+30000);
     return summary;
   }
@@ -132,40 +137,40 @@ export class ConnectedDeployment extends SbaDeployment {
   }
   async alarm(){
     if(this.env.ENABLE_CONNECTED_DEPLOYMENTS!=='yes'||!this.env.SBA_GITHUB_TOKEN)return;
-    try{
-      const record=await this.bootstrap(),policy=record.plan.policy;
-      let job=await this.inspect(record.owner);
-      if(!job||!['dispatching','dispatched','dispatch-unknown','running'].includes(job.status))return;
-      const executor=createGithubExecutor(policy.github,{token:this.env.SBA_GITHUB_TOKEN});
-      if(job.status==='dispatch-unknown'&&job.runId===null&&job.permitId===null){
-        const found=await executor.findDispatchedRun(job.request,job.manifest);
-        if(found){await super.attachRun(record.owner,record.taskId,found);job=await this.inspect(record.owner);}
-      }
-      if(job.status==='dispatched'&&job.permitId===null&&job.runId!==null){
-        try{await executor.inspectUnstartedRun(job.runId,job.request,job.manifest);await this.markUnknown(record.owner,record.taskId);}catch{}
-      }else if(job.status==='running'||missingDeadlineReceipt(job)){
-        try{
-          const outcome=await recoverSbaReceipt(policy.github,job,{token:this.env.SBA_GITHUB_TOKEN});
-          if(outcome.status==='verified-receipt')await this.settle(record.owner,outcome.envelope);
-          else if(outcome.status==='unknown')await this.markUnknown(record.owner,record.taskId);
-        }catch{}
-      }
-      const after=await this.inspect(record.owner);
-      if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(after?.status)){
-        const vault=this.env.CONNECTIONS.get(this.env.CONNECTIONS.idFromName(`connections/v1/${record.owner}`));
-        const index=(await vault.deploymentIndex(record.owner)).find(r=>r.taskId===record.taskId);
-        if(index){
-          for(const id of index.accountIds??[index.accountId])await accountStub(this.env,id).release(record.taskId);
-          this.markLaneReleased(record.owner);
-        }
+    // Let storage and finalization failures reach the runtime’s bounded alarm retry.
+    const record=await this.bootstrap(),policy=record.plan.policy;
+    let job=await this.inspect(record.owner);
+    if(!job)return;
+    const executor=createGithubExecutor(policy.github,{token:this.env.SBA_GITHUB_TOKEN});
+    if(needsDispatchDiscovery(job)){
+      const attempts=await this.unstartedAttempts(record.owner);
+      const found=await executor.findDispatchedRun(job.request,job.manifest,attempts.map(attempt=>attempt.job.runId));
+      if(found){await super.attachRun(record.owner,record.taskId,found,job.submittedAt);job=await this.inspect(record.owner);}
+    }
+    if(job.status==='dispatched'&&job.permitId===null&&job.runId!==null){
+      try{await executor.inspectUnstartedRun(job.runId,job.request,job.manifest);await this.markUnknown(record.owner,record.taskId,{runId:job.runId,status:job.status,submittedAt:job.submittedAt});}catch{}
+    }else if(job.status==='running'||missingDeadlineReceipt(job)){
+      try{
+        const outcome=await recoverSbaReceipt(policy.github,job,{token:this.env.SBA_GITHUB_TOKEN});
+        if(outcome.status==='verified-receipt')await this.settle(record.owner,outcome.envelope);
+        else if(outcome.status==='unknown'&&job.status==='running')await this.markUnknown(record.owner,record.taskId,{runId:job.runId,status:job.status,submittedAt:job.submittedAt});
+      }catch{}
+    }
+    const after=await this.inspect(record.owner);
+    if(!record.plan.verificationOf&&['succeeded','deployed-unverified'].includes(after?.status)&&!this.laneReleased()){
+      const vault=this.env.CONNECTIONS.get(this.env.CONNECTIONS.idFromName(`connections/v1/${record.owner}`));
+      const index=(await vault.deploymentIndex(record.owner)).find(r=>r.taskId===record.taskId);
+      if(index){
+        for(const id of index.accountIds??[index.accountId])await accountStub(this.env,id).release(record.taskId);
         if((record.plan.operation?.action==='destroy-preview'||repairedCleanup(after.request??{}))&&after.status==='succeeded'&&record.plan.operation?.instanceId){
           await vault.markPreviewDeleted(record.owner,record.plan.operation.instanceId);
         }
-      }else if(['dispatching','dispatched','dispatch-unknown','running'].includes(after?.status)){
-        const deadline=after.resultDeadline??after.permitDeadline;
-        await this.ctx.storage.setAlarm(Math.min(Date.now()+120000,Math.max(Date.now()+5000,deadline+1000)));
+        await this.markLaneReleased(record.owner);
       }
-    }catch{/* Keep fail-closed durable state; alarm never overwrites uncertain outcomes. */}
+    }else if(['dispatching','dispatched','dispatch-unknown','running'].includes(after?.status)){
+      const deadline=after.resultDeadline??after.permitDeadline;
+      await this.ctx.storage.setAlarm(Math.min(Date.now()+120000,Math.max(Date.now()+5000,deadline+1000)));
+    }
   }
   async verification(actor) {
     await this.bootstrap(actor);

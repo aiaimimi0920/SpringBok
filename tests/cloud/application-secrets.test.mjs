@@ -100,8 +100,11 @@ test('explicit rotateApplicationSecrets on update rotates secrets to a new profi
   try{
     const first=await f.preview();await f.submit(first);f.complete(await(await f.machine()).json());
     await f.service('service-state',{instanceId:first.taskId,reconcile:true});
-    const multiline='synthetic-key-header\nsynthetic-key-payload-line-2\nsynthetic-key-footer\n';
-    const created=(await f.create({label:'2026-Q4 轮换',values:{APP_COOKIE_SECRET:multiline,APP_STORAGE_KEY:'rotated-storage-key'}})).json().profile;
+    const multiline='synthetic-key-header\n' + '中'.repeat(5450) + 'x'.repeat(13);
+    assert.equal(Buffer.byteLength(multiline),16384);
+    const response=await f.create({label:'2026-Q4 轮换',values:{APP_COOKIE_SECRET:multiline,APP_STORAGE_KEY:'rotated-storage-key'}});
+    assert.equal(response.status,200,response.text);
+    const created=response.json().profile;
     assert.equal(created.label,'2026-Q4 轮换');
     const rotatedInput={...f.input,sourceSha:updatedSha,applicationSecrets:{id:created.id,revision:1},rotateApplicationSecrets:true,instance:{id:first.taskId,previousTaskId:first.taskId}};
     const planRes=await f.api('plan',rotatedInput);assert.equal(planRes.status,200,planRes.text);

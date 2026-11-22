@@ -21,7 +21,7 @@ async function equal(a, b) {
   const bytes = new TextEncoder(), [x, y] = await Promise.all([crypto.subtle.digest('SHA-256', bytes.encode(a)), crypto.subtle.digest('SHA-256', bytes.encode(b))]);
   return crypto.subtle.timingSafeEqual(x, y);
 }
-async function body(request, maximum = 2048) {
+async function body(request, maximum = 2048, accepts = null) {
   if (request.headers.get('content-type') !== 'application/json') throw new Error('invalid body');
   const declared = request.headers.get('content-length');
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maximum)) throw new Error('large body');
@@ -33,7 +33,9 @@ async function body(request, maximum = 2048) {
     for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > maximum) throw new Error('large body'); chunks.push(value); }
     if (timedOut) throw new Error('body deadline exceeded');
     const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    if (accepts && !accepts(value, size)) throw new Error('large body');
+    return value;
   } finally { clearTimeout(timeout); await reader.cancel().catch(() => {}); }
 }
 export default {

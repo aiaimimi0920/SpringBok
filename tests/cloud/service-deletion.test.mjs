@@ -155,10 +155,11 @@ test('bounded multi-page Pages deployments inspect every page before deletion an
   const s = await deployed();
   try {
     const prior = s.state.provider;
-    let sharedOnPage2 = true;
+    let sharedOnPage2 = true, emptyPages = false;
     s.state.provider = async (request, context) => {
       const url = new URL(request.url);
       if (request.method === 'GET' && url.pathname.endsWith('/pages/projects')) {
+        if (emptyPages) return Response.json({success:true,result:[],result_info:{page:1,total_pages:0,total_count:0}});
         return Response.json({ success: true, result: [{ name: 'paged-pages', deployment_configs: { production: {} } }], result_info: { page: 1, total_pages: 1, total_count: 1 } });
       }
       if (request.method === 'GET' && url.pathname.endsWith('/pages/projects/paged-pages/deployments')) {
@@ -172,6 +173,9 @@ test('bounded multi-page Pages deployments inspect every page before deletion an
     };
     assert.equal((await s.service('delete-plan', s.body)).status, 409, 'shared binding on page 2 must block deletion');
     sharedOnPage2 = false;
+    emptyPages = true;
+    assert.equal((await s.service('delete-plan',s.body)).status,200,'an explicit empty provider inventory is complete');
+    emptyPages = false;
     const review = await s.service('delete-plan', s.body); assert.equal(review.status, 200, review.text);
     s.live.lost = true;
     assert.equal((await s.service('delete-submit', review.json())).json().status, 'delete-unknown');

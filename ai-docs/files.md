@@ -6,7 +6,7 @@ SBA 是一个接入目录与运行时协议，不是单个扩展名为 `.sba` �
 | --- | --- | --- |
 | `.sba/manifest.json` | 执行契约必需 | 应用身份、版本、固定运行环境、动作、秘密名称及可选修复声明 |
 | `.sba/deployment.json` | 自助部署表单必需 | 账号、公开配置、资源和 Worker/域名目标的声明 |
-| `.sba/springbok.ps1` | 示例入口名；实际由 entrypoint 指定 | 接收请求并原子写入结果；必须是 `.sba` 下简单 `.ps1` 文件名 |
+| `.sba/springbok.ps1` | 示例入口名；实际由 entrypoint 指定 | 接收请求并原子写入结果；必须是 `.sba` 下与 runtime 匹配的简单 `.ps1` 或 `.mjs` 文件名 |
 | `.sba/*.py` 或其他辅助文件 | 应用自选 | 内部构建、发布、迁移逻辑；平台不规定 Python 模块名字 |
 | 应用构建锁文件、迁移脚本 | 按应用需要 | 固定依赖和数据迁移，不属于 SpringBok 自动生成的业务代码 |
 | RequestPath 指向的 JSON | 由执行端生成 | 一次任务的公开输入，不能作为仓库里的真实凭据配置提交 |
@@ -18,9 +18,9 @@ Windows runtime 的入口调用形式如下；路径由执行端提供，不能�
 powershell.exe -NoProfile -NonInteractive -File .sba/springbok.ps1 -RequestPath <absolute-request-path> -ResultPath <absolute-result-path>
 ```
 
-Linux runtime 由受信执行端选择校验过的固定版本 `pwsh`，不是运行上述 Windows 命令，
-也不从任意 PATH 选择解释器。两种 runtime 都使用 `.ps1` 入口和 `-RequestPath`、
-`-ResultPath` 参数；运行环境组合见 [manifest](manifest.md)。
+Linux runtime 按 [manifest](manifest.md) 由受信执行端选择已校验的固定版本 `pwsh`
+（`.ps1`）或 Node.js（`.mjs`），不运行上述 Windows 命令，也不从任意 PATH 选择解释器。
+所有入口都接收 `-RequestPath` 和 `-ResultPath` 参数；`.mjs` 从命令行参数中读取路径。
 
 工作目录是应用 checkout 根。entrypoint 不支持绝对路径、目录跳转或命令串；执行端还检查实际路径和符号链接边界。不要依赖开发者本机上的未提交文件。
 

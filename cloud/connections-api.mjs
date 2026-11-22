@@ -10,7 +10,10 @@ export async function adminConnectionsRequest(request, env, session, readBody) {
   if (request.method === 'POST' && (request.headers.get('origin') !== session.origin || !sameProof(request.headers.get('x-csrf-token'), await signSession(session, 'csrf', null)))) return reply({ error: 'refresh-session' }, 403);
   try {
     const vault = env.CONNECTIONS.get(env.CONNECTIONS.idFromName(`connections/v1/${session.actor}`));
-    const result = request.method === 'GET' ? await vault[resources ? 'resourceSnapshot' : 'snapshot'](session.actor) : await vault[resources ? 'resourceOperation' : 'mutate'](session.actor, await readBody(request));
+    // 20 * 16 KiB of decoded secrets, including JSON escape overhead and profile metadata.
+    const input = request.method === 'POST' ? await readBody(request, resources ? 2 * 1024 * 1024 : undefined,
+      resources ? (value, size) => value?.action === 'application-secrets' || size <= 2048 : undefined) : null;
+    const result = request.method === 'GET' ? await vault[resources ? 'resourceSnapshot' : 'snapshot'](session.actor) : await vault[resources ? 'resourceOperation' : 'mutate'](session.actor, input);
     return reply(result, result.error ? 422 : 200);
   } catch { return reply({ error: 'connection-rejected-refresh-before-retry' }, 409); }
 }

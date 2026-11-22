@@ -2,6 +2,11 @@ import { ConnectionVault as Vault } from '../../cloud/connections-store.mjs';
 import { ConnectedDeployment as ConnectedStore } from '../../cloud/connected-store.mjs';
 export { default, TargetMailbox, OwnerCatalog, NodeMailbox, NodeTelemetry, SbaDeployment, DeploymentLocks } from '../../cloud/worker.mjs';
 export class ConnectedDeployment extends ConnectedStore {
+  expirePermit() {
+    const sql=this.ctx.storage.sql,job=JSON.parse(this.rawJob());
+    job.permitDeadline=Date.now()-1000;job.submittedAt=job.permitDeadline-900000;
+    sql.exec('UPDATE sba_deployment SET state=? WHERE id=1',JSON.stringify(job));
+  }
   expireResult() {
     const sql=this.ctx.storage.sql,job=JSON.parse(sql.exec('SELECT state FROM sba_deployment WHERE id=1').one().state);
     const shift=job.resultDeadline-Date.now()+1000;
@@ -12,6 +17,7 @@ export class ConnectedDeployment extends ConnectedStore {
   corruptLateReceipt() { this.ctx.storage.sql.exec("UPDATE connected_late_receipt SET digest='corrupt'"); }
   seedOrphanSba() { this.ctx.storage.sql.exec('CREATE TABLE sba_orphan (id INTEGER PRIMARY KEY)'); }
   async runScheduledAlarm() { const scheduled = await this.ctx.storage.getAlarm(); await this.alarm(); return scheduled; }
+  async runAlarmCapturingFailure() { try { await this.alarm(); return null; } catch (error) { return error.message; } }
   async raceInitialization(owner, taskId, plan, record) {
     const pending = this.initialize(owner, taskId, plan);
     this.cancelUninitialized(owner, record);
@@ -23,6 +29,11 @@ export class ConnectionVault extends Vault {
   patchPreparation(taskId, patch) {
     const sql=this.ctx.storage.sql,record=JSON.parse(sql.exec('SELECT record FROM connection_deployments WHERE task=?',taskId).one().record);
     Object.assign(record.preparation,patch);sql.exec('UPDATE connection_deployments SET record=? WHERE task=?',JSON.stringify(record),taskId);
+  }
+  failNextPreviewDeletionMarker() { this.previewDeletionMarkerFault = true; }
+  markPreviewDeleted(owner,instanceId) {
+    if (this.previewDeletionMarkerFault) { this.previewDeletionMarkerFault = false; throw new Error('synthetic preview index write failure'); }
+    return super.markPreviewDeleted(owner,instanceId);
   }
   inspectStorage() { return this.ctx.storage.sql.exec('SELECT * FROM connections').toArray(); }
   inspectApplicationSecrets() { return { profiles:this.ctx.storage.sql.exec('SELECT * FROM application_secrets').toArray(),tasks:this.ctx.storage.sql.exec('SELECT * FROM application_task_secrets').toArray() }; }

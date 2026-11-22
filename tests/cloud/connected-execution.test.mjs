@@ -99,6 +99,24 @@ test('dispatch uncertainty cannot replay; approved in-flight connection disable 
     assert.equal((await machine()).status,403);assert.equal((await api('reconcile',{taskId:plan.taskId})).json().job.status,'unknown');assert.equal(state.dispatches,1);
   }finally{await f.close();}
 });
+test('an approved task can use a disabled derived source only while its parent token is unchanged',async()=>{
+  for (const rotate of [false,true]) {
+    const {f,state,session,input,preview,submit,machine,api}=await connectedFixture();
+    try {
+      const mutate=body=>f.call('/api/admin/connections',{...session,body});
+      const parent=(await mutate({action:'connect',id:randomUUID(),name:'GitHub',provider:'github',accountId:'',token:fakeToken})).json().connections[0];
+      const child=(await mutate({action:'use-repository',id:parent.id,revision:parent.revision,repository:'owner/repo'})).json().connection;
+      input.github={id:child.id,revision:child.revision};
+      const plan=await preview();assert.equal((await submit(plan)).status,200);
+      assert.equal((await mutate({action:'disable',...input.github})).status,200);
+      if(rotate)assert.equal((await mutate({action:'rotate',id:parent.id,revision:parent.revision,token:'rotated-synthetic-token-abcdef123456'})).status,200);
+      const source=await machine('source');assert.equal(source.status,rotate?403:200);
+      if(rotate)assert.equal(source.headers.get('x-sba-denied-phase'),'secrets');
+      const job=(await api('state',{taskId:plan.taskId})).json().job;
+      assert.equal(job.permitAt,null);assert.equal(state.dispatches,1);
+    }finally{await f.close();}
+  }
+});
 test('source failures expose only bounded diagnostics and never consume a permit',async()=>{
   const {f,state,preview,submit,machine,api}=await connectedFixture();try{
     const plan=await preview();await submit(plan);const original=state.provider;

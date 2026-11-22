@@ -10,7 +10,7 @@ export function vaultKeyring(value) {
   if (!keys || typeof keys !== 'object' || Array.isArray(keys)) return null;
   const entries = Object.entries(keys);
   if (entries.length < 1 || entries.length > 8 || !entries.every(([k, v]) => keyId(k) && hexKey(v))) return null;
-  if (!Object.hasOwn(keys, active) || new Set(entries.map(([, v]) => v)).size !== entries.length) return null;
+  if (!keyId(active) || !Object.hasOwn(keys, active) || new Set(entries.map(([, v]) => v)).size !== entries.length) return null;
   return { legacy: false, active, keys: Object.fromEntries(entries) };
 }
 export const validVaultKey = value => vaultKeyring(value) !== null;

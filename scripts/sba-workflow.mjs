@@ -30,14 +30,14 @@ export async function workflowInput(env) {
   if (origin.protocol !== 'https:' || origin.origin !== env.SBA_RUNNER_ORIGIN || origin.username || origin.password) reject();
   return { request, endpoint: `${origin.origin}/sba/v2/permit`, executorSha: sha, runId: Number(env.GITHUB_RUN_ID), workflowPath: profile.workflowPath };
 }
-async function readJson(url, options, fetchImpl) {
+async function readJson(url, options, fetchImpl, maxBytes = 524288) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetchImpl(url, { ...options, redirect: 'manual', signal: controller.signal });
     if (response.status !== 200 || !response.body) { await response.body?.cancel(); reject(); }
     const reader = response.body.getReader(), chunks = []; let size = 0;
     try { for (;;) { const { done, value } = await reader.read(); if (done) break;
-      size += value.byteLength; if (size > 524288) reject(); chunks.push(value); } }
+      size += value.byteLength; if (size > maxBytes) reject(); chunks.push(value); } }
     finally { await reader.cancel().catch(() => {}); }
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
   } finally { clearTimeout(timer); controller.abort(); }
@@ -96,7 +96,7 @@ export async function runSbaWorkflow({ environment = process.env, fetchImpl = fe
   onStage('permit');
   // 不重试：POST 的任何丢响应都可能已经消费许可。
   const permit = await readJson(input.endpoint, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ taskId: input.request.taskId, requestDigest: environment.SBA_REQUEST_SHA256 }) }, fetchImpl);
+    body: JSON.stringify({ taskId: input.request.taskId, requestDigest: environment.SBA_REQUEST_SHA256 }) }, fetchImpl, 1024 * 1024);
   if (!/^[a-f0-9]{64}$/.test(permit.permitId) || permit.requestDigest !== environment.SBA_REQUEST_SHA256 ||
       canonicalSba(permit.request) !== canonicalSba(input.request) || canonicalSba(permit.manifest) !== canonicalSba(checked.manifest) ||
       !permit.secrets || typeof permit.secrets !== 'object' || Array.isArray(permit.secrets) ||

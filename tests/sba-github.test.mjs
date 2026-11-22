@@ -156,7 +156,7 @@ test('pending, cancelled, failed or unknown runs never fetch artifacts or claim 
 });
 
 test('artifact ownership, digest, size, uniqueness and bounded complete list must all match', async () => {
-  const changes = [a => { a.id = 0; }, a => { a.name = 'other'; }, a => { a.expired = true; }, a => { a.size_in_bytes = 65537; },
+  const changes = [a => { a.id = 0; }, a => { a.name = 'other'; },  a => { a.size_in_bytes = 65537; },
     a => { a.size_in_bytes = 0; }, a => { a.digest = 'unknown'; }, a => { a.workflow_run.id++; },
     a => { a.workflow_run.repository_id++; }, a => { a.workflow_run.head_repository_id++; },
     a => { a.workflow_run.head_sha = 'a'.repeat(40); }, a => { a.workflow_run.head_branch = 'other'; }];
@@ -166,11 +166,20 @@ test('artifact ownership, digest, size, uniqueness and bounded complete list mus
     responses.push(json(run(binding.title)), json({ total_count: 1, artifacts: [a] }));
     await assert.rejects(executor.inspectRun(30, request(), manifest()), /SBA_GITHUB_ARTIFACT_INVALID/);
   }
-  for (const count of [0, 2, 101]) {
+  for (const count of [2, 101]) {
     const responses = []; const { executor } = client(responses); const binding = await executor.prepare(request(), manifest());
     const artifacts = count === 2 ? [artifact(binding.artifactName), artifact(binding.artifactName)] : [];
     responses.push(json(run(binding.title)), json({ total_count: count, artifacts }));
     await assert.rejects(executor.inspectRun(30, request(), manifest()), /SBA_GITHUB_ARTIFACT_INVALID/);
+  }
+});
+
+test('empty and exact expired artifact listings are unavailable, not invalid', async () => {
+  for (const expired of [false, true]) {
+    const responses = []; const { executor } = client(responses); const binding = await executor.prepare(request(), manifest());
+    const artifacts = expired ? [{ ...artifact(binding.artifactName), expired }] : [];
+    responses.push(json(run(binding.title)), json({ total_count: artifacts.length, artifacts }));
+    await assert.rejects(executor.inspectRun(30, request(), manifest()), /SBA_GITHUB_ARTIFACT_UNAVAILABLE/);
   }
 });
 

@@ -45,6 +45,7 @@ test('renderer escapes HTML and code, rejects unsafe links and malformed Markdow
   for (const url of ['javascript:alert(1)','//evil.example','../private.json','http://example.com']) assert.throws(()=>safeHref(url));
   assert.throws(()=>renderMarkdown('# T\n```json\n{}')); assert.throws(()=>renderMarkdown('# T\n# Second'));
   assert.throws(()=>renderMarkdown('# T\n| a | b |\n| --- | --- |\n| one |'));
+  for (const heading of ['## ', '###   ']) assert.throws(()=>renderMarkdown('# T\n'+heading), /Empty Markdown heading/);
 });
 
 test('public output is allowlisted and links work at a GitHub project subpath', async () => {

@@ -2,6 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { serviceFixture, updatedSha } from './service-fixture.mjs';
 
+test('a scheduled alarm still reconciles the original receipt when it wakes past the result deadline',async()=>{
+  const {f,service,input,github,submit,machine,receipt,state}=await serviceFixture();
+  try {
+    const plan=(await service('plan',{...input,github,repository:'owner/repo'})).json();
+    await submit(plan);const permit=await (await machine()).json();
+    const ns=await f.mf.getDurableObjectNamespace('CONNECTED_TASKS'),stub=ns.get(ns.idFromName('connected/v1/'+plan.taskId));
+    await stub.expireResult();receipt(permit);
+    assert.ok(await stub.runScheduledAlarm());
+    const after=(await service('service-state',{instanceId:plan.taskId,reconcile:false})).json();
+    assert.equal(after.job.status,'succeeded');
+    assert.equal(after.receiptRecovery.original.job.errorCode,'SBA_TASK_DEADLINE');
+    assert.equal(state.dispatches,1);
+  }finally{await f.close();}
+});
+
 test('authenticated late receipt resolves observation without rewriting deadline history or replaying execution',async()=>{
   const x=await serviceFixture(),{f,service,input,github,submit,machine,receipt,state}=x;
   try {

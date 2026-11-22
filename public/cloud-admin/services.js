@@ -9,7 +9,7 @@ import { retireService } from './service-retirement.js';
 const $ = id => document.getElementById(id);
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 const api = '/api/admin/deployments/';
-let session = null, connections = [], generation = 0, dialogGeneration = 0, loadingCount = 0;
+let session = null, connections = [], generation = 0, dialogGeneration = 0, versionListGeneration = 0, loadingCount = 0;
 let catalog = new Map(), scanning = false, scannedAt = 0, scanErrors = new Map();
 let catalogOrder = new Map();
 let scanProgress = null;
@@ -592,17 +592,18 @@ async function loadResources(version, pageVersion) {
   } catch (error) { if (currentDialog(version, pageVersion)) { selectedResources.ready = false; dialogNotice(error.message, 'error'); } }
   finally { if (currentDialog(version, pageVersion)) { selectionBusy = false; controls(); } }
 }
-async function loadVersions(row, version, pageVersion) {
+async function loadVersions(row, listVersion, pageVersion) {
+  const currentList = () => listVersion === versionListGeneration && current(pageVersion) && selected === row && $('service-dialog').open;
   let cursor = ''; const seen = new Set(), hashes = new Set([...$('service-version').options].map(option=>option.value));
   try {
     do {
       if (seen.has(cursor) || seen.size >= 100) throw new Error('版本列表未完整读取'); seen.add(cursor);
       const result = await request(api + 'versions', { github: row.github, repository: row.repository, cursor });
-      if (!currentDialog(version, pageVersion)) return;
+      if (!currentList()) return;
       for (const item of result.items) if (!hashes.has(item.sourceSha)) { hashes.add(item.sourceSha); $('service-version').append(new Option(`${item.label} · ${item.sourceSha.slice(0, 12)}`, item.sourceSha)); }
       cursor = result.next ?? '';
     } while (cursor);
-  } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }
+  } catch (error) { if (currentList()) dialogNotice(error.message, 'error'); }
 }
 async function selectService(row) {
   if (busy || submitting) return;
@@ -611,7 +612,7 @@ async function selectService(row) {
   renderTabs(); $('service-selection').textContent = row.repository + (row.manifest ? ' · v' + row.manifest.version : '');
   fillOptions($('service-version'), [[row.sourceSha, `${row.branch || (row.manifest ? 'v' + row.manifest.version : '当前版本')} · ${row.sourceSha.slice(0, 12)}`]]);
   buildFields(row); controls();
-  void loadVersions(row, version, pageVersion);
+  void loadVersions(row, ++versionListGeneration, pageVersion);
   await loadResources(version, pageVersion);
 }
 async function changeVersion() {
@@ -625,6 +626,7 @@ async function changeVersion() {
     : null;
   const previousEnv = !updateTarget && !importing && !rehearsing ? $('service-environment').value : '';
   const previousCloudflare = !updateTarget ? $('service-cloudflare').value : '';
+  const previousAccounts = new Map([...$('service-inputs').querySelectorAll('select[id^="service-account-"]')].map(select => [select.id, select.value]));
   application = null; selectedResources = new Map(); clearPreview(); selectionBusy = true; controls(); dialogNotice('正在读取版本…');
   try {
     const data = await request(api + 'application', { github: row.github, repository: row.repository, sourceSha }); if (!currentDialog(version, pageVersion)) return;
@@ -643,6 +645,10 @@ async function changeVersion() {
       for (const output of document.querySelectorAll('output[data-resource-template]')) output.value = output.dataset.resourceTemplate.replaceAll('{instance}', previousEnv);
     }
     if (previousCloudflare && !updateTarget && [...$('service-cloudflare').options].some(o => o.value === previousCloudflare)) $('service-cloudflare').value = previousCloudflare;
+    if (!updateTarget) for (const [id, value] of previousAccounts) {
+      const select = $(id);
+      if (select && [...select.options].some(option => option.value === value)) select.value = value;
+    }
     await loadResources(version, pageVersion);
     if (currentDialog(version,pageVersion)) versionNotice(data);
   } catch (error) { if (currentDialog(version, pageVersion)) dialogNotice(error.message, 'error'); }

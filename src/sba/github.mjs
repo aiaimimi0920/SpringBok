@@ -149,24 +149,26 @@ export function createGithubExecutor(configuration, { token, fetchImpl = fetch }
     const list = await api(`${base}/actions/runs/${runId}/artifacts?per_page=100`);
     if (!Number.isSafeInteger(list.total_count) || !Array.isArray(list.artifacts) || list.total_count !== list.artifacts.length ||
         list.total_count > 100) fail('SBA_GITHUB_ARTIFACT_INVALID');
+    if (list.total_count === 0) fail('SBA_GITHUB_ARTIFACT_UNAVAILABLE');
     const matches = list.artifacts.filter(a => a?.name === binding.artifactName);
     if (matches.length !== 1) fail('SBA_GITHUB_ARTIFACT_INVALID');
     const artifact = matches[0];
-    if (!positiveId(artifact.id) || artifact.expired !== false || !Number.isSafeInteger(artifact.size_in_bytes) ||
+    if (!positiveId(artifact.id) || typeof artifact.expired !== 'boolean' || !Number.isSafeInteger(artifact.size_in_bytes) ||
         artifact.size_in_bytes < 1 || artifact.size_in_bytes > 65536 || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest) ||
         artifact.workflow_run?.id !== runId || artifact.workflow_run?.repository_id !== c.repositoryId ||
         artifact.workflow_run?.head_repository_id !== c.repositoryId || artifact.workflow_run?.head_sha !== c.executorSha ||
         artifact.workflow_run?.head_branch !== c.ref) fail('SBA_GITHUB_ARTIFACT_INVALID');
+    if (artifact.expired) fail('SBA_GITHUB_ARTIFACT_UNAVAILABLE');
     // 这里只核实下载候选，不能把 workflow success 当作 SBA/业务成功。
     return { status: 'receipt-available', runId, requestDigest: binding.requestDigest,
       artifact: { id: artifact.id, name: artifact.name, size: artifact.size_in_bytes, digest: artifact.digest } };
   }
-  async function findDispatchedRun(request, manifest) {
+  async function findDispatchedRun(request, manifest, excludedRunIds = []) {
     const binding = await prepare(request, manifest);
     try {
       const list = await api(`${base}/actions/workflows/${c.workflowId}/runs?event=workflow_dispatch&per_page=30`);
       if (!Array.isArray(list.workflow_runs) || list.workflow_runs.length > 30) return null;
-      const matches = list.workflow_runs.filter(run => run && positiveId(run.id) && run.workflow_id === c.workflowId &&
+      const matches = list.workflow_runs.filter(run => run && positiveId(run.id) && !excludedRunIds.includes(run.id) && run.workflow_id === c.workflowId &&
         run.event === 'workflow_dispatch' && run.head_sha === c.executorSha && run.head_branch === c.ref &&
         run.path === c.workflowPath && run.run_attempt === 1 && run.repository?.id === c.repositoryId &&
         run.repository?.full_name === c.repository && run.head_repository?.id === c.repositoryId &&

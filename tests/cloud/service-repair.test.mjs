@@ -205,6 +205,10 @@ test('expired GitHub artifact after authoritative DO settlement still allows ver
     state.provider=async(request,context)=>{
       if(request.url.endsWith('/actions/runs/456/artifacts?per_page=100')){
         if(mode==='expired')return Response.json({total_count:0,artifacts:[]});
+        if(mode==='invalid-metadata'){
+          const {total_count,artifacts}=await (await prior(request,context)).json();
+          return Response.json({total_count,artifacts:artifacts.map(row=>({...row,digest:'invalid'}))});
+        }
       }
       if(mode==='tampered'&&request.url==='https://synthetic.blob.core.windows.net/receipt?sig=test'){
         return new Response('corrupted-zip-bytes');
@@ -213,6 +217,8 @@ test('expired GitHub artifact after authoritative DO settlement still allows ver
     };
     mode='tampered';
     assert.equal((await service('plan',body)).status,409,'tampered live artifact must still fail closed');
+    mode='invalid-metadata';
+    assert.equal((await service('plan',body)).status,409,'invalid live metadata is not proof of expiration');
     mode='expired';
     state.runStatus='in_progress';
     assert.equal((await service('plan',body)).status,409,'in-progress run cannot bypass via expired artifact path');

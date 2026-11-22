@@ -98,6 +98,13 @@ test('lost new dispatch cannot be replayed and disabling execution rejects confi
     assert.equal((await machine()).status,403);assert.equal(state.dispatches,3);
     const ns=await f.mf.getDurableObjectNamespace('CONNECTED_TASKS'),stub=ns.get(ns.idFromName('connected/v1/'+next.taskId));
     await assert.rejects(stub.permit(next.taskId,body.digest,456),'old in-flight permit is fenced even while new run ID is unknown');
+    const prior=state.provider, archived=await (await prior(new Request('https://api.github.com/repos/owner/executor/actions/runs/456',{headers:{authorization:'Bearer synthetic-executor'}}))).json();
+    let visible=[archived];
+    state.provider=(request,context)=>request.url.includes('/runs?event=workflow_dispatch')?Response.json({workflow_runs:visible}):prior(request,context);
+    assert.equal((await api('reconcile',{taskId:next.taskId})).json().job.runId,null,'an archived run is not the replacement');
+    visible=[archived,{...archived,id:789}];
+    state.failRun=false;
+    assert.equal((await api('reconcile',{taskId:next.taskId})).json().job.runId,789,'archived run does not make a replacement ambiguous');
     await f.restart();assert.equal((await api('state',{taskId:next.taskId})).json().attempts.length,1);
   } finally {await f.close();}
 });
@@ -128,6 +135,8 @@ test('unstarted initial deploy and lost-dispatch run discovery can recover befor
       }
       return prior(request, context);
     };
+    const ns=await f.mf.getDurableObjectNamespace('CONNECTED_TASKS'),stub=ns.get(ns.idFromName('connected/v1/'+first.taskId));
+    await stub.expirePermit();
     const reconciled = (await service('service-state', { instanceId: first.taskId, reconcile: true })).json();
     assert.equal(reconciled.job.runId, 456); assert.equal(reconciled.job.status, 'unknown'); assert.equal(reconciled.canRestart, true);
     state.dispatchLost = false;

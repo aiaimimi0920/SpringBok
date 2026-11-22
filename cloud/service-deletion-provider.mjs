@@ -38,8 +38,12 @@ async function listPaged(account, token, basePath, keyOf, transport) {
       return body.result;
     }
     const pages = body.result_info.total_pages ?? 1, count = body.result_info.total_count ?? body.result.length;
-    requireSba(Number.isSafeInteger(pages) && pages >= 1 && pages <= 20 && Number.isSafeInteger(count) && count >= 0 && count <= 1000);
     requireSba((body.result_info.page ?? page) === page);
+    if (pages === 0) {
+      requireSba(page === 1 && body.result_info.total_count === 0 && body.result.length === 0);
+      return [];
+    }
+    requireSba(Number.isSafeInteger(pages) && pages >= 1 && pages <= 20 && Number.isSafeInteger(count) && count >= 0 && count <= 1000);
     if (totalPages === null) { totalPages = pages; totalCount = count; }
     requireSba(pages === totalPages && count === totalCount);
     rows.push(...body.result);

@@ -124,6 +124,21 @@ test('concurrent creates commit one connection and changed encryption key fails 
   } finally { await f.close(); }
 });
 
+test('derived repository recheck uses the current parent credential, never the retired token', async () => {
+  const { f, state } = await connectionsFixture();
+  try {
+    const session = await auth(f), replacement = 'rotated-synthetic-token-abcdef123456';
+    const parent = (await post(f,session,{ action:'connect',id:randomUUID(),name:'synthetic',provider:'github',accountId:'',token:fakeToken })).connections[0];
+    const child = (await post(f,session,{ action:'use-repository',id:parent.id,revision:parent.revision,repository:'owner/repo' })).connection;
+    state.rejectRequest = request => request.url.includes('/repos/') && request.headers.get('authorization') === 'Bearer '+replacement;
+    await post(f,session,{ action:'rotate',id:parent.id,revision:parent.revision,token:replacement });
+    const rechecked=(await post(f,session,{action:'verify',id:child.id,revision:child.revision+1})).connection;
+    assert.equal(rechecked.state,'failed');
+    state.rejectRequest = request => request.url.includes('/repos/') && request.headers.get('authorization') === 'Bearer '+fakeToken;
+    assert.equal((await post(f,session,{action:'verify',id:child.id,revision:rechecked.revision})).connection.state,'verified');
+  }finally{await f.close();}
+});
+
 test('in-place token rotation preserves working credential on 422, rotates atomically and supports v2 vault keyrings', async () => {
   const { f, state } = await connectionsFixture();
   try {

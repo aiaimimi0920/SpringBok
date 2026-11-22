@@ -80,6 +80,29 @@ test('valid permit executes once and writes only bound receipt, not credentials'
   assert.equal(JSON.parse(text).permitId, permit.permitId);
   assert.deepEqual(s.stages, ['input', 'workspace', 'checkout', 'oidc', 'permit', 'execution', 'receipt']);
 });
+test('permit accepts escaped multiline secrets beyond the old JSON limit, but is still bounded', async t => {
+  const secrets = { ...permit.secrets, ...Object.fromEntries(Array.from({ length: 19 }, (_, index) => ['APP_SECRET_'+index, '\n'.repeat(16384)])) };
+  const expanded = { ...manifest, secrets: Object.keys(secrets) };
+  const payload = JSON.stringify({ ...permit, manifest: expanded, secrets });
+  assert.ok(Buffer.byteLength(payload) > 524288 && Buffer.byteLength(payload) < 1024 * 1024);
+  for (const oversize of [false,true]) {
+    const root = await mkdtemp(join(tmpdir(), 'springbok-workflow-large-permit-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    let calls=0, executions=0;
+    const run = runSbaWorkflow({ environment: base, tempRoot: root,
+      checkout: async () => ({ root, input: request, manifest: expanded }),
+      execute: async ({ environment }) => {
+        executions++;
+        for (const [key,value] of Object.entries(secrets)) assert.equal(environment[key]===value,true);
+        return { result: { schemaVersion: 2, taskId: request.taskId, action: request.action, sourceSha: request.sourceSha, applicationVersion: request.applicationVersion, status: 'succeeded', checks: [{ id: 'synthetic-check', passed: true }] } };
+      },
+      fetchImpl: async () => ++calls === 1 ? Response.json({ value: 'synthetic-oidc' }) : new Response(oversize ? payload.padEnd(1024 * 1024 + 1) : payload),
+    });
+    if (oversize) await assert.rejects(run, /SBA_WORKFLOW_REJECTED/);
+    else assert.equal((await run).result.status,'succeeded');
+    assert.equal(executions,oversize?0:1);assert.equal(calls,2);
+  }
+});
 test('lost permit response never retries or executes', async t => {
   const s = await scenario(t, { failPermit: true }); await assert.rejects(s.run()); assert.equal(s.calls.length, 2); assert.equal(s.executions(), 0);
   assert.deepEqual(s.stages, ['input', 'workspace', 'checkout', 'oidc', 'permit']);

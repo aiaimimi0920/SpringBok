@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { fakeToken } from '../cloud/connections-fixture.mjs';
+import { updatedSha } from '../cloud/service-fixture.mjs';
 import { join } from 'node:path';
 import { serviceBrowser, ready, reviewService } from './service-fixture.mjs';
-const suite=await serviceBrowser(),{page,state,errors,requests,machine,receipt}=suite;
+const suite=await serviceBrowser(),{page,state,errors,requests,machine,receipt,f,session,input,auth}=suite;
 const directory=process.env.UI_EVIDENCE_DIR??'test-results';await mkdir(directory,{recursive:true});
 const business=process.env.APPLICATION_SECRETS==='1',privateValues={APP_COOKIE_SECRET:'Synthetic-Cookie-Only!42',APP_STORAGE_KEY:'synthetic-storage-only'};
 try{
-  const d=structuredClone(state.declaration);d.schemaVersion=2;d.accountMode='single';
-  d.accounts=[{key:'runtime',label:'账户',path:['accountId'],secret:'CLOUDFLARE_API_TOKEN'}];
+  const d=structuredClone(state.declaration);d.schemaVersion=2;d.accountMode='multiple';
+  d.accounts=[{key:'runtime',label:'账户',path:['accountId'],secret:'CLOUDFLARE_API_TOKEN'}, {key:'aux',label:'辅助账户',path:['auxAccountId'],secret:'AUX_CLOUDFLARE_TOKEN'}];
+  state.manifestOverride={secrets:['CLOUDFLARE_API_TOKEN','AUX_CLOUDFLARE_TOKEN']};
   d.fields=d.fields.map(field=>({...field,template:field.type==='text'?'{instance}-worker':null}));
   d.resources=d.resources.map(row=>({...row,account:'runtime',nativeAccount:'runtime',nameTemplate:'{instance}-db'}));
   d.targets=d.targets.map(target=>({...target,account:'runtime'}));state.declaration=d;state.resources=null;
@@ -16,17 +20,49 @@ try{
     d.fields.push({path:['pages'],label:'Pages',type:'text',required:true,template:'{instance}-pages'},
       {path:['workflow'],label:'Actions',type:'text',required:true,template:'.github/workflows/refresh.yml@{instance}'});
     d.targets.push({kind:'pages',path:['pages'],account:'runtime'},{kind:'github-actions',path:['workflow'],account:null});
-    state.manifestOverride={secrets:['CLOUDFLARE_API_TOKEN','DEPLOY_GITHUB_TOKEN']};
+    state.manifestOverride.secrets.push('DEPLOY_GITHUB_TOKEN');
   }
   if(business){d.applicationSecrets=Object.keys(privateValues);state.manifestOverride.secrets.push(...d.applicationSecrets);}
   state.missingSba.add('owner/second');const provider=state.provider;let creates=0;
+  const auxAccount='b'.repeat(32),auxId=randomUUID();
   state.provider=async(request,context)=>{
+    if(request.url==='https://api.cloudflare.com/client/v4/accounts/'+auxAccount)return Response.json({success:true,result:{id:auxAccount}});
     if(request.url==='https://api.cloudflare.com/client/v4/accounts/'+'a'.repeat(32)+'/d1/database'&&request.method==='POST'){
       creates++;const body=await request.json();return Response.json({success:true,result:{uuid:'87654321-1234-1234-1234-123456789abc',name:body.name}});
     }
     return provider(request,context);
   };
-  await ready(page);await page.locator('#service-add').click();await page.locator('[role=tab][data-repository="owner/repo"]').click();
+  const added=await f.call('/api/admin/connections',{...session,body:{action:'create',id:auxId,name:'Auxiliary',provider:'cloudflare',target:auxAccount,token:fakeToken}});
+  assert.equal(added.status,200,added.text);
+  const selectAccounts=async()=>{
+    await page.locator('#service-cloudflare').selectOption(input.cloudflare.id);
+    await page.locator('#service-account-aux').selectOption(auxId);
+  };
+  const laterSha='e'.repeat(40);let releasePage;
+  const heldPage=new Promise(resolve=>{releasePage=resolve;});
+  auth.intercept=async route=>{
+    if(!route.request().url().endsWith('/deployments/versions'))return false;
+    const {cursor}=route.request().postDataJSON();
+    if(cursor)await heldPage;
+    await route.fulfill({json:cursor?{items:[{label:'older',sourceSha:laterSha}],next:null}:{items:[{label:'update',sourceSha:updatedSha}],next:'second-page'}});
+    return true;
+  };
+  await ready(page);await page.locator('#service-add').click();
+  const pageTwo=page.waitForRequest(req=>req.url().endsWith('/deployments/versions')&&req.postDataJSON().cursor==='second-page');
+  await page.locator('[role=tab][data-repository="owner/repo"]').click();
+  await pageTwo;
+  await selectAccounts();
+  const version=page.locator('#service-version'), initialSha=await version.inputValue();
+  try {
+    await version.selectOption(updatedSha);
+    await page.locator('#service-selection').getByText('owner/repo · v2.0.0',{exact:true}).waitFor();
+    assert.equal(await page.locator('#service-cloudflare').inputValue(),input.cloudflare.id);
+    assert.equal(await page.locator('#service-account-aux').inputValue(),auxId);
+  }finally{releasePage();}
+  await page.locator('#service-version option[value="'+laterSha+'"]').waitFor({state:'attached'});
+  auth.intercept=null;
+  await version.selectOption(initialSha);
+  await page.locator('#service-selection').getByText('owner/repo · v1.0.0',{exact:true}).waitFor();
   if(process.env.SUITE_TARGETS==='1')assert.equal(await page.locator('#service-platform').textContent(),'Cloudflare · GitHub Actions');
   assert.match(await page.locator('#service-environment').inputValue(),/^app-[a-f0-9]{12}$/);
   assert.equal(await page.locator('#service-inputs input, #service-resources select').count(),business?3:0);
@@ -39,7 +75,7 @@ try{
     await importFile('{synthetic-private-parser-error');await status.getByText('秘密文件格式或内容不匹配',{exact:true}).waitFor();
     for(const [name,value]of Object.entries(privateValues))assert.equal(await page.locator('#service-secret-'+name).inputValue(),value,'invalid imports are atomic');
     assert.ok(!(await status.textContent()).includes('synthetic-private-parser-error'));
-    await importFile(' '.repeat(32769));await status.getByText('秘密文件格式或内容不匹配',{exact:true}).waitFor();
+    await importFile(' '.repeat(262145));await status.getByText('秘密文件格式或内容不匹配',{exact:true}).waitFor();
     assert.equal(await file.inputValue(),'');
     assert.equal(requests.filter(row=>row.body?.action==='application-secrets').length,0,'import never submits secrets');
     await importFile(JSON.stringify(privateValues));await status.getByText('已导入 2 项',{exact:true}).waitFor();
@@ -59,6 +95,7 @@ try{
     await page.waitForFunction(()=>!document.getElementById('service-dialog').open && [...document.querySelectorAll('#service-inputs input[type=password]')].every(input=>!input.value));
     for(const name of Object.keys(privateValues))assert.equal(await page.locator('#service-secret-'+name).inputValue(),'','closing clears secrets');
     await page.locator('#service-add').click();await page.locator('[role=tab][data-repository="owner/repo"]').click();
+    await selectAccounts();
     await importFile(JSON.stringify(privateValues));await status.getByText('已导入 2 项',{exact:true}).waitFor();
   }
   await page.locator('#service-field-1').fill('{');
@@ -75,7 +112,10 @@ try{
   }
   await page.locator('#service-environment').fill('my-instance');
   assert.equal(await page.locator('#service-resource-database').textContent(),'my-instance-db');
-  await reviewService(page);assert.equal(creates,0);assert.match(await page.locator('#service-review').textContent(),/my-instance-worker/);
+  await reviewService(page);
+  const planRequest=requests.findLast(row=>row.path==='/api/admin/deployments/plan');
+  assert.equal(planRequest.body.cloudflare.id,input.cloudflare.id);assert.equal(planRequest.body.accounts.aux.id,auxId);
+  assert.equal(creates,0);assert.match(await page.locator('#service-review').textContent(),/my-instance-worker/);
   if(business){
     for(const [name,value]of Object.entries(privateValues)){
       assert.equal(await page.locator('#service-secret-'+name).inputValue(),'');

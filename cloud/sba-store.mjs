@@ -3,6 +3,8 @@ import { validateResult } from '../src/sba/contract.mjs';
 import { sbaPolicy, sbaRequest, sbaDigest, canonicalSba, requireSba, exactSba, sbaObjectName, sbaSummary, sbaExecutorTransition, sbaAuthorizedRecovery, sbaRecoveryApproval, sbaRecoveryNextPolicy } from './sba-control.mjs';
 const statuses = ['dispatching', 'dispatched', 'dispatch-unknown', 'running', 'succeeded', 'deployed-unverified', 'failed', 'unknown'];
 const id = v => Number.isSafeInteger(v) && v > 0;
+export const needsDispatchDiscovery = job => job?.runId === null && job.permitId === null &&
+  (job.status === 'dispatch-unknown' || (job.status === 'unknown' && job.errorCode === 'SBA_TASK_DEADLINE'));
 
 // 独立的首次部署槽；旧 fixture/节点账本不复用、不改名、不迁移。
 export class SbaDeployment extends DurableObject {
@@ -224,13 +226,25 @@ export class SbaDeployment extends DurableObject {
       return { policyTransitionPending: true, nextPolicyDigest, archivedTaskId: taskId, outcome: record.outcome };
     });
   }
-  attachRun(actor, taskId, outcome) {
+  attachRun(actor, taskId, outcome, observedSubmission = null) {
     return this.#run(actor, (job, save) => {
       requireSba(job && job.request.taskId === taskId && outcome.requestDigest === job.requestDigest);
       requireSba(['dispatched', 'unknown'].includes(outcome.status));
       if (outcome.status === 'dispatched') {
-        requireSba(id(outcome.runId) && (job.runId === null || job.runId === outcome.runId));
-        if (['dispatching', 'dispatched', 'dispatch-unknown'].includes(job.status)) { job.runId = outcome.runId; job.status = 'dispatched'; save(job); }
+        requireSba(id(outcome.runId));
+        if (observedSubmission !== null) {
+          if (job.submittedAt !== observedSubmission || !needsDispatchDiscovery(job)) return sbaSummary(job);
+          const sql = this.ctx.storage.sql;
+          if (sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='sba_unstarted_attempts'").toArray().length &&
+              sql.exec('SELECT run_id FROM sba_unstarted_attempts WHERE run_id=?', outcome.runId).toArray().length) return sbaSummary(job);
+        }
+        requireSba(job.runId === null || job.runId === outcome.runId);
+        if (['dispatching', 'dispatched', 'dispatch-unknown'].includes(job.status)) {
+          job.runId = outcome.runId; job.status = 'dispatched'; job.errorCode = null; save(job);
+        } else if (observedSubmission !== null) {
+          // Record the original run after expiry without reopening the permit window.
+          job.runId = outcome.runId; save(job);
+        }
       } else if (job.status === 'dispatching') { job.status = 'dispatch-unknown'; job.errorCode = 'SBA_GITHUB_DISPATCH_UNKNOWN'; save(job); }
       return sbaSummary(job);
     });
@@ -264,9 +278,10 @@ export class SbaDeployment extends DurableObject {
       return sbaSummary(job);
     });
   }
-  markUnknown(actor, taskId) {
+  markUnknown(actor, taskId, expected = null) {
     return this.#run(actor, (job, save) => {
       requireSba(job && job.request.taskId === taskId);
+      if (expected && (job.runId !== expected.runId || job.status !== expected.status || job.submittedAt !== expected.submittedAt)) return sbaSummary(job);
       if (['dispatching', 'dispatched', 'dispatch-unknown', 'running'].includes(job.status)) { job.status = 'unknown'; job.errorCode = 'SBA_RUN_UNCONFIRMED'; save(job); }
       return sbaSummary(job);
     });

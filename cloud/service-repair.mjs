@@ -30,7 +30,7 @@ export async function serviceRepairDraft(vault, owner, input) {
     const proof = await recoverSbaReceipt(old.policy.github, job, { token: vault.env.SBA_GITHUB_TOKEN });
     requireSba(proof.status === 'verified-receipt' && canonicalSba(proof.envelope.result) === canonicalSba(job.result));
   } catch (error) {
-    if (error?.message !== 'SBA_GITHUB_ARTIFACT_INVALID') throw error;
+    if (error?.message !== 'SBA_GITHUB_ARTIFACT_UNAVAILABLE') throw error;
     await createGithubExecutor(old.policy.github, { token: vault.env.SBA_GITHUB_TOKEN }).verifyCompletedRun(job.runId, job.request, job.manifest);
   }
   const connections = resolveInstanceConnections(vault, old);

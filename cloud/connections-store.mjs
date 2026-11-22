@@ -286,7 +286,18 @@ export class ConnectionVault extends DurableObject {
     if(provider==='bootstrap-disabled'||provider.startsWith('bootstrap:'))return bootstrapCredential(this,owner,record,provider);
     const stored=this.row(record.connections[provider].id);requireSba(stored);
     requireSba(provider==='github'||provider==='cloudflare'||Object.values(record.credentials??{}).includes(provider));
-    const row=JSON.parse(stored.metadata);requireSba(row.provider===(provider==='github'?'github':'cloudflare'));return openToken(this.env.CONNECTIONS_ENCRYPTION_KEY,owner,row,stored.sealed);
+    const row=JSON.parse(stored.metadata),key=this.env.CONNECTIONS_ENCRYPTION_KEY;
+    requireSba(row.provider===(provider==='github'?'github':'cloudflare'));
+    const token=await openToken(key,owner,row,stored.sealed);
+    if(row.parentId){
+      // A disable is not revocation of an existing approval. But never return a
+      // failed repository credential or a token replaced by parent rotation.
+      requireSba(row.state!=='failed');
+      const parent=this.row(row.parentId);requireSba(parent);
+      const metadata=JSON.parse(parent.metadata);
+      requireSba(metadata.provider==='github'&&metadata.target.startsWith('@')&&token===await openToken(key,owner,metadata,parent.sealed));
+    }
+    return token;
   }
   async mutate(owner, raw) {
     if (raw?.action === 'connect') return connectBrand(this,owner,raw);
@@ -349,10 +360,12 @@ export class ConnectionVault extends DurableObject {
         return { connection: connectionMetadata(next) };
       });
     }
-    let check, resealed = null;
+    let check, parentRef, resealed = null;
     if (input.action === 'verify') {
       try {
-        const plain = await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, stored.sealed);
+        const source = metadata.parentId ? this.activeConnection(metadata.parentId) : { row: metadata, sealed: stored.sealed };
+        if (metadata.parentId) parentRef = source.row;
+        const plain = await openToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, source.row, source.sealed);
         check = await verifyConnection(metadata, plain);
         if (check.ok) resealed = await sealToken(this.env.CONNECTIONS_ENCRYPTION_KEY, owner, metadata, plain);
       } catch { check = { ok: false, code: 'credential-unavailable' }; }
@@ -360,8 +373,9 @@ export class ConnectionVault extends DurableObject {
     return this.ctx.storage.transactionSync(() => {
       this.guard(owner); const current = JSON.parse(this.row(input.id).metadata);
       if (current.revision !== input.revision || current.state === 'disabled') throw new Error('stale connection');
+      if (parentRef) this.activeConnection(parentRef.id,parentRef.revision);
       const now = Date.now(), nextRevision = current.revision + 1;
-      const next = { ...current, revision: nextRevision, updatedAt: now,
+      const next = { ...current, revision: nextRevision, updatedAt: now, ...(check?.ok && parentRef ? { parentRevision: parentRef.revision } : {}),
         ...(check ? { state: check.ok ? 'verified' : 'failed', check: check.code, checkedAt: now } : { state: 'disabled' }) };
       if (resealed) this.ctx.storage.sql.exec('UPDATE connections SET metadata=?,sealed=? WHERE id=?', JSON.stringify(next), resealed, input.id);
       else this.ctx.storage.sql.exec('UPDATE connections SET metadata=? WHERE id=?', JSON.stringify(next), input.id);

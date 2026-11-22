@@ -7,7 +7,7 @@ export async function connectionsFixture(overrides = {}) {
     outbound: async (request, context) => {
       state.requests.push({ method: request.method, url: request.url });
       state.onRequest?.(); if (state.hold) await state.hold;
-      if (state.reject) return Response.json({ error: fakeToken }, { status: 403 });
+      if (state.reject || state.rejectRequest?.(request)) return Response.json({ error: fakeToken }, { status: 403 });
       if (state.resources && request.url.startsWith('https://api.cloudflare.com/client/v4/accounts/' + 'a'.repeat(32) + '/')) return Response.json(state.resources);
       if (request.url === 'https://api.cloudflare.com/client/v4/accounts/' + 'a'.repeat(32)) return Response.json({ success: true, result: { id: 'a'.repeat(32) } });
       if (request.url === 'https://api.github.com/user') return Response.json(state.user ?? { id: 1, login: 'owner' });

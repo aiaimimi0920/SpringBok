@@ -42,8 +42,9 @@ export function renderMarkdown(source, linkMap = new Map()) {
       html += `<div class="code-block"><span class="code-language">${escapeHtml(language || 'text')}</span><pre tabindex="0"><code>${escapeHtml(code.join('\n'))}</code></pre></div>`;
       continue;
     }
-    const h = /^(#{1,3}) (.+)$/.exec(line);
+    const h = /^(#{1,3}) (.*)$/.exec(line);
     if (h) {
+      if (!h[2].trim()) throw new Error('Empty Markdown heading');
       const level = h[1].length, id = `section-${++heading}`;
       if (level === 1) titleCount++;
       else toc.push({ id, title: h[2].replaceAll('`', ''), level });

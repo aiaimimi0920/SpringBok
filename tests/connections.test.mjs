@@ -33,6 +33,7 @@ test('AES-GCM uses randomized envelopes and binds owner, row identity, provider 
   assert.equal(validVaultKey(ring), true);
   assert.throws(() => ownerId(ring), 'keyring JSON must never pass as an ownerId');
   assert.equal(validVaultKey(JSON.stringify({ active: 'missing', keys: { k1: key } })), false);
+  for (const active of [['k1'], 1, null]) assert.equal(validVaultKey(JSON.stringify({ active, keys: { k1: key, 1: '9'.repeat(64) } })), false);
   assert.equal(validVaultKey(JSON.stringify({ active: 'k1', keys: { k1: key, k2: key } })), false);
   assert.equal(await openToken(ring, owner, row, a), token, 'legacy v1 envelope remains readable via keyring');
   const v2 = await sealToken(ring, owner, row, token);

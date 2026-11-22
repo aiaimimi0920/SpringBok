@@ -52,7 +52,7 @@ unknown，不允许再次恢复或新建任务绕过。已有 bootstrap、creati
 多账号、预升级、更新及需要管理员秘密的准备任务不在此恢复范围内。
 这不是新的 SBA action，不重放已经执行的应用，不删除原记录或解锁其他任务。
 
-对于 connected 的 `deploy`、`update`、`preview`、`destroy-preview` 或 `repair` 任务：若派发响应丢失进入 `dispatch-unknown`，`reconcile` 可在固定执行器工作流列表中按唯一 `sba:<taskId>:<requestDigest>` 标题、executor SHA 与 `run_attempt=1` 反查并绑定 `runId`。若任务始终未消费一次性执行许可（`permitId === null` 且零秘密交付），且 GitHub 第 1 次运行已进入终态失败（`failure` / `cancelled` / `timed_out`），原 owner 经两分钟签名确认后可为同一不可变任务重新派发（最多 3 次尝试，保留每次未执行证明与原账户执行 lane，旧 `runId` 永久隔离，已领取许可或已产出结果的任务永不进入此通道）。
+对于 connected 的 `deploy`、`update`、`preview`、`destroy-preview` 或 `repair` 任务：若派发响应丢失进入 `dispatch-unknown`，`reconcile` 可在固定执行器工作流列表中按唯一 `sba:<taskId>:<requestDigest>` 标题、executor SHA 与 `run_attempt=1` 反查并绑定 `runId`，不考虑已归档的尝试。许可到期后可补记原 run，但任务保持 `unknown`，不会重开许可。若任务始终未消费一次性执行许可（`permitId === null` 且零秘密交付），且 GitHub 第 1 次运行已进入终态失败（`failure` / `cancelled` / `timed_out`），原 owner 经两分钟签名确认后可为同一不可变任务重新派发（最多 3 次尝试，保留每次未执行证明与原账户执行 lane，旧 `runId` 永久隔离，已领取许可或已产出结果的任务永不进入此通道）。
 
 | 动作 | 应用必须承担的行为 |
 | --- | --- |
@@ -80,7 +80,7 @@ preview 成功要求所有资源 created、所有批准 urls、非空 snapshot�
 
 ## 修复 context
 
-repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。执行器写完本地回执后通过新鲜 OIDC 令牌向 `/sba/v2/receipt` 发起最佳努力主动上报，并由控制面 DO 定时 `alarm` 后台自动收尾（GitHub Artifact 保留 30 天作兜底）；若父任务回执早已在控制面验签持久化但后续 GitHub Artifact 超期清理，平台在核验原 GitHub Run 身份与已完成状态后仍允许基于持久父回执发起修复。
+repair context 恰好包含 repairId、parentTaskId、parentRunId、requestDigest、resultDigest、errorCode。父任务必须不同，GitHub run 为正整数，两项摘要均为 64 位小写十六进制；操作与错误码必须匹配 manifest.repairs。执行器写完本地回执后通过新鲜 OIDC 令牌向 `/sba/v2/receipt` 发起最佳努力主动上报，并由控制面 DO 定时 `alarm` 后台自动收尾（GitHub Artifact 保留 30 天作兜底）；若父任务回执早已在控制面验签持久化但后续 GitHub Artifact 已过期或返回完整空清单，平台在核验原 GitHub Run 身份与已完成状态后仍允许基于持久父回执发起修复。仍存在但身份、摘要或内容不合法的制品不允许走此兜底。
 
 修复 preview 或其失败 repair 时，context 额外且必须包含 `preview`，其值为平台从已验证父回执及原计划
 继承的完整 preview context（source、resources、urls）；客户端不能提供或替换。所选修复模板
